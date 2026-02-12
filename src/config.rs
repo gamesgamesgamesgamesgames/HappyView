@@ -32,8 +32,4 @@ impl Config {
             .parse()
             .expect("invalid HOST/PORT")
     }
-
-    pub fn jwks_url(&self) -> String {
-        format!("{}/.well-known/jwks.json", self.aip_url.trim_end_matches('/'))
-    }
 }

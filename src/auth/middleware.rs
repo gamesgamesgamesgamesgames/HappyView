@@ -1,46 +1,37 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::auth::jwks::JwksProvider;
 use crate::error::AppError;
+use crate::AppState;
 
-/// JWT claims from an AIP-issued access token.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Authenticated user identity extracted from an AIP-issued access token.
+#[derive(Debug, Clone)]
 pub struct Claims {
-    pub iss: String,
-    pub sub: String,
-    pub aud: serde_json::Value,
-    pub exp: u64,
-    pub iat: u64,
-    #[serde(default)]
-    pub scope: Option<String>,
+    did: String,
 }
 
 impl Claims {
-    /// The authenticated user's DID (the `sub` claim).
+    /// The authenticated user's DID.
     pub fn did(&self) -> &str {
-        &self.sub
+        &self.did
     }
 }
 
-/// Axum extractor that validates the Bearer token against AIP's JWKS.
-///
-/// Use in handler signatures:
-/// ```ignore
-/// async fn my_handler(claims: Claims) -> impl IntoResponse { ... }
-/// ```
-impl<S> FromRequestParts<S> for Claims
-where
-    S: Send + Sync,
-    JwksProvider: FromRef<S>,
-{
+#[derive(Deserialize)]
+struct UserinfoResponse {
+    sub: String,
+}
+
+/// Axum extractor that validates the Bearer token by forwarding it to AIP's
+/// `/oauth/userinfo` endpoint. AIP returns the DID in the `sub` field.
+impl FromRequestParts<AppState> for Claims {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let provider = JwksProvider::from_ref(state);
-
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let header = parts
             .headers
             .get("authorization")
@@ -49,47 +40,33 @@ where
 
         let token = header
             .strip_prefix("Bearer ")
-            .or_else(|| header.strip_prefix("DPoP "))
             .ok_or_else(|| AppError::Auth("invalid Authorization scheme".into()))?;
 
-        let jwks = provider
-            .keyset()
+        let userinfo_url = format!(
+            "{}/oauth/userinfo",
+            state.config.aip_url.trim_end_matches('/')
+        );
+
+        let resp = state
+            .http
+            .get(&userinfo_url)
+            .header("authorization", format!("Bearer {token}"))
+            .send()
             .await
-            .ok_or_else(|| AppError::Auth("JWKS not yet available".into()))?;
+            .map_err(|e| AppError::Auth(format!("userinfo request failed: {e}")))?;
 
-        // Decode the JWT header to find the `kid`.
-        let jwt_header = jsonwebtoken::decode_header(token)
-            .map_err(|e| AppError::Auth(format!("invalid token header: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(AppError::Auth(format!(
+                "userinfo returned {}",
+                resp.status()
+            )));
+        }
 
-        let kid = jwt_header
-            .kid
-            .as_deref()
-            .ok_or_else(|| AppError::Auth("token missing kid".into()))?;
+        let info: UserinfoResponse = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Auth(format!("invalid userinfo response: {e}")))?;
 
-        let jwk = jwks
-            .find(kid)
-            .ok_or_else(|| AppError::Auth("unknown signing key".into()))?;
-
-        let key = DecodingKey::from_jwk(jwk)
-            .map_err(|e| AppError::Auth(format!("bad JWK: {e}")))?;
-
-        let mut validation = Validation::new(Algorithm::ES256);
-        validation.validate_aud = false; // AIP sets aud to the client_id; we skip it here
-
-        let data = decode::<Claims>(token, &key, &validation)
-            .map_err(|e| AppError::Auth(format!("token validation failed: {e}")))?;
-
-        Ok(data.claims)
-    }
-}
-
-/// Helper trait so we can pull JwksProvider out of app state.
-pub trait FromRef<T> {
-    fn from_ref(input: &T) -> Self;
-}
-
-impl FromRef<crate::AppState> for JwksProvider {
-    fn from_ref(state: &crate::AppState) -> Self {
-        state.jwks.clone()
+        Ok(Claims { did: info.sub })
     }
 }

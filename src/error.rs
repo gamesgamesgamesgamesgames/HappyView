@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 pub enum AppError {
     Auth(String),
     Internal(String),
+    NotFound(String),
 }
 
 impl std::fmt::Display for AppError {
@@ -12,6 +13,7 @@ impl std::fmt::Display for AppError {
         match self {
             AppError::Auth(msg) => write!(f, "auth error: {msg}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
+            AppError::NotFound(msg) => write!(f, "not found: {msg}"),
         }
     }
 }
@@ -27,6 +29,7 @@ impl IntoResponse for AppError {
                     "internal server error".into(),
                 )
             }
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
         };
 
         let body = serde_json::json!({ "error": message });

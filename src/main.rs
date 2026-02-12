@@ -1,19 +1,16 @@
 mod auth;
 mod config;
 mod error;
+mod profile;
 mod server;
-
-use std::time::Duration;
 
 use config::Config;
 use tracing::info;
 
-use crate::auth::jwks::JwksProvider;
-
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
-    pub jwks: JwksProvider,
+    pub http: reqwest::Client,
     pub db: sqlx::PgPool,
 }
 
@@ -37,16 +34,9 @@ async fn main() {
 
     info!("connected to database");
 
-    // Set up JWKS provider pointed at AIP.
-    let jwks = JwksProvider::new(config.jwks_url());
-    if let Err(e) = jwks.refresh().await {
-        tracing::warn!("initial JWKS fetch failed (AIP may not be running yet): {e}");
-    }
-    jwks.clone().spawn_refresh_loop(Duration::from_secs(300));
-
     let state = AppState {
         config: config.clone(),
-        jwks,
+        http: reqwest::Client::new(),
         db,
     };
 
