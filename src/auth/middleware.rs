@@ -9,12 +9,18 @@ use crate::AppState;
 #[derive(Debug, Clone)]
 pub struct Claims {
     did: String,
+    token: String,
 }
 
 impl Claims {
     /// The authenticated user's DID.
     pub fn did(&self) -> &str {
         &self.did
+    }
+
+    /// The raw Bearer token for forwarding to AIP's XRPC proxy.
+    pub fn token(&self) -> &str {
+        &self.token
     }
 }
 
@@ -67,6 +73,9 @@ impl FromRequestParts<AppState> for Claims {
             .await
             .map_err(|e| AppError::Auth(format!("invalid userinfo response: {e}")))?;
 
-        Ok(Claims { did: info.sub })
+        Ok(Claims {
+            did: info.sub,
+            token: token.to_string(),
+        })
     }
 }

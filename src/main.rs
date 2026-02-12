@@ -2,6 +2,7 @@ mod auth;
 mod config;
 mod error;
 mod profile;
+mod repo;
 mod server;
 
 use config::Config;

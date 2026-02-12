@@ -66,6 +66,19 @@ pub async fn resolve_profile(http: &reqwest::Client, did: &str) -> Result<Profil
     })
 }
 
+/// Resolve the PDS endpoint for a DID by fetching its DID document.
+#[allow(dead_code)]
+pub async fn resolve_pds_endpoint(http: &reqwest::Client, did: &str) -> Result<String, AppError> {
+    let did_doc = resolve_did_document(http, did).await?;
+
+    did_doc
+        .service
+        .iter()
+        .find(|s| s.id == "#atproto_pds")
+        .map(|s| s.service_endpoint.clone())
+        .ok_or_else(|| AppError::NotFound("no PDS endpoint in DID document".into()))
+}
+
 /// Fetch a DID document from the PLC directory.
 // TODO: handle did:web:* resolution (fetch https://{domain}/.well-known/did.json)
 async fn resolve_did_document(http: &reqwest::Client, did: &str) -> Result<DidDocument, AppError> {
