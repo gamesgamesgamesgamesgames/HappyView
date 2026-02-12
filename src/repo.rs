@@ -1,5 +1,5 @@
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -11,9 +11,41 @@ use sha2::{Digest, Sha256};
 
 use crate::auth::Claims;
 use crate::error::AppError;
+use crate::profile;
 use crate::AppState;
 
 const COLLECTION: &str = "games.gamesgamesgamesgames.game";
+
+// ---------------------------------------------------------------------------
+// AT URI parsing
+// ---------------------------------------------------------------------------
+
+struct AtUri {
+    did: String,
+    collection: String,
+    rkey: String,
+}
+
+impl AtUri {
+    fn parse(uri: &str) -> Result<Self, AppError> {
+        let stripped = uri
+            .strip_prefix("at://")
+            .ok_or_else(|| AppError::Internal("AT URI must start with at://".into()))?;
+
+        let parts: Vec<&str> = stripped.splitn(3, '/').collect();
+        if parts.len() != 3 {
+            return Err(AppError::Internal(
+                "AT URI must have format at://did/collection/rkey".into(),
+            ));
+        }
+
+        Ok(Self {
+            did: parts[0].to_string(),
+            collection: parts[1].to_string(),
+            rkey: parts[2].to_string(),
+        })
+    }
+}
 
 // ---------------------------------------------------------------------------
 // AIP session types
@@ -422,4 +454,93 @@ pub async fn upload_blob(
         .unwrap_or("application/octet-stream");
 
     pds_post_blob(&state, &session, content_type, body).await
+}
+
+// ---------------------------------------------------------------------------
+// getGame (public, unauthenticated)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct GetGameParams {
+    uri: String,
+}
+
+pub async fn get_game(
+    State(state): State<AppState>,
+    Query(params): Query<GetGameParams>,
+) -> Result<Json<Value>, AppError> {
+    let at_uri = AtUri::parse(&params.uri)?;
+
+    let pds = profile::resolve_pds_endpoint(&state.http, &at_uri.did).await?;
+
+    let url = format!(
+        "{}/xrpc/com.atproto.repo.getRecord?repo={}&collection={}&rkey={}",
+        pds.trim_end_matches('/'),
+        at_uri.did,
+        at_uri.collection,
+        at_uri.rkey,
+    );
+
+    let resp = state
+        .http
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| AppError::Internal(format!("PDS getRecord failed: {e}")))?;
+
+    if !resp.status().is_success() {
+        return Err(AppError::NotFound("game record not found".into()));
+    }
+
+    let body: Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Internal(format!("invalid PDS response: {e}")))?;
+
+    let mut record = body
+        .get("value")
+        .cloned()
+        .ok_or_else(|| AppError::Internal("PDS response missing value field".into()))?;
+
+    enrich_media_blobs(&mut record, &pds, &at_uri.did);
+
+    record
+        .as_object_mut()
+        .unwrap()
+        .insert("uri".to_string(), json!(params.uri));
+
+    Ok(Json(json!({ "game": record })))
+}
+
+/// Walk `media[]` and add a `url` field to each blob so the frontend can
+/// display images directly.
+fn enrich_media_blobs(record: &mut Value, pds: &str, did: &str) {
+    let media = match record.get_mut("media").and_then(|m| m.as_array_mut()) {
+        Some(arr) => arr,
+        None => return,
+    };
+
+    let pds_base = pds.trim_end_matches('/');
+
+    for item in media.iter_mut() {
+        let cid = item
+            .get("blob")
+            .and_then(|b| b.get("ref"))
+            .and_then(|r| r.get("$link"))
+            .and_then(|l| l.as_str())
+            .map(|s| s.to_string());
+
+        if let Some(cid) = cid {
+            if let Some(blob) = item.get_mut("blob") {
+                if let Some(obj) = blob.as_object_mut() {
+                    obj.insert(
+                        "url".to_string(),
+                        json!(format!(
+                            "{pds_base}/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}"
+                        )),
+                    );
+                }
+            }
+        }
+    }
 }

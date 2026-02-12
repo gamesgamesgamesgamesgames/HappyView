@@ -67,7 +67,6 @@ pub async fn resolve_profile(http: &reqwest::Client, did: &str) -> Result<Profil
 }
 
 /// Resolve the PDS endpoint for a DID by fetching its DID document.
-#[allow(dead_code)]
 pub async fn resolve_pds_endpoint(http: &reqwest::Client, did: &str) -> Result<String, AppError> {
     let did_doc = resolve_did_document(http, did).await?;
 
