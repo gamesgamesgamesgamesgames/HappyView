@@ -1,0 +1,20 @@
+[package]
+name = "happyview"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8"
+base64 = "0.22"
+dotenvy = "0.15"
+jsonwebtoken = "9"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "json", "chrono"] }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
