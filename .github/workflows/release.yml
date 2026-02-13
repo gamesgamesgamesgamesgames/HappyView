@@ -91,15 +91,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install svu
-        run: |
-          curl -kL https://github.com/caarlos0/svu/releases/download/v3.2.2/svu_3.2.2_linux_amd64.tar.gz | tar zx
-          mv svu /usr/local/bin/svu
-          chmod +x /usr/local/bin/svu
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Create release
+      - name: Release
         env:
-          GH_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
-        run: |
-          VERSION_TAG=$(svu next)
-          gh release create "$VERSION_TAG" -t "$VERSION_TAG" --generate-notes
+          GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+        run: npx semantic-release
