@@ -2,8 +2,8 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use serde::Deserialize;
 
-use crate::error::AppError;
 use crate::AppState;
+use crate::error::AppError;
 
 /// Authenticated user identity extracted from an AIP-issued access token.
 #[derive(Debug, Clone)]

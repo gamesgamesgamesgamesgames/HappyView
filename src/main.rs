@@ -1,6 +1,6 @@
 use happyview::config::Config;
 use happyview::lexicon::LexiconRegistry;
-use happyview::{admin, backfill, jetstream, server, AppState};
+use happyview::{AppState, admin, backfill, jetstream, server};
 use tokio::sync::watch;
 use tracing::info;
 
@@ -48,8 +48,17 @@ async fn main() {
         collections_tx,
     };
 
-    jetstream::spawn(state.db.clone(), config.jetstream_url.clone(), collections_rx);
-    backfill::spawn_worker(state.db.clone(), state.http.clone(), config.relay_url.clone(), config.plc_url.clone());
+    jetstream::spawn(
+        state.db.clone(),
+        config.jetstream_url.clone(),
+        collections_rx,
+    );
+    backfill::spawn_worker(
+        state.db.clone(),
+        state.http.clone(),
+        config.relay_url.clone(),
+        config.plc_url.clone(),
+    );
 
     let app = server::router(state);
     let addr = config.listen_addr();

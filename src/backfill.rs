@@ -128,7 +128,12 @@ async fn fetch_records(
 
         let page_count = body.records.len();
         for entry in body.records {
-            let rkey = entry.uri.split('/').last().unwrap_or_default().to_string();
+            let rkey = entry
+                .uri
+                .split('/')
+                .next_back()
+                .unwrap_or_default()
+                .to_string();
             records.push((entry.uri, rkey, entry.cid, entry.value));
         }
 
@@ -154,13 +159,12 @@ async fn run_job(
     job_id: &str,
 ) -> Result<(), String> {
     // Fetch the job
-    let job: (Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT collection, did FROM backfill_jobs WHERE id::text = $1",
-    )
-    .bind(job_id)
-    .fetch_one(db)
-    .await
-    .map_err(|e| format!("failed to fetch job: {e}"))?;
+    let job: (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT collection, did FROM backfill_jobs WHERE id::text = $1")
+            .bind(job_id)
+            .fetch_one(db)
+            .await
+            .map_err(|e| format!("failed to fetch job: {e}"))?;
 
     let (job_collection, job_did) = job;
 
@@ -279,7 +283,10 @@ async fn run_job(
     .execute(db)
     .await;
 
-    info!(job = job_id, processed_repos, total_records, "backfill completed");
+    info!(
+        job = job_id,
+        processed_repos, total_records, "backfill completed"
+    );
     Ok(())
 }
 

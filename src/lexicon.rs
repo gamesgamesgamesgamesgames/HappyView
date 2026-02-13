@@ -43,7 +43,11 @@ pub struct ParsedLexicon {
 
 impl ParsedLexicon {
     /// Parse a lexicon JSON document into a `ParsedLexicon`.
-    pub fn parse(raw: Value, revision: i32, target_collection: Option<String>) -> Result<Self, String> {
+    pub fn parse(
+        raw: Value,
+        revision: i32,
+        target_collection: Option<String>,
+    ) -> Result<Self, String> {
         let id = raw
             .get("id")
             .and_then(|v| v.as_str())
@@ -92,6 +96,12 @@ impl ParsedLexicon {
 #[derive(Debug, Clone)]
 pub struct LexiconRegistry {
     inner: Arc<RwLock<HashMap<String, ParsedLexicon>>>,
+}
+
+impl Default for LexiconRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LexiconRegistry {
@@ -277,11 +287,19 @@ mod tests {
 
     #[test]
     fn parse_query_lexicon() {
-        let parsed = ParsedLexicon::parse(query_lexicon_json(), 2, Some("games.gamesgamesgamesgames.game".into())).unwrap();
+        let parsed = ParsedLexicon::parse(
+            query_lexicon_json(),
+            2,
+            Some("games.gamesgamesgamesgames.game".into()),
+        )
+        .unwrap();
         assert_eq!(parsed.lexicon_type, LexiconType::Query);
         assert!(parsed.parameters.is_some());
         assert!(parsed.output.is_some());
-        assert_eq!(parsed.target_collection, Some("games.gamesgamesgamesgames.game".into()));
+        assert_eq!(
+            parsed.target_collection,
+            Some("games.gamesgamesgamesgames.game".into())
+        );
         assert_eq!(parsed.revision, 2);
     }
 
@@ -316,12 +334,9 @@ mod tests {
 
     #[test]
     fn parse_target_collection_passthrough() {
-        let parsed = ParsedLexicon::parse(
-            query_lexicon_json(),
-            1,
-            Some("custom.collection".into()),
-        )
-        .unwrap();
+        let parsed =
+            ParsedLexicon::parse(query_lexicon_json(), 1, Some("custom.collection".into()))
+                .unwrap();
         assert_eq!(parsed.target_collection, Some("custom.collection".into()));
     }
 
@@ -356,7 +371,13 @@ mod tests {
         reg.upsert(v2).await;
 
         assert_eq!(reg.count().await, 1);
-        assert_eq!(reg.get("games.gamesgamesgamesgames.game").await.unwrap().revision, 5);
+        assert_eq!(
+            reg.get("games.gamesgamesgamesgames.game")
+                .await
+                .unwrap()
+                .revision,
+            5
+        );
     }
 
     #[tokio::test]

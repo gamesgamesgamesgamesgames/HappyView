@@ -3,7 +3,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use serial_test::serial;
 use tower::ServiceExt;
 
@@ -391,11 +391,7 @@ async fn backfill_list_jobs() {
     // Create a job first
     app.router
         .clone()
-        .oneshot(admin_post(
-            "/admin/backfill",
-            &app.admin_secret,
-            &json!({}),
-        ))
+        .oneshot(admin_post("/admin/backfill", &app.admin_secret, &json!({})))
         .await
         .unwrap();
 

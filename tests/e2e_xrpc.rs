@@ -3,7 +3,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use serial_test::serial;
 use tower::ServiceExt;
 use wiremock::matchers::{method, path, path_regex};
@@ -88,7 +88,7 @@ async fn seed_lexicons(app: &TestApp) {
 
 /// Seed a record directly into the database.
 async fn seed_record(app: &TestApp, uri: &str, did: &str, collection: &str, record: &Value) {
-    let rkey = uri.split('/').last().unwrap_or("1");
+    let rkey = uri.split('/').next_back().unwrap_or("1");
     sqlx::query(
         "INSERT INTO records (uri, did, collection, rkey, record, cid) VALUES ($1, $2, $3, $4, $5, $6)",
     )
@@ -138,27 +138,23 @@ async fn profile_with_mocked_services_returns_200() {
     // Mock PLC directory
     Mock::given(method("GET"))
         .and(path(format!("/{did}")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            fixtures::did_document(did, &app.mock_server.uri()),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixtures::did_document(did, &app.mock_server.uri())),
+        )
         .mount(&app.mock_server)
         .await;
 
     // Mock PDS getRecord for profile
     Mock::given(method("GET"))
         .and(path("/xrpc/com.atproto.repo.getRecord"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(fixtures::profile_record()),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixtures::profile_record()))
         .mount(&app.mock_server)
         .await;
 
     let resp = app
         .router
-        .oneshot(authed_get(
-            "/xrpc/app.bsky.actor.getProfile",
-            "valid-token",
-        ))
+        .oneshot(authed_get("/xrpc/app.bsky.actor.getProfile", "valid-token"))
         .await
         .unwrap();
 
@@ -226,9 +222,10 @@ async fn xrpc_get_single_record_by_uri() {
     // Mock PLC for PDS resolution
     Mock::given(method("GET"))
         .and(path(format!("/{did}")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            fixtures::did_document(did, "https://pds.example.com"),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixtures::did_document(did, "https://pds.example.com")),
+        )
         .mount(&app.mock_server)
         .await;
 
@@ -236,7 +233,7 @@ async fn xrpc_get_single_record_by_uri() {
         .router
         .oneshot(
             Request::builder()
-                .uri(&format!(
+                .uri(format!(
                     "/xrpc/games.gamesgamesgamesgames.listGames?uri={}",
                     urlencoding::encode(uri)
                 ))
@@ -283,9 +280,10 @@ async fn xrpc_get_list_with_pagination() {
     // Mock PLC for enrichment
     Mock::given(method("GET"))
         .and(path_regex("/did:plc:.*"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            fixtures::did_document(did, "https://pds.example.com"),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixtures::did_document(did, "https://pds.example.com")),
+        )
         .mount(&app.mock_server)
         .await;
 
@@ -326,7 +324,7 @@ async fn xrpc_get_list_with_pagination() {
         .router
         .oneshot(
             Request::builder()
-                .uri(&format!(
+                .uri(format!(
                     "/xrpc/games.gamesgamesgamesgames.listGames?limit=2&cursor={cursor}"
                 ))
                 .body(Body::empty())
@@ -350,9 +348,12 @@ async fn xrpc_get_list_filtered_by_did() {
     // Mock PLC
     Mock::given(method("GET"))
         .and(path_regex("/did:plc:.*"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            fixtures::did_document("did:plc:a", "https://pds.example.com"),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(fixtures::did_document(
+                "did:plc:a",
+                "https://pds.example.com",
+            )),
+        )
         .mount(&app.mock_server)
         .await;
 

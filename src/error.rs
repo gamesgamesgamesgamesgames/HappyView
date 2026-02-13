@@ -107,10 +107,7 @@ mod tests {
 
     #[test]
     fn display_formats() {
-        assert_eq!(
-            AppError::Auth("x".into()).to_string(),
-            "auth error: x"
-        );
+        assert_eq!(AppError::Auth("x".into()).to_string(), "auth error: x");
         assert_eq!(
             AppError::BadRequest("y".into()).to_string(),
             "bad request: y"
@@ -119,10 +116,7 @@ mod tests {
             AppError::Internal("z".into()).to_string(),
             "internal error: z"
         );
-        assert_eq!(
-            AppError::NotFound("w".into()).to_string(),
-            "not found: w"
-        );
+        assert_eq!(AppError::NotFound("w".into()).to_string(), "not found: w");
         assert_eq!(
             AppError::PdsError(StatusCode::BAD_GATEWAY, Bytes::new()).to_string(),
             "PDS error: 502 Bad Gateway"

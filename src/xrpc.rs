@@ -1,16 +1,16 @@
+use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
+use crate::AppState;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::lexicon::LexiconType;
 use crate::profile;
 use crate::repo;
-use crate::AppState;
 
 // ---------------------------------------------------------------------------
 // Catch-all handler
@@ -75,14 +75,11 @@ async fn handle_query(
     }
 
     // List query: needs a target collection to know what to query
-    let collection = lexicon
-        .target_collection
-        .as_deref()
-        .ok_or_else(|| {
-            AppError::BadRequest(format!(
-                "{method} has no target_collection configured for list queries"
-            ))
-        })?;
+    let collection = lexicon.target_collection.as_deref().ok_or_else(|| {
+        AppError::BadRequest(format!(
+            "{method} has no target_collection configured for list queries"
+        ))
+    })?;
 
     let limit: i64 = params
         .get("limit")
@@ -126,7 +123,9 @@ async fn handle_query(
     let unique_dids: HashSet<&str> = rows.iter().map(|(_, did, _)| did.as_str()).collect();
     let mut pds_map: HashMap<String, String> = HashMap::new();
     for did in unique_dids {
-        if let Ok(pds) = profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, did).await {
+        if let Ok(pds) =
+            profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, did).await
+        {
             pds_map.insert(did.to_string(), pds);
         }
     }
@@ -159,15 +158,13 @@ async fn handle_query(
 async fn handle_get_record(state: &AppState, uri: &str) -> Result<Response, AppError> {
     let did = repo::parse_did_from_at_uri(uri)?;
 
-    let row: Option<(Value,)> =
-        sqlx::query_as("SELECT record FROM records WHERE uri = $1")
-            .bind(uri)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
+    let row: Option<(Value,)> = sqlx::query_as("SELECT record FROM records WHERE uri = $1")
+        .bind(uri)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
 
-    let (mut record,) =
-        row.ok_or_else(|| AppError::NotFound("record not found".into()))?;
+    let (mut record,) = row.ok_or_else(|| AppError::NotFound("record not found".into()))?;
 
     let pds = profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, &did).await?;
     repo::enrich_media_blobs(&mut record, &pds, &did);
@@ -190,14 +187,9 @@ async fn handle_procedure(
     input: &Value,
     lexicon: &crate::lexicon::ParsedLexicon,
 ) -> Result<Response, AppError> {
-    let collection = lexicon
-        .target_collection
-        .as_deref()
-        .ok_or_else(|| {
-            AppError::BadRequest(format!(
-                "{method} has no target_collection configured"
-            ))
-        })?;
+    let collection = lexicon.target_collection.as_deref().ok_or_else(|| {
+        AppError::BadRequest(format!("{method} has no target_collection configured"))
+    })?;
 
     let session = repo::get_atp_session(state, claims.token()).await?;
 
@@ -232,7 +224,8 @@ async fn handle_create_record(
         "record": record,
     });
 
-    let resp = repo::pds_post_json_raw(state, session, "com.atproto.repo.createRecord", &pds_body).await?;
+    let resp =
+        repo::pds_post_json_raw(state, session, "com.atproto.repo.createRecord", &pds_body).await?;
 
     if resp.status().is_success() {
         let bytes = resp
@@ -247,7 +240,7 @@ async fn handle_create_record(
             pds_result.get("uri").and_then(|v| v.as_str()),
             pds_result.get("cid").and_then(|v| v.as_str()),
         ) {
-            let rkey = uri.split('/').last().unwrap_or_default();
+            let rkey = uri.split('/').next_back().unwrap_or_default();
             let _ = sqlx::query(
                 r#"
                 INSERT INTO records (uri, did, collection, rkey, record, cid)
@@ -292,7 +285,7 @@ async fn handle_put_record(
 
     let rkey = uri
         .split('/')
-        .last()
+        .next_back()
         .ok_or_else(|| AppError::Internal("invalid AT URI".into()))?;
 
     // Build record from input, adding $type
@@ -310,7 +303,8 @@ async fn handle_put_record(
         "record": record,
     });
 
-    let resp = repo::pds_post_json_raw(state, session, "com.atproto.repo.putRecord", &pds_body).await?;
+    let resp =
+        repo::pds_post_json_raw(state, session, "com.atproto.repo.putRecord", &pds_body).await?;
 
     if resp.status().is_success() {
         let bytes = resp
