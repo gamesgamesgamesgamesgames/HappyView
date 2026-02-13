@@ -9,16 +9,7 @@ use crate::error::AppError;
 /// (same as `Claims`), then checks if the returned DID exists in the `admins`
 /// table. If no admins exist yet, the first authenticated user is
 /// auto-bootstrapped as the initial admin.
-pub struct AdminAuth {
-    did: String,
-}
-
-impl AdminAuth {
-    /// The authenticated admin's DID.
-    pub fn did(&self) -> &str {
-        &self.did
-    }
-}
+pub struct AdminAuth;
 
 impl FromRequestParts<AppState> for AdminAuth {
     type Rejection = AppError;
@@ -68,6 +59,6 @@ impl FromRequestParts<AppState> for AdminAuth {
                 .await;
         });
 
-        Ok(AdminAuth { did })
+        Ok(AdminAuth)
     }
 }
