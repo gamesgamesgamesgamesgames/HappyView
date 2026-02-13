@@ -10,6 +10,7 @@ mod server;
 
 use config::Config;
 use lexicon::LexiconRegistry;
+use tokio::sync::watch;
 use tracing::info;
 
 #[derive(Clone)]
@@ -18,6 +19,7 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub db: sqlx::PgPool,
     pub lexicons: LexiconRegistry,
+    pub collections_tx: watch::Sender<Vec<String>>,
 }
 
 #[tokio::main]
@@ -51,14 +53,18 @@ async fn main() {
         .await
         .expect("failed to load lexicons");
 
+    let initial_collections = lexicons.get_record_collections().await;
+    let (collections_tx, collections_rx) = watch::channel(initial_collections);
+
     let state = AppState {
         config: config.clone(),
         http: reqwest::Client::new(),
         db,
         lexicons,
+        collections_tx,
     };
 
-    jetstream::spawn(state.db.clone(), config.jetstream_url.clone());
+    jetstream::spawn(state.db.clone(), config.jetstream_url.clone(), collections_rx);
 
     let app = server::router(state);
     let addr = config.listen_addr();
