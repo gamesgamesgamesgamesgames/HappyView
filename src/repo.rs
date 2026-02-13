@@ -512,6 +512,102 @@ pub async fn get_game(
     Ok(Json(json!({ "game": record })))
 }
 
+// ---------------------------------------------------------------------------
+// listGames (authenticated)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct ListGamesParams {
+    cursor: Option<String>,
+    limit: Option<u32>,
+}
+
+pub async fn list_games(
+    State(state): State<AppState>,
+    claims: Claims,
+    Query(params): Query<ListGamesParams>,
+) -> Result<Json<Value>, AppError> {
+    let did = claims.did();
+    let pds = profile::resolve_pds_endpoint(&state.http, did).await?;
+
+    let limit = params.limit.unwrap_or(20).min(100);
+
+    let mut url = format!(
+        "{}/xrpc/com.atproto.repo.listRecords?repo={}&collection={}&limit={}",
+        pds.trim_end_matches('/'),
+        did,
+        COLLECTION,
+        limit,
+    );
+
+    if let Some(ref cursor) = params.cursor {
+        url.push_str(&format!("&cursor={}", cursor));
+    }
+
+    let resp = state
+        .http
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| AppError::Internal(format!("PDS listRecords failed: {e}")))?;
+
+    if !resp.status().is_success() {
+        return Err(AppError::Internal(format!(
+            "PDS listRecords returned {}",
+            resp.status()
+        )));
+    }
+
+    let body: Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Internal(format!("invalid PDS listRecords response: {e}")))?;
+
+    let cursor = body.get("cursor").and_then(|c| c.as_str()).map(|s| s.to_string());
+
+    let records = body
+        .get("records")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let games: Vec<Value> = records
+        .into_iter()
+        .filter_map(|record| {
+            let uri = record.get("uri")?.as_str()?.to_string();
+            let mut value = record.get("value")?.clone();
+
+            enrich_media_blobs(&mut value, &pds, did);
+
+            let name = value.get("name")?.as_str()?.to_string();
+            let summary = value.get("summary").and_then(|s| s.as_str()).map(|s| s.to_string());
+            let media = value.get("media").cloned();
+
+            let mut game = json!({
+                "uri": uri,
+                "name": name,
+            });
+
+            let obj = game.as_object_mut().unwrap();
+            if let Some(summary) = summary {
+                obj.insert("summary".to_string(), json!(summary));
+            }
+            if let Some(media) = media {
+                obj.insert("media".to_string(), media);
+            }
+
+            Some(game)
+        })
+        .collect();
+
+    let mut result = json!({ "games": games });
+    if let Some(cursor) = cursor {
+        result.as_object_mut().unwrap().insert("cursor".to_string(), json!(cursor));
+    }
+
+    Ok(Json(result))
+}
+
 /// Walk `media[]` and add a `url` field to each blob so the frontend can
 /// display images directly.
 fn enrich_media_blobs(record: &mut Value, pds: &str, did: &str) {

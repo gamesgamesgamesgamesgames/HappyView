@@ -23,6 +23,10 @@ pub fn router(state: AppState) -> Router {
             get(repo::get_game),
         )
         .route(
+            "/xrpc/games.gamesgamesgamesgames.listGames",
+            get(repo::list_games),
+        )
+        .route(
             "/xrpc/games.gamesgamesgamesgames.putGame",
             post(repo::put_game),
         )
