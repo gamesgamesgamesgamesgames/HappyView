@@ -15,12 +15,11 @@ pub(super) async fn create_admin(
     _admin: AdminAuth,
     Json(body): Json<CreateAdminBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    let row: (String,) =
-        sqlx::query_as("INSERT INTO admins (did) VALUES ($1) RETURNING id::text")
-            .bind(&body.did)
-            .fetch_one(&state.db)
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to create admin: {e}")))?;
+    let row: (String,) = sqlx::query_as("INSERT INTO admins (did) VALUES ($1) RETURNING id::text")
+        .bind(&body.did)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to create admin: {e}")))?;
 
     Ok((
         StatusCode::CREATED,

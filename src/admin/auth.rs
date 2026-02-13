@@ -49,12 +49,11 @@ impl FromRequestParts<AppState> for AdminAuth {
         }
 
         // Look up the DID in the admins table.
-        let found: Option<(String,)> =
-            sqlx::query_as("SELECT id::text FROM admins WHERE did = $1")
-                .bind(&did)
-                .fetch_optional(&state.db)
-                .await
-                .map_err(|e| AppError::Internal(format!("admin auth query failed: {e}")))?;
+        let found: Option<(String,)> = sqlx::query_as("SELECT id::text FROM admins WHERE did = $1")
+            .bind(&did)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("admin auth query failed: {e}")))?;
 
         let Some((admin_id,)) = found else {
             return Err(AppError::Forbidden("not an admin".into()));
