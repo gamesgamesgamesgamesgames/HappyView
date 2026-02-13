@@ -120,8 +120,8 @@ async fn run(
 
                 if let Err(e) = sqlx::query(
                     r#"
-                    INSERT INTO records (uri, did, collection, rkey, record, cid)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
                     ON CONFLICT (uri) DO UPDATE
                         SET record = EXCLUDED.record,
                             cid = EXCLUDED.cid,

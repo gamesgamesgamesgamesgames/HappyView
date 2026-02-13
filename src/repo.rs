@@ -191,12 +191,13 @@ async fn forward_pds_response(resp: reqwest::Response) -> Result<Response, AppEr
 }
 
 /// POST JSON to a PDS XRPC endpoint with DPoP auth and nonce retry.
-async fn pds_post_json(
+/// Returns the raw reqwest::Response so callers can inspect the body.
+async fn pds_post_json_raw(
     state: &AppState,
     session: &AtpSession,
     xrpc_method: &str,
     body: &Value,
-) -> Result<Response, AppError> {
+) -> Result<reqwest::Response, AppError> {
     let url = format!(
         "{}/xrpc/{xrpc_method}",
         session.pds_endpoint.trim_end_matches('/')
@@ -242,11 +243,11 @@ async fn pds_post_json(
                 .await
                 .map_err(|e| AppError::Internal(format!("PDS request retry failed: {e}")))?;
 
-            return forward_pds_response(resp).await;
+            return Ok(resp);
         }
     }
 
-    forward_pds_response(resp).await
+    Ok(resp)
 }
 
 /// POST a binary blob to the PDS with DPoP auth and nonce retry.
@@ -352,13 +353,56 @@ pub async fn create_game(
         rec.insert("publishedAt".to_string(), json!(now));
     }
 
-    let body = json!({
+    let pds_body = json!({
         "repo": claims.did(),
         "collection": COLLECTION,
         "record": record,
     });
 
-    pds_post_json(&state, &session, "com.atproto.repo.createRecord", &body).await
+    let resp = pds_post_json_raw(&state, &session, "com.atproto.repo.createRecord", &pds_body).await?;
+
+    if resp.status().is_success() {
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to read PDS response: {e}")))?;
+
+        let pds_result: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| AppError::Internal(format!("invalid PDS JSON: {e}")))?;
+
+        if let (Some(uri), Some(cid)) = (
+            pds_result.get("uri").and_then(|v| v.as_str()),
+            pds_result.get("cid").and_then(|v| v.as_str()),
+        ) {
+            let rkey = uri.split('/').last().unwrap_or_default();
+            let _ = sqlx::query(
+                r#"
+                INSERT INTO records (uri, did, collection, rkey, record, cid)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (uri) DO UPDATE
+                    SET record = EXCLUDED.record,
+                        cid = EXCLUDED.cid
+                "#,
+            )
+            .bind(uri)
+            .bind(claims.did())
+            .bind(COLLECTION)
+            .bind(rkey)
+            .bind(&record)
+            .bind(cid)
+            .execute(&state.db)
+            .await;
+        }
+
+        Ok((
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            bytes,
+        )
+            .into_response())
+    } else {
+        forward_pds_response(resp).await
+    }
 }
 
 pub async fn put_game(
@@ -416,14 +460,57 @@ pub async fn put_game(
         rec.insert("publishedAt".to_string(), json!(now));
     }
 
-    let body = json!({
+    let pds_body = json!({
         "repo": claims.did(),
         "collection": COLLECTION,
         "rkey": rkey,
         "record": record,
     });
 
-    pds_post_json(&state, &session, "com.atproto.repo.putRecord", &body).await
+    let resp = pds_post_json_raw(&state, &session, "com.atproto.repo.putRecord", &pds_body).await?;
+
+    if resp.status().is_success() {
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to read PDS response: {e}")))?;
+
+        let pds_result: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| AppError::Internal(format!("invalid PDS JSON: {e}")))?;
+
+        let cid = pds_result
+            .get("cid")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO records (uri, did, collection, rkey, record, cid)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (uri) DO UPDATE
+                SET record = EXCLUDED.record,
+                    cid = EXCLUDED.cid,
+                    indexed_at = NOW()
+            "#,
+        )
+        .bind(uri)
+        .bind(claims.did())
+        .bind(COLLECTION)
+        .bind(rkey)
+        .bind(&record)
+        .bind(cid)
+        .execute(&state.db)
+        .await;
+
+        Ok((
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            bytes,
+        )
+            .into_response())
+    } else {
+        forward_pds_response(resp).await
+    }
 }
 
 pub async fn upload_blob(
