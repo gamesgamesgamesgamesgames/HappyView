@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::AppState;
 use crate::error::AppError;
 use crate::lexicon::{LexiconType, ParsedLexicon};
-use crate::AppState;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,34 +59,31 @@ impl axum::extract::FromRequestParts<AppState> for AdminAuth {
 
         // Check admins table first
         let key_hash = hash_api_key(token);
-        let found: Option<(String,)> = sqlx::query_as(
-            "SELECT id::text FROM admins WHERE api_key_hash = $1",
-        )
-        .bind(&key_hash)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("admin auth query failed: {e}")))?;
+        let found: Option<(String,)> =
+            sqlx::query_as("SELECT id::text FROM admins WHERE api_key_hash = $1")
+                .bind(&key_hash)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| AppError::Internal(format!("admin auth query failed: {e}")))?;
 
         if let Some((admin_id,)) = found {
             // Update last_used_at in the background
             let db = state.db.clone();
             let admin_id = admin_id.clone();
             tokio::spawn(async move {
-                let _ = sqlx::query(
-                    "UPDATE admins SET last_used_at = NOW() WHERE id::text = $1",
-                )
-                .bind(&admin_id)
-                .execute(&db)
-                .await;
+                let _ = sqlx::query("UPDATE admins SET last_used_at = NOW() WHERE id::text = $1")
+                    .bind(&admin_id)
+                    .execute(&db)
+                    .await;
             });
             return Ok(AdminAuth);
         }
 
         // Fall back to ADMIN_SECRET env var
-        if let Some(ref secret) = state.config.admin_secret {
-            if token == secret {
-                return Ok(AdminAuth);
-            }
+        if let Some(ref secret) = state.config.admin_secret
+            && token == secret
+        {
+            return Ok(AdminAuth);
         }
 
         Err(AppError::Auth("invalid admin credentials".into()))
@@ -181,7 +178,9 @@ async fn upload_lexicon(
         .lexicon_json
         .get("lexicon")
         .and_then(|v| v.as_i64())
-        .ok_or_else(|| AppError::BadRequest("lexicon JSON must have a numeric 'lexicon' field".into()))?;
+        .ok_or_else(|| {
+            AppError::BadRequest("lexicon JSON must have a numeric 'lexicon' field".into())
+        })?;
 
     if lexicon_version != 1 {
         return Err(AppError::BadRequest(format!(
@@ -254,6 +253,7 @@ async fn list_lexicons(
     State(state): State<AppState>,
     _admin: AdminAuth,
 ) -> Result<Json<Vec<LexiconSummary>>, AppError> {
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(String, i32, Value, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
             "SELECT id, revision, lexicon_json, backfill, created_at, updated_at FROM lexicons ORDER BY id",
@@ -289,6 +289,7 @@ async fn get_lexicon(
     _admin: AdminAuth,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, AppError> {
+    #[allow(clippy::type_complexity)]
     let row: Option<(String, i32, Value, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
             "SELECT id, revision, lexicon_json, backfill, created_at, updated_at FROM lexicons WHERE id = $1",
@@ -413,6 +414,7 @@ async fn backfill_status(
     State(state): State<AppState>,
     _admin: AdminAuth,
 ) -> Result<Json<Vec<BackfillJob>>, AppError> {
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(
         String,
         Option<String>,
@@ -435,7 +437,19 @@ async fn backfill_status(
     let jobs: Vec<BackfillJob> = rows
         .into_iter()
         .map(
-            |(id, collection, did, status, total_repos, processed_repos, total_records, error, started_at, completed_at, created_at)| {
+            |(
+                id,
+                collection,
+                did,
+                status,
+                total_repos,
+                processed_repos,
+                total_records,
+                error,
+                started_at,
+                completed_at,
+                created_at,
+            )| {
                 BackfillJob {
                     id,
                     collection,
@@ -506,13 +520,18 @@ async fn list_admins(
     State(state): State<AppState>,
     _admin: AdminAuth,
 ) -> Result<Json<Vec<AdminSummary>>, AppError> {
-    let rows: Vec<(String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> =
-        sqlx::query_as(
-            "SELECT id::text, name, created_at, last_used_at FROM admins ORDER BY created_at",
-        )
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to list admins: {e}")))?;
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(
+        String,
+        String,
+        chrono::DateTime<chrono::Utc>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    )> = sqlx::query_as(
+        "SELECT id::text, name, created_at, last_used_at FROM admins ORDER BY created_at",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to list admins: {e}")))?;
 
     let admins: Vec<AdminSummary> = rows
         .into_iter()

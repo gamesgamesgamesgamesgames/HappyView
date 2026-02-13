@@ -2,8 +2,8 @@ use sqlx::PgPool;
 
 /// Connect to the test database using `TEST_DATABASE_URL`.
 pub async fn test_pool() -> PgPool {
-    let url = std::env::var("TEST_DATABASE_URL")
-        .expect("TEST_DATABASE_URL must be set for e2e tests");
+    let url =
+        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for e2e tests");
 
     let pool = PgPool::connect(&url)
         .await

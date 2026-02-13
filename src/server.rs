@@ -4,13 +4,13 @@ use axum::{Json, Router};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+use crate::AppState;
 use crate::admin;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::profile;
 use crate::repo;
 use crate::xrpc;
-use crate::AppState;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -36,6 +36,7 @@ async fn get_profile(
     State(state): State<AppState>,
     claims: Claims,
 ) -> Result<Json<profile::Profile>, AppError> {
-    let profile = profile::resolve_profile(&state.http, &state.config.plc_url, claims.did()).await?;
+    let profile =
+        profile::resolve_profile(&state.http, &state.config.plc_url, claims.did()).await?;
     Ok(Json(profile))
 }

@@ -36,7 +36,11 @@ struct GetRecordResponse {
 }
 
 /// Resolve a full profile for the given DID: DID document -> handle + PDS -> profile record.
-pub async fn resolve_profile(http: &reqwest::Client, plc_url: &str, did: &str) -> Result<Profile, AppError> {
+pub async fn resolve_profile(
+    http: &reqwest::Client,
+    plc_url: &str,
+    did: &str,
+) -> Result<Profile, AppError> {
     let did_doc = resolve_did_document(http, plc_url, did).await?;
 
     let handle = did_doc
@@ -52,10 +56,9 @@ pub async fn resolve_profile(http: &reqwest::Client, plc_url: &str, did: &str) -
         .map(|s| s.service_endpoint.clone())
         .ok_or_else(|| AppError::NotFound("no PDS endpoint in DID document".into()))?;
 
-    let (display_name, description, avatar_url) =
-        fetch_profile_from_pds(http, &pds_endpoint, did)
-            .await
-            .unwrap_or((None, None, None));
+    let (display_name, description, avatar_url) = fetch_profile_from_pds(http, &pds_endpoint, did)
+        .await
+        .unwrap_or((None, None, None));
 
     Ok(Profile {
         did: did.to_string(),
@@ -67,7 +70,11 @@ pub async fn resolve_profile(http: &reqwest::Client, plc_url: &str, did: &str) -
 }
 
 /// Resolve the PDS endpoint for a DID by fetching its DID document.
-pub async fn resolve_pds_endpoint(http: &reqwest::Client, plc_url: &str, did: &str) -> Result<String, AppError> {
+pub async fn resolve_pds_endpoint(
+    http: &reqwest::Client,
+    plc_url: &str,
+    did: &str,
+) -> Result<String, AppError> {
     let did_doc = resolve_did_document(http, plc_url, did).await?;
 
     did_doc
@@ -80,7 +87,11 @@ pub async fn resolve_pds_endpoint(http: &reqwest::Client, plc_url: &str, did: &s
 
 /// Fetch a DID document from the PLC directory.
 // TODO: handle did:web:* resolution (fetch https://{domain}/.well-known/did.json)
-async fn resolve_did_document(http: &reqwest::Client, plc_url: &str, did: &str) -> Result<DidDocument, AppError> {
+async fn resolve_did_document(
+    http: &reqwest::Client,
+    plc_url: &str,
+    did: &str,
+) -> Result<DidDocument, AppError> {
     let url = format!("{}/{did}", plc_url.trim_end_matches('/'));
 
     let resp = http

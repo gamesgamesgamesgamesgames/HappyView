@@ -1,7 +1,7 @@
 use axum::Router;
 use happyview::config::Config;
 use happyview::lexicon::LexiconRegistry;
-use happyview::{admin, server, AppState};
+use happyview::{AppState, admin, server};
 use tokio::sync::watch;
 use wiremock::MockServer;
 

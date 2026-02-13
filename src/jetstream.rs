@@ -2,8 +2,8 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::PgPool;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -57,7 +57,15 @@ pub fn spawn(db: PgPool, jetstream_url: String, mut collections_rx: watch::Recei
 
             // Connect and process events. If the collection list changes
             // mid-stream, `run` returns so we can reconnect with new filters.
-            match run(&db, &jetstream_url, &cursor, &collections, &mut collections_rx).await {
+            match run(
+                &db,
+                &jetstream_url,
+                &cursor,
+                &collections,
+                &mut collections_rx,
+            )
+            .await
+            {
                 Ok(()) => {
                     tracing::info!("jetstream reconnecting due to collection change");
                 }

@@ -17,9 +17,7 @@ pub fn admin_auth_header(token: &str) -> (HeaderName, HeaderValue) {
 pub async fn mock_aip_userinfo(mock_server: &MockServer, did: &str) {
     Mock::given(method("GET"))
         .and(path("/oauth/userinfo"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(fixtures::userinfo_response(did)),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixtures::userinfo_response(did)))
         .mount(mock_server)
         .await;
 }

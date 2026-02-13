@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// A minimal record-type lexicon JSON for testing.
 pub fn game_record_lexicon() -> Value {

@@ -21,17 +21,13 @@ impl Config {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(3000),
-            database_url: env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set"),
-            aip_url: env::var("AIP_URL")
-                .expect("AIP_URL must be set"),
+            database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
+            aip_url: env::var("AIP_URL").expect("AIP_URL must be set"),
             jetstream_url: env::var("JETSTREAM_URL")
                 .unwrap_or_else(|_| "wss://jetstream2.us-west.bsky.network/subscribe".into()),
             admin_secret: env::var("ADMIN_SECRET").ok(),
-            relay_url: env::var("RELAY_URL")
-                .unwrap_or_else(|_| "https://bsky.network".into()),
-            plc_url: env::var("PLC_URL")
-                .unwrap_or_else(|_| "https://plc.directory".into()),
+            relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
+            plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
         }
     }
 
@@ -49,10 +45,18 @@ mod tests {
 
     unsafe fn clear_env() {
         for key in [
-            "HOST", "PORT", "DATABASE_URL", "AIP_URL", "JETSTREAM_URL",
-            "ADMIN_SECRET", "RELAY_URL", "PLC_URL",
+            "HOST",
+            "PORT",
+            "DATABASE_URL",
+            "AIP_URL",
+            "JETSTREAM_URL",
+            "ADMIN_SECRET",
+            "RELAY_URL",
+            "PLC_URL",
         ] {
-            unsafe { env::remove_var(key); }
+            unsafe {
+                env::remove_var(key);
+            }
         }
     }
 

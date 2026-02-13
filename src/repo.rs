@@ -5,12 +5,12 @@ use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use p256::pkcs8::EncodePrivateKey;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+use crate::AppState;
 use crate::auth::Claims;
 use crate::error::AppError;
-use crate::AppState;
 
 // ---------------------------------------------------------------------------
 // AT URI parsing
@@ -110,8 +110,7 @@ pub(crate) fn generate_dpop_proof(
         .to_pkcs8_der()
         .map_err(|e| AppError::Internal(format!("PKCS#8 conversion failed: {e}")))?;
 
-    let encoding_key =
-        jsonwebtoken::EncodingKey::from_ec_der(pkcs8_der.as_bytes());
+    let encoding_key = jsonwebtoken::EncodingKey::from_ec_der(pkcs8_der.as_bytes());
 
     // Public JWK for the header (no private component)
     let public_jwk = jsonwebtoken::jwk::Jwk {
@@ -212,35 +211,34 @@ pub(crate) async fn pds_post_json_raw(
         .map_err(|e| AppError::Internal(format!("PDS request failed: {e}")))?;
 
     // Retry with nonce if PDS requires it
-    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-        if let Some(nonce) = resp
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED
+        && let Some(nonce) = resp
             .headers()
             .get("dpop-nonce")
             .and_then(|v| v.to_str().ok())
-        {
-            let nonce = nonce.to_string();
-            tracing::debug!("retrying with DPoP nonce");
+    {
+        let nonce = nonce.to_string();
+        tracing::debug!("retrying with DPoP nonce");
 
-            let dpop = generate_dpop_proof(
-                "POST",
-                &url,
-                &session.dpop_jwk,
-                &session.access_token,
-                Some(&nonce),
-            )?;
+        let dpop = generate_dpop_proof(
+            "POST",
+            &url,
+            &session.dpop_jwk,
+            &session.access_token,
+            Some(&nonce),
+        )?;
 
-            let resp = state
-                .http
-                .post(&url)
-                .header("authorization", format!("DPoP {}", session.access_token))
-                .header("dpop", &dpop)
-                .json(body)
-                .send()
-                .await
-                .map_err(|e| AppError::Internal(format!("PDS request retry failed: {e}")))?;
+        let resp = state
+            .http
+            .post(&url)
+            .header("authorization", format!("DPoP {}", session.access_token))
+            .header("dpop", &dpop)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("PDS request retry failed: {e}")))?;
 
-            return Ok(resp);
-        }
+        return Ok(resp);
     }
 
     Ok(resp)
@@ -271,36 +269,35 @@ async fn pds_post_blob(
         .await
         .map_err(|e| AppError::Internal(format!("PDS uploadBlob failed: {e}")))?;
 
-    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-        if let Some(nonce) = resp
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED
+        && let Some(nonce) = resp
             .headers()
             .get("dpop-nonce")
             .and_then(|v| v.to_str().ok())
-        {
-            let nonce = nonce.to_string();
-            tracing::debug!("retrying uploadBlob with DPoP nonce");
+    {
+        let nonce = nonce.to_string();
+        tracing::debug!("retrying uploadBlob with DPoP nonce");
 
-            let dpop = generate_dpop_proof(
-                "POST",
-                &url,
-                &session.dpop_jwk,
-                &session.access_token,
-                Some(&nonce),
-            )?;
+        let dpop = generate_dpop_proof(
+            "POST",
+            &url,
+            &session.dpop_jwk,
+            &session.access_token,
+            Some(&nonce),
+        )?;
 
-            let resp = state
-                .http
-                .post(&url)
-                .header("authorization", format!("DPoP {}", session.access_token))
-                .header("dpop", &dpop)
-                .header("content-type", content_type)
-                .body(blob)
-                .send()
-                .await
-                .map_err(|e| AppError::Internal(format!("PDS uploadBlob retry failed: {e}")))?;
+        let resp = state
+            .http
+            .post(&url)
+            .header("authorization", format!("DPoP {}", session.access_token))
+            .header("dpop", &dpop)
+            .header("content-type", content_type)
+            .body(blob)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("PDS uploadBlob retry failed: {e}")))?;
 
-            return forward_pds_response(resp).await;
-        }
+        return forward_pds_response(resp).await;
     }
 
     forward_pds_response(resp).await
@@ -344,17 +341,16 @@ pub(crate) fn enrich_media_blobs(record: &mut Value, pds: &str, did: &str) {
             .and_then(|l| l.as_str())
             .map(|s| s.to_string());
 
-        if let Some(cid) = cid {
-            if let Some(blob) = item.get_mut("blob") {
-                if let Some(obj) = blob.as_object_mut() {
-                    obj.insert(
-                        "url".to_string(),
-                        json!(format!(
-                            "{pds_base}/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}"
-                        )),
-                    );
-                }
-            }
+        if let Some(cid) = cid
+            && let Some(blob) = item.get_mut("blob")
+            && let Some(obj) = blob.as_object_mut()
+        {
+            obj.insert(
+                "url".to_string(),
+                json!(format!(
+                    "{pds_base}/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}"
+                )),
+            );
         }
     }
 }
@@ -480,19 +476,23 @@ mod tests {
         let point = public.to_encoded_point(false);
 
         DpopJwk {
-            x: base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode(point.x().unwrap()),
-            y: base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode(point.y().unwrap()),
-            d: base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode(secret.to_bytes()),
+            x: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(point.x().unwrap()),
+            y: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(point.y().unwrap()),
+            d: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(secret.to_bytes()),
         }
     }
 
     #[test]
     fn dpop_proof_produces_valid_jwt_structure() {
         let jwk = test_dpop_jwk();
-        let token = generate_dpop_proof("POST", "https://pds.example.com/xrpc/test", &jwk, "access-tok", None).unwrap();
+        let token = generate_dpop_proof(
+            "POST",
+            "https://pds.example.com/xrpc/test",
+            &jwk,
+            "access-tok",
+            None,
+        )
+        .unwrap();
 
         let parts: Vec<&str> = token.split('.').collect();
         assert_eq!(parts.len(), 3, "JWT should have 3 parts");
@@ -501,7 +501,14 @@ mod tests {
     #[test]
     fn dpop_proof_header_has_correct_fields() {
         let jwk = test_dpop_jwk();
-        let token = generate_dpop_proof("POST", "https://pds.example.com/xrpc/test", &jwk, "access-tok", None).unwrap();
+        let token = generate_dpop_proof(
+            "POST",
+            "https://pds.example.com/xrpc/test",
+            &jwk,
+            "access-tok",
+            None,
+        )
+        .unwrap();
 
         let header_b64 = token.split('.').next().unwrap();
         let header_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -517,7 +524,14 @@ mod tests {
     #[test]
     fn dpop_proof_claims_have_correct_fields() {
         let jwk = test_dpop_jwk();
-        let token = generate_dpop_proof("GET", "https://pds.example.com/xrpc/test", &jwk, "my-access-token", None).unwrap();
+        let token = generate_dpop_proof(
+            "GET",
+            "https://pds.example.com/xrpc/test",
+            &jwk,
+            "my-access-token",
+            None,
+        )
+        .unwrap();
 
         let payload_b64 = token.split('.').nth(1).unwrap();
         let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -537,7 +551,14 @@ mod tests {
     #[test]
     fn dpop_proof_includes_nonce_when_provided() {
         let jwk = test_dpop_jwk();
-        let token = generate_dpop_proof("POST", "https://pds.example.com/xrpc/test", &jwk, "tok", Some("abc123")).unwrap();
+        let token = generate_dpop_proof(
+            "POST",
+            "https://pds.example.com/xrpc/test",
+            &jwk,
+            "tok",
+            Some("abc123"),
+        )
+        .unwrap();
 
         let payload_b64 = token.split('.').nth(1).unwrap();
         let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -552,7 +573,8 @@ mod tests {
     fn dpop_proof_ath_is_sha256_of_access_token() {
         let jwk = test_dpop_jwk();
         let access_token = "test-access-token";
-        let token = generate_dpop_proof("POST", "https://example.com", &jwk, access_token, None).unwrap();
+        let token =
+            generate_dpop_proof("POST", "https://example.com", &jwk, access_token, None).unwrap();
 
         let payload_b64 = token.split('.').nth(1).unwrap();
         let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
