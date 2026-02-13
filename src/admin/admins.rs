@@ -7,38 +7,31 @@ use crate::AppState;
 use crate::error::AppError;
 
 use super::auth::AdminAuth;
-use super::hash::hash_api_key;
 use super::types::{AdminSummary, CreateAdminBody};
 
-/// POST /admin/admins — create a new admin. Returns the API key once.
+/// POST /admin/admins — add a new admin by DID.
 pub(super) async fn create_admin(
     State(state): State<AppState>,
     _admin: AdminAuth,
     Json(body): Json<CreateAdminBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    let api_key = uuid::Uuid::new_v4().to_string();
-    let key_hash = hash_api_key(&api_key);
-
-    let row: (String,) = sqlx::query_as(
-        "INSERT INTO admins (name, api_key_hash) VALUES ($1, $2) RETURNING id::text",
-    )
-    .bind(&body.name)
-    .bind(&key_hash)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to create admin: {e}")))?;
+    let row: (String,) =
+        sqlx::query_as("INSERT INTO admins (did) VALUES ($1) RETURNING id::text")
+            .bind(&body.did)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to create admin: {e}")))?;
 
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({
             "id": row.0,
-            "name": body.name,
-            "api_key": api_key,
+            "did": body.did,
         })),
     ))
 }
 
-/// GET /admin/admins — list all admins (without keys).
+/// GET /admin/admins — list all admins.
 pub(super) async fn list_admins(
     State(state): State<AppState>,
     _admin: AdminAuth,
@@ -50,7 +43,7 @@ pub(super) async fn list_admins(
         chrono::DateTime<chrono::Utc>,
         Option<chrono::DateTime<chrono::Utc>>,
     )> = sqlx::query_as(
-        "SELECT id::text, name, created_at, last_used_at FROM admins ORDER BY created_at",
+        "SELECT id::text, did, created_at, last_used_at FROM admins ORDER BY created_at",
     )
     .fetch_all(&state.db)
     .await
@@ -58,9 +51,9 @@ pub(super) async fn list_admins(
 
     let admins: Vec<AdminSummary> = rows
         .into_iter()
-        .map(|(id, name, created_at, last_used_at)| AdminSummary {
+        .map(|(id, did, created_at, last_used_at)| AdminSummary {
             id,
-            name,
+            did,
             created_at,
             last_used_at,
         })

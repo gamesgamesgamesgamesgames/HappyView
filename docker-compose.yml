@@ -50,7 +50,6 @@ services:
     environment:
       DATABASE_URL: postgres://happyview:happyview@postgres/happyview
       AIP_URL: http://aip:8080
-      ADMIN_SECRET: ${ADMIN_SECRET:-dev-secret}
     depends_on:
       postgres:
         condition: service_healthy

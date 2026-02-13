@@ -1,6 +1,6 @@
 use happyview::config::Config;
 use happyview::lexicon::LexiconRegistry;
-use happyview::{AppState, admin, backfill, jetstream, server};
+use happyview::{AppState, backfill, jetstream, server};
 use tokio::sync::watch;
 use tracing::info;
 
@@ -28,8 +28,6 @@ async fn main() {
         .run(&db)
         .await
         .expect("failed to run migrations");
-
-    admin::bootstrap(&db, &config.admin_secret).await;
 
     let lexicons = LexiconRegistry::new();
     lexicons

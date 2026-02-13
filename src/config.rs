@@ -8,7 +8,6 @@ pub struct Config {
     pub database_url: String,
     pub aip_url: String,
     pub jetstream_url: String,
-    pub admin_secret: Option<String>,
     pub relay_url: String,
     pub plc_url: String,
 }
@@ -25,7 +24,6 @@ impl Config {
             aip_url: env::var("AIP_URL").expect("AIP_URL must be set"),
             jetstream_url: env::var("JETSTREAM_URL")
                 .unwrap_or_else(|_| "wss://jetstream2.us-west.bsky.network/subscribe".into()),
-            admin_secret: env::var("ADMIN_SECRET").ok(),
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
             plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
         }
@@ -50,7 +48,6 @@ mod tests {
             "DATABASE_URL",
             "AIP_URL",
             "JETSTREAM_URL",
-            "ADMIN_SECRET",
             "RELAY_URL",
             "PLC_URL",
         ] {
@@ -75,7 +72,6 @@ mod tests {
             database_url: String::new(),
             aip_url: String::new(),
             jetstream_url: String::new(),
-            admin_secret: None,
             relay_url: String::new(),
             plc_url: String::new(),
         };
@@ -110,7 +106,6 @@ mod tests {
         assert!(config.jetstream_url.contains("jetstream"));
         assert_eq!(config.relay_url, "https://bsky.network");
         assert_eq!(config.plc_url, "https://plc.directory");
-        assert!(config.admin_secret.is_none());
     }
 
     #[test]
@@ -121,14 +116,12 @@ mod tests {
             set_required_env();
             env::set_var("HOST", "10.0.0.1");
             env::set_var("PORT", "9090");
-            env::set_var("ADMIN_SECRET", "s3cret");
             env::set_var("RELAY_URL", "https://relay.example.com");
             env::set_var("PLC_URL", "https://plc.example.com");
         }
         let config = Config::from_env();
         assert_eq!(config.host, "10.0.0.1");
         assert_eq!(config.port, 9090);
-        assert_eq!(config.admin_secret, Some("s3cret".into()));
         assert_eq!(config.relay_url, "https://relay.example.com");
         assert_eq!(config.plc_url, "https://plc.example.com");
     }

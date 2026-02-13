@@ -6,6 +6,7 @@ use bytes::Bytes;
 pub enum AppError {
     Auth(String),
     BadRequest(String),
+    Forbidden(String),
     Internal(String),
     NotFound(String),
     PdsError(StatusCode, Bytes),
@@ -16,6 +17,7 @@ impl std::fmt::Display for AppError {
         match self {
             AppError::Auth(msg) => write!(f, "auth error: {msg}"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
+            AppError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
             AppError::NotFound(msg) => write!(f, "not found: {msg}"),
             AppError::PdsError(status, _) => write!(f, "PDS error: {status}"),
@@ -36,6 +38,7 @@ impl IntoResponse for AppError {
                 let (status, message) = match &other {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
                     AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+                    AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
                     AppError::Internal(msg) => {
                         tracing::error!("{msg}");
                         (
