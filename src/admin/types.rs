@@ -74,13 +74,13 @@ pub(super) struct BackfillJob {
 
 #[derive(Deserialize)]
 pub(super) struct CreateAdminBody {
-    pub(super) name: String,
+    pub(super) did: String,
 }
 
 #[derive(Serialize)]
 pub(super) struct AdminSummary {
     pub(super) id: String,
-    pub(super) name: String,
+    pub(super) did: String,
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
 }

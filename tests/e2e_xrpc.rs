@@ -43,12 +43,14 @@ fn authed_get(uri: &str, token: &str) -> Request<Body> {
 
 /// Seed the game record lexicon and a query lexicon into the test app.
 async fn seed_lexicons(app: &TestApp) {
+    app.mock_admin_userinfo().await;
+
     // Record lexicon
     app.router
         .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_secret,
+            &app.admin_token,
             &json!({
                 "lexicon_json": fixtures::game_record_lexicon(),
                 "backfill": false
@@ -62,7 +64,7 @@ async fn seed_lexicons(app: &TestApp) {
         .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_secret,
+            &app.admin_token,
             &json!({
                 "lexicon_json": fixtures::list_games_query_lexicon(),
                 "target_collection": "games.gamesgamesgamesgames.game"
@@ -76,7 +78,7 @@ async fn seed_lexicons(app: &TestApp) {
         .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_secret,
+            &app.admin_token,
             &json!({
                 "lexicon_json": fixtures::create_game_procedure_lexicon(),
                 "target_collection": "games.gamesgamesgamesgames.game"

@@ -1,59 +1,74 @@
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+
 use crate::AppState;
+use crate::auth::middleware::Claims;
 use crate::error::AppError;
 
-use super::hash::hash_api_key;
+/// Axum extractor for admin auth. Validates the Bearer token via AIP OAuth
+/// (same as `Claims`), then checks if the returned DID exists in the `admins`
+/// table. If no admins exist yet, the first authenticated user is
+/// auto-bootstrapped as the initial admin.
+pub struct AdminAuth {
+    did: String,
+}
 
-/// Axum extractor for admin auth. Checks the Bearer token against:
-/// 1. The `admins` table (hashed key lookup)
-/// 2. Falls back to `ADMIN_SECRET` env var for bootstrap
-pub struct AdminAuth;
+impl AdminAuth {
+    /// The authenticated admin's DID.
+    pub fn did(&self) -> &str {
+        &self.did
+    }
+}
 
-impl axum::extract::FromRequestParts<AppState> for AdminAuth {
+impl FromRequestParts<AppState> for AdminAuth {
     type Rejection = AppError;
 
     async fn from_request_parts(
-        parts: &mut axum::http::request::Parts,
+        parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        let header = parts
-            .headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AppError::Auth("missing Authorization header".into()))?;
+        // Validate the Bearer token via AIP userinfo (reuse Claims extractor).
+        let claims = Claims::from_request_parts(parts, state).await?;
+        let did = claims.did().to_string();
 
-        let token = header
-            .strip_prefix("Bearer ")
-            .ok_or_else(|| AppError::Auth("invalid Authorization scheme".into()))?;
+        // Check whether the admins table is empty (auto-bootstrap case).
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins")
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("admin count query failed: {e}")))?;
 
-        // Check admins table first
-        let key_hash = hash_api_key(token);
+        if count.0 == 0 {
+            // First authenticated user becomes the initial admin.
+            sqlx::query("INSERT INTO admins (did) VALUES ($1) ON CONFLICT DO NOTHING")
+                .bind(&did)
+                .execute(&state.db)
+                .await
+                .map_err(|e| AppError::Internal(format!("auto-bootstrap admin failed: {e}")))?;
+
+            tracing::info!(did = %did, "auto-bootstrapped first admin");
+        }
+
+        // Look up the DID in the admins table.
         let found: Option<(String,)> =
-            sqlx::query_as("SELECT id::text FROM admins WHERE api_key_hash = $1")
-                .bind(&key_hash)
+            sqlx::query_as("SELECT id::text FROM admins WHERE did = $1")
+                .bind(&did)
                 .fetch_optional(&state.db)
                 .await
                 .map_err(|e| AppError::Internal(format!("admin auth query failed: {e}")))?;
 
-        if let Some((admin_id,)) = found {
-            // Update last_used_at in the background
-            let db = state.db.clone();
-            let admin_id = admin_id.clone();
-            tokio::spawn(async move {
-                let _ = sqlx::query("UPDATE admins SET last_used_at = NOW() WHERE id::text = $1")
-                    .bind(&admin_id)
-                    .execute(&db)
-                    .await;
-            });
-            return Ok(AdminAuth);
-        }
+        let Some((admin_id,)) = found else {
+            return Err(AppError::Forbidden("not an admin".into()));
+        };
 
-        // Fall back to ADMIN_SECRET env var
-        if let Some(ref secret) = state.config.admin_secret
-            && token == secret
-        {
-            return Ok(AdminAuth);
-        }
+        // Update last_used_at in the background.
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            let _ = sqlx::query("UPDATE admins SET last_used_at = NOW() WHERE id::text = $1")
+                .bind(&admin_id)
+                .execute(&db)
+                .await;
+        });
 
-        Err(AppError::Auth("invalid admin credentials".into()))
+        Ok(AdminAuth { did })
     }
 }

@@ -1,8 +1,6 @@
 mod admins;
 pub(crate) mod auth;
 mod backfill;
-pub(crate) mod bootstrap;
-pub(crate) mod hash;
 mod lexicons;
 mod stats;
 mod types;
@@ -11,8 +9,6 @@ use axum::Router;
 use axum::routing::{delete, get, post};
 
 use crate::AppState;
-
-pub use bootstrap::bootstrap;
 
 pub fn admin_routes(_state: AppState) -> Router<AppState> {
     Router::new()

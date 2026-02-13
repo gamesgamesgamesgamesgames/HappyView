@@ -78,6 +78,7 @@ async fn admin_no_auth_returns_401() {
 async fn admin_wrong_token_returns_401() {
     let app = TestApp::new().await;
 
+    // No AIP mock mounted — the userinfo request will fail.
     let resp = app
         .router
         .oneshot(admin_get("/admin/lexicons", "wrong-token"))
@@ -91,14 +92,65 @@ async fn admin_wrong_token_returns_401() {
 #[serial]
 async fn admin_valid_token_returns_200() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", &app.admin_secret))
+        .oneshot(admin_get("/admin/lexicons", &app.admin_token))
         .await
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial]
+async fn admin_non_admin_did_returns_403() {
+    let app = TestApp::new().await;
+
+    // Mock AIP returning a DID that is NOT in the admins table.
+    common::auth::mock_aip_userinfo(&app.mock_server, "did:plc:notadmin").await;
+
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/lexicons", "some-token"))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+#[serial]
+async fn admin_auto_bootstrap_first_user() {
+    let app = TestApp::new().await;
+
+    // Clear the seeded admin so the table is empty.
+    sqlx::query("DELETE FROM admins")
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+
+    // Mock AIP returning a new DID.
+    let bootstrap_did = "did:plc:bootstrap";
+    common::auth::mock_aip_userinfo(&app.mock_server, bootstrap_did).await;
+
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/lexicons", "bootstrap-token"))
+        .await
+        .unwrap();
+
+    // The first user should be auto-bootstrapped as admin.
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Verify the DID was inserted.
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins WHERE did = $1")
+        .bind(bootstrap_did)
+        .fetch_one(&app.state.db)
+        .await
+        .unwrap();
+    assert_eq!(count.0, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +161,7 @@ async fn admin_valid_token_returns_200() {
 #[serial]
 async fn lexicon_create_returns_201() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": fixtures::game_record_lexicon(),
         "backfill": true
@@ -116,7 +169,7 @@ async fn lexicon_create_returns_201() {
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
         .await
         .unwrap();
 
@@ -130,6 +183,7 @@ async fn lexicon_create_returns_201() {
 #[serial]
 async fn lexicon_upsert_returns_200_with_incremented_revision() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": fixtures::game_record_lexicon(),
         "backfill": true
@@ -139,7 +193,7 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
     let resp = app
         .router
         .clone()
-        .oneshot(admin_post("/admin/lexicons", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
@@ -147,7 +201,7 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
     // Upsert
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -159,13 +213,14 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
 #[serial]
 async fn lexicon_invalid_version_returns_400() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": { "lexicon": 99, "id": "test.bad" },
     });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
         .await
         .unwrap();
 
@@ -176,13 +231,14 @@ async fn lexicon_invalid_version_returns_400() {
 #[serial]
 async fn lexicon_missing_id_returns_400() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": { "lexicon": 1 },
     });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
         .await
         .unwrap();
 
@@ -193,13 +249,14 @@ async fn lexicon_missing_id_returns_400() {
 #[serial]
 async fn lexicon_list_all() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     // Seed a lexicon
     app.router
         .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_secret,
+            &app.admin_token,
             &json!({ "lexicon_json": fixtures::game_record_lexicon() }),
         ))
         .await
@@ -207,7 +264,7 @@ async fn lexicon_list_all() {
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", &app.admin_secret))
+        .oneshot(admin_get("/admin/lexicons", &app.admin_token))
         .await
         .unwrap();
 
@@ -222,12 +279,13 @@ async fn lexicon_list_all() {
 #[serial]
 async fn lexicon_get_by_id() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_secret,
+            &app.admin_token,
             &json!({ "lexicon_json": fixtures::game_record_lexicon() }),
         ))
         .await
@@ -237,7 +295,7 @@ async fn lexicon_get_by_id() {
         .router
         .oneshot(admin_get(
             "/admin/lexicons/games.gamesgamesgamesgames.game",
-            &app.admin_secret,
+            &app.admin_token,
         ))
         .await
         .unwrap();
@@ -251,12 +309,13 @@ async fn lexicon_get_by_id() {
 #[serial]
 async fn lexicon_get_not_found() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
         .oneshot(admin_get(
             "/admin/lexicons/nonexistent.lexicon",
-            &app.admin_secret,
+            &app.admin_token,
         ))
         .await
         .unwrap();
@@ -268,12 +327,13 @@ async fn lexicon_get_not_found() {
 #[serial]
 async fn lexicon_delete() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_secret,
+            &app.admin_token,
             &json!({ "lexicon_json": fixtures::game_record_lexicon() }),
         ))
         .await
@@ -283,7 +343,7 @@ async fn lexicon_delete() {
         .router
         .oneshot(admin_delete(
             "/admin/lexicons/games.gamesgamesgamesgames.game",
-            &app.admin_secret,
+            &app.admin_token,
         ))
         .await
         .unwrap();
@@ -295,12 +355,13 @@ async fn lexicon_delete() {
 #[serial]
 async fn lexicon_delete_not_found() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
         .oneshot(admin_delete(
             "/admin/lexicons/nonexistent.lexicon",
-            &app.admin_secret,
+            &app.admin_token,
         ))
         .await
         .unwrap();
@@ -316,10 +377,11 @@ async fn lexicon_delete_not_found() {
 #[serial]
 async fn stats_empty_db() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/stats", &app.admin_secret))
+        .oneshot(admin_get("/admin/stats", &app.admin_token))
         .await
         .unwrap();
 
@@ -333,6 +395,7 @@ async fn stats_empty_db() {
 #[serial]
 async fn stats_with_seeded_records() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     // Seed records directly
     sqlx::query(
@@ -350,7 +413,7 @@ async fn stats_with_seeded_records() {
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/stats", &app.admin_secret))
+        .oneshot(admin_get("/admin/stats", &app.admin_token))
         .await
         .unwrap();
 
@@ -369,11 +432,12 @@ async fn stats_with_seeded_records() {
 #[serial]
 async fn backfill_create_job() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
     let body = json!({ "collection": "test.collection" });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/backfill", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/backfill", &app.admin_token, &body))
         .await
         .unwrap();
 
@@ -387,17 +451,18 @@ async fn backfill_create_job() {
 #[serial]
 async fn backfill_list_jobs() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     // Create a job first
     app.router
         .clone()
-        .oneshot(admin_post("/admin/backfill", &app.admin_secret, &json!({})))
+        .oneshot(admin_post("/admin/backfill", &app.admin_token, &json!({})))
         .await
         .unwrap();
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/backfill/status", &app.admin_secret))
+        .oneshot(admin_get("/admin/backfill/status", &app.admin_token))
         .await
         .unwrap();
 
@@ -412,43 +477,45 @@ async fn backfill_list_jobs() {
 
 #[tokio::test]
 #[serial]
-async fn admin_create_returns_api_key() {
+async fn admin_create_returns_did() {
     let app = TestApp::new().await;
-    let body = json!({ "name": "test-admin" });
+    app.mock_admin_userinfo().await;
+    let body = json!({ "did": "did:plc:newadmin" });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/admins", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/admins", &app.admin_token, &body))
         .await
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::CREATED);
     let json = json_body(resp).await;
-    assert_eq!(json["name"], "test-admin");
-    assert!(json.get("api_key").is_some());
+    assert_eq!(json["did"], "did:plc:newadmin");
     assert!(json.get("id").is_some());
 }
 
 #[tokio::test]
 #[serial]
-async fn admin_created_key_authenticates() {
+async fn admin_created_did_authenticates() {
     let app = TestApp::new().await;
-    let body = json!({ "name": "new-admin" });
+    app.mock_admin_userinfo().await;
 
-    // Create admin
-    let resp = app
-        .router
+    let new_did = "did:plc:newadmin2";
+    let body = json!({ "did": new_did });
+
+    // Create admin via the existing admin
+    app.router
         .clone()
-        .oneshot(admin_post("/admin/admins", &app.admin_secret, &body))
+        .oneshot(admin_post("/admin/admins", &app.admin_token, &body))
         .await
         .unwrap();
-    let json = json_body(resp).await;
-    let api_key = json["api_key"].as_str().unwrap();
 
-    // Use the new key
+    // Now mock AIP returning the new DID for a different token
+    common::auth::mock_aip_userinfo(&app.mock_server, new_did).await;
+
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", api_key))
+        .oneshot(admin_get("/admin/lexicons", "new-admin-token"))
         .await
         .unwrap();
 
@@ -457,12 +524,13 @@ async fn admin_created_key_authenticates() {
 
 #[tokio::test]
 #[serial]
-async fn admin_list_excludes_keys() {
+async fn admin_list_returns_dids() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/admins", &app.admin_secret))
+        .oneshot(admin_get("/admin/admins", &app.admin_token))
         .await
         .unwrap();
 
@@ -470,8 +538,8 @@ async fn admin_list_excludes_keys() {
     let json = json_body(resp).await;
     let admins = json.as_array().unwrap();
     assert!(!admins.is_empty());
-    // No admin should expose api_key or api_key_hash
     for admin in admins {
+        assert!(admin.get("did").is_some());
         assert!(admin.get("api_key").is_none());
         assert!(admin.get("api_key_hash").is_none());
     }
@@ -481,6 +549,7 @@ async fn admin_list_excludes_keys() {
 #[serial]
 async fn admin_delete_returns_204() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     // Create an admin to delete
     let resp = app
@@ -488,8 +557,8 @@ async fn admin_delete_returns_204() {
         .clone()
         .oneshot(admin_post(
             "/admin/admins",
-            &app.admin_secret,
-            &json!({ "name": "disposable" }),
+            &app.admin_token,
+            &json!({ "did": "did:plc:disposable" }),
         ))
         .await
         .unwrap();
@@ -500,7 +569,7 @@ async fn admin_delete_returns_204() {
         .router
         .oneshot(admin_delete(
             &format!("/admin/admins/{id}"),
-            &app.admin_secret,
+            &app.admin_token,
         ))
         .await
         .unwrap();
@@ -512,12 +581,13 @@ async fn admin_delete_returns_204() {
 #[serial]
 async fn admin_delete_not_found() {
     let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
         .oneshot(admin_delete(
             "/admin/admins/00000000-0000-0000-0000-000000000000",
-            &app.admin_secret,
+            &app.admin_token,
         ))
         .await
         .unwrap();
