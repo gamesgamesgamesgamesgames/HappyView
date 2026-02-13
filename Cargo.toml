@@ -30,3 +30,4 @@ wiremock = "0.6"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 serial_test = "3"
+urlencoding = "2.1.3"

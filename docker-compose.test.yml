@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: happyview
+      POSTGRES_PASSWORD: happyview
+      POSTGRES_DB: happyview_test
+    ports:
+      - "5433:5432"
