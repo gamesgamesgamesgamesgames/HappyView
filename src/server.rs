@@ -9,6 +9,7 @@ use crate::auth::Claims;
 use crate::error::AppError;
 use crate::profile;
 use crate::repo;
+use crate::xrpc;
 use crate::AppState;
 
 pub fn router(state: AppState) -> Router {
@@ -17,25 +18,11 @@ pub fn router(state: AppState) -> Router {
         .nest("/admin", admin::admin_routes(state.clone()))
         .route("/xrpc/app.bsky.actor.getProfile", get(get_profile))
         .route(
-            "/xrpc/games.gamesgamesgamesgames.createGame",
-            post(repo::create_game),
-        )
-        .route(
-            "/xrpc/games.gamesgamesgamesgames.getGame",
-            get(repo::get_game),
-        )
-        .route(
-            "/xrpc/games.gamesgamesgamesgames.listGames",
-            get(repo::list_games),
-        )
-        .route(
-            "/xrpc/games.gamesgamesgamesgames.putGame",
-            post(repo::put_game),
-        )
-        .route(
             "/xrpc/com.atproto.repo.uploadBlob",
             post(repo::upload_blob).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
         )
+        // Catch-all for dynamically registered lexicons
+        .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

@@ -37,11 +37,13 @@ pub struct ParsedLexicon {
     pub raw: Value,
     /// Database revision number.
     pub revision: i32,
+    /// For queries/procedures: the backing record collection NSID.
+    pub target_collection: Option<String>,
 }
 
 impl ParsedLexicon {
     /// Parse a lexicon JSON document into a `ParsedLexicon`.
-    pub fn parse(raw: Value, revision: i32) -> Result<Self, String> {
+    pub fn parse(raw: Value, revision: i32, target_collection: Option<String>) -> Result<Self, String> {
         let id = raw
             .get("id")
             .and_then(|v| v.as_str())
@@ -81,6 +83,7 @@ impl ParsedLexicon {
             record_schema,
             raw,
             revision,
+            target_collection,
         })
     }
 }
@@ -100,8 +103,8 @@ impl LexiconRegistry {
 
     /// Load all lexicons from the database, replacing any existing entries.
     pub async fn load_from_db(&self, db: &sqlx::PgPool) -> Result<(), String> {
-        let rows: Vec<(String, Value, i32)> =
-            sqlx::query_as("SELECT id, lexicon_json, revision FROM lexicons")
+        let rows: Vec<(String, Value, i32, Option<String>)> =
+            sqlx::query_as("SELECT id, lexicon_json, revision, target_collection FROM lexicons")
                 .fetch_all(db)
                 .await
                 .map_err(|e| format!("failed to load lexicons: {e}"))?;
@@ -110,8 +113,8 @@ impl LexiconRegistry {
         inner.clear();
 
         let mut loaded = 0u32;
-        for (id, json, revision) in rows {
-            match ParsedLexicon::parse(json, revision) {
+        for (id, json, revision, target_collection) in rows {
+            match ParsedLexicon::parse(json, revision, target_collection) {
                 Ok(parsed) => {
                     inner.insert(id, parsed);
                     loaded += 1;

@@ -88,6 +88,7 @@ struct UploadLexiconBody {
     lexicon_json: Value,
     #[serde(default = "default_backfill")]
     backfill: bool,
+    target_collection: Option<String>,
 }
 
 fn default_backfill() -> bool {
@@ -137,17 +138,18 @@ async fn upload_lexicon(
         .to_string();
 
     // Validate it parses correctly
-    ParsedLexicon::parse(body.lexicon_json.clone(), 1)
+    ParsedLexicon::parse(body.lexicon_json.clone(), 1, body.target_collection.clone())
         .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
 
     // Upsert into database
     let row: (i32,) = sqlx::query_as(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill)
-        VALUES ($1, $2, $3)
+        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             backfill = EXCLUDED.backfill,
+            target_collection = EXCLUDED.target_collection,
             revision = lexicons.revision + 1,
             updated_at = NOW()
         RETURNING revision
@@ -156,6 +158,7 @@ async fn upload_lexicon(
     .bind(&id)
     .bind(&body.lexicon_json)
     .bind(body.backfill)
+    .bind(&body.target_collection)
     .fetch_one(&state.db)
     .await
     .map_err(|e| AppError::Internal(format!("failed to upsert lexicon: {e}")))?;
@@ -163,7 +166,7 @@ async fn upload_lexicon(
     let revision = row.0;
 
     // Update in-memory registry with correct revision
-    let parsed = ParsedLexicon::parse(body.lexicon_json, revision)
+    let parsed = ParsedLexicon::parse(body.lexicon_json, revision, body.target_collection)
         .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;
     let is_record = parsed.lexicon_type == LexiconType::Record;
     state.lexicons.upsert(parsed).await;
@@ -203,7 +206,7 @@ async fn list_lexicons(
     let summaries: Vec<LexiconSummary> = rows
         .into_iter()
         .map(|(id, revision, json, backfill, created_at, updated_at)| {
-            let lexicon_type = ParsedLexicon::parse(json, revision)
+            let lexicon_type = ParsedLexicon::parse(json, revision, None)
                 .map(|p| format!("{:?}", p.lexicon_type).to_lowercase())
                 .unwrap_or_else(|_| "unknown".into());
 

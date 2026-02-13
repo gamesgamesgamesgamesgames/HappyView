@@ -7,6 +7,7 @@ mod lexicon;
 mod profile;
 mod repo;
 mod server;
+mod xrpc;
 
 use config::Config;
 use lexicon::LexiconRegistry;
