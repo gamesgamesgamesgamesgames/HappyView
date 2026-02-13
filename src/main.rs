@@ -1,12 +1,15 @@
+mod admin;
 mod auth;
 mod config;
 mod error;
 mod jetstream;
+mod lexicon;
 mod profile;
 mod repo;
 mod server;
 
 use config::Config;
+use lexicon::LexiconRegistry;
 use tracing::info;
 
 #[derive(Clone)]
@@ -14,6 +17,7 @@ pub struct AppState {
     pub config: Config,
     pub http: reqwest::Client,
     pub db: sqlx::PgPool,
+    pub lexicons: LexiconRegistry,
 }
 
 #[tokio::main]
@@ -41,10 +45,17 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    let lexicons = LexiconRegistry::new();
+    lexicons
+        .load_from_db(&db)
+        .await
+        .expect("failed to load lexicons");
+
     let state = AppState {
         config: config.clone(),
         http: reqwest::Client::new(),
         db,
+        lexicons,
     };
 
     jetstream::spawn(state.db.clone(), config.jetstream_url.clone());

@@ -5,6 +5,7 @@ use bytes::Bytes;
 #[derive(Debug)]
 pub enum AppError {
     Auth(String),
+    BadRequest(String),
     Internal(String),
     NotFound(String),
     PdsError(StatusCode, Bytes),
@@ -14,6 +15,7 @@ impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AppError::Auth(msg) => write!(f, "auth error: {msg}"),
+            AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
             AppError::NotFound(msg) => write!(f, "not found: {msg}"),
             AppError::PdsError(status, _) => write!(f, "PDS error: {status}"),
@@ -33,6 +35,7 @@ impl IntoResponse for AppError {
             other => {
                 let (status, message) = match &other {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+                    AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
                     AppError::Internal(msg) => {
                         tracing::error!("{msg}");
                         (

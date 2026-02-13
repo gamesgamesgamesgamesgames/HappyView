@@ -4,6 +4,7 @@ use axum::{Json, Router};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+use crate::admin;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::profile;
@@ -13,6 +14,7 @@ use crate::AppState;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .nest("/admin", admin::admin_routes(state.clone()))
         .route("/xrpc/app.bsky.actor.getProfile", get(get_profile))
         .route(
             "/xrpc/games.gamesgamesgamesgames.createGame",
