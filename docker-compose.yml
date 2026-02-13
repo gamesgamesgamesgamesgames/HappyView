@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: happyview
+      POSTGRES_PASSWORD: happyview
+      POSTGRES_DB: happyview
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U happyview"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  aip-postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: aip
+      POSTGRES_PASSWORD: aip
+      POSTGRES_DB: aip
+    volumes:
+      - aip-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aip"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  aip:
+    image: atcr.io/gamesgamesgamesgames.games/aip:latest
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://aip:aip@aip-postgres/aip
+      STORAGE_BACKEND: postgres
+      EXTERNAL_BASE: http://localhost:8080
+      DPOP_NONCE_SEED: ${DPOP_NONCE_SEED}
+      HTTP_PORT: 8080
+    depends_on:
+      aip-postgres:
+        condition: service_healthy
+
+  happyview:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://happyview:happyview@postgres/happyview
+      AIP_URL: http://aip:8080
+      ADMIN_SECRET: ${ADMIN_SECRET:-dev-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      aip:
+        condition: service_started
+
+volumes:
+  pgdata:
+  aip-pgdata:

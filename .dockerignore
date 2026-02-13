@@ -1,0 +1,7 @@
+target/
+tests/
+.git/
+.github/
+.claude/
+.env
+docker-compose*.yml
