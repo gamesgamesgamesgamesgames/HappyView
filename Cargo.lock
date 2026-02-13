@@ -668,6 +668,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures-util",
+ "hex",
  "jsonwebtoken",
  "p256",
  "reqwest",

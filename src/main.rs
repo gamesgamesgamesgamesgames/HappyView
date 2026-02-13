@@ -49,6 +49,8 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    admin::bootstrap(&db, &config.admin_secret).await;
+
     let lexicons = LexiconRegistry::new();
     lexicons
         .load_from_db(&db)

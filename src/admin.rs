@@ -1,19 +1,29 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::error::AppError;
 use crate::lexicon::{LexiconType, ParsedLexicon};
 use crate::AppState;
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// SHA-256 hash a plaintext API key for storage/comparison.
+fn hash_api_key(key: &str) -> String {
+    let hash = Sha256::digest(key.as_bytes());
+    hex::encode(hash)
+}
+
+// ---------------------------------------------------------------------------
 // Admin auth middleware
 // ---------------------------------------------------------------------------
 
-/// Axum middleware layer that rejects requests without a valid admin secret.
 pub fn admin_routes(_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/lexicons", post(upload_lexicon).get(list_lexicons))
@@ -21,31 +31,13 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route("/stats", get(stats))
         .route("/backfill", post(create_backfill))
         .route("/backfill/status", get(backfill_status))
+        .route("/admins", post(create_admin).get(list_admins))
+        .route("/admins/{id}", delete(delete_admin))
 }
 
-/// Extract and validate the admin Bearer token from request headers.
-fn extract_admin_token(headers: &axum::http::HeaderMap, secret: &Option<String>) -> Result<(), AppError> {
-    let secret = secret
-        .as_ref()
-        .ok_or_else(|| AppError::Auth("admin API is not configured".into()))?;
-
-    let header = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AppError::Auth("missing Authorization header".into()))?;
-
-    let token = header
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| AppError::Auth("invalid Authorization scheme".into()))?;
-
-    if token != secret {
-        return Err(AppError::Auth("invalid admin secret".into()));
-    }
-
-    Ok(())
-}
-
-/// Axum extractor for admin auth — validates Bearer token against ADMIN_SECRET.
+/// Axum extractor for admin auth. Checks the Bearer token against:
+/// 1. The `admins` table (hashed key lookup)
+/// 2. Falls back to `ADMIN_SECRET` env var for bootstrap
 pub struct AdminAuth;
 
 impl axum::extract::FromRequestParts<AppState> for AdminAuth {
@@ -55,8 +47,73 @@ impl axum::extract::FromRequestParts<AppState> for AdminAuth {
         parts: &mut axum::http::request::Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        extract_admin_token(&parts.headers, &state.config.admin_secret)?;
-        Ok(AdminAuth)
+        let header = parts
+            .headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AppError::Auth("missing Authorization header".into()))?;
+
+        let token = header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| AppError::Auth("invalid Authorization scheme".into()))?;
+
+        // Check admins table first
+        let key_hash = hash_api_key(token);
+        let found: Option<(String,)> = sqlx::query_as(
+            "SELECT id::text FROM admins WHERE api_key_hash = $1",
+        )
+        .bind(&key_hash)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("admin auth query failed: {e}")))?;
+
+        if let Some((admin_id,)) = found {
+            // Update last_used_at in the background
+            let db = state.db.clone();
+            let admin_id = admin_id.clone();
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    "UPDATE admins SET last_used_at = NOW() WHERE id::text = $1",
+                )
+                .bind(&admin_id)
+                .execute(&db)
+                .await;
+            });
+            return Ok(AdminAuth);
+        }
+
+        // Fall back to ADMIN_SECRET env var
+        if let Some(ref secret) = state.config.admin_secret {
+            if token == secret {
+                return Ok(AdminAuth);
+            }
+        }
+
+        Err(AppError::Auth("invalid admin credentials".into()))
+    }
+}
+
+/// Bootstrap: if no admins exist and ADMIN_SECRET is set, create a bootstrap admin.
+pub async fn bootstrap(db: &sqlx::PgPool, admin_secret: &Option<String>) {
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins")
+        .fetch_one(db)
+        .await
+        .unwrap_or((0,));
+
+    if count.0 > 0 {
+        return;
+    }
+
+    if let Some(secret) = admin_secret {
+        let key_hash = hash_api_key(secret);
+        let _ = sqlx::query(
+            "INSERT INTO admins (name, api_key_hash) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind("bootstrap")
+        .bind(&key_hash)
+        .execute(db)
+        .await;
+        tracing::info!("created bootstrap admin from ADMIN_SECRET");
     }
 }
 
@@ -397,4 +454,94 @@ async fn backfill_status(
         .collect();
 
     Ok(Json(jobs))
+}
+
+// ---------------------------------------------------------------------------
+// Admin management endpoints
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CreateAdminBody {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct AdminSummary {
+    id: String,
+    name: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// POST /admin/admins — create a new admin. Returns the API key once.
+async fn create_admin(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+    Json(body): Json<CreateAdminBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let api_key = uuid::Uuid::new_v4().to_string();
+    let key_hash = hash_api_key(&api_key);
+
+    let row: (String,) = sqlx::query_as(
+        "INSERT INTO admins (name, api_key_hash) VALUES ($1, $2) RETURNING id::text",
+    )
+    .bind(&body.name)
+    .bind(&key_hash)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to create admin: {e}")))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": row.0,
+            "name": body.name,
+            "api_key": api_key,
+        })),
+    ))
+}
+
+/// GET /admin/admins — list all admins (without keys).
+async fn list_admins(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+) -> Result<Json<Vec<AdminSummary>>, AppError> {
+    let rows: Vec<(String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> =
+        sqlx::query_as(
+            "SELECT id::text, name, created_at, last_used_at FROM admins ORDER BY created_at",
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list admins: {e}")))?;
+
+    let admins: Vec<AdminSummary> = rows
+        .into_iter()
+        .map(|(id, name, created_at, last_used_at)| AdminSummary {
+            id,
+            name,
+            created_at,
+            last_used_at,
+        })
+        .collect();
+
+    Ok(Json(admins))
+}
+
+/// DELETE /admin/admins/:id — remove an admin.
+async fn delete_admin(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let result = sqlx::query("DELETE FROM admins WHERE id::text = $1")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to delete admin: {e}")))?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!("admin '{id}' not found")));
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }
