@@ -20,31 +20,17 @@ const COLLECTION: &str = "games.gamesgamesgamesgames.game";
 // AT URI parsing
 // ---------------------------------------------------------------------------
 
-struct AtUri {
-    did: String,
-    collection: String,
-    rkey: String,
-}
+/// Extract the DID from an AT URI (at://did/collection/rkey).
+fn parse_did_from_at_uri(uri: &str) -> Result<String, AppError> {
+    let stripped = uri
+        .strip_prefix("at://")
+        .ok_or_else(|| AppError::Internal("AT URI must start with at://".into()))?;
 
-impl AtUri {
-    fn parse(uri: &str) -> Result<Self, AppError> {
-        let stripped = uri
-            .strip_prefix("at://")
-            .ok_or_else(|| AppError::Internal("AT URI must start with at://".into()))?;
-
-        let parts: Vec<&str> = stripped.splitn(3, '/').collect();
-        if parts.len() != 3 {
-            return Err(AppError::Internal(
-                "AT URI must have format at://did/collection/rkey".into(),
-            ));
-        }
-
-        Ok(Self {
-            did: parts[0].to_string(),
-            collection: parts[1].to_string(),
-            rkey: parts[2].to_string(),
-        })
-    }
+    stripped
+        .split('/')
+        .next()
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::Internal("invalid AT URI".into()))
 }
 
 // ---------------------------------------------------------------------------
@@ -469,40 +455,21 @@ pub async fn get_game(
     State(state): State<AppState>,
     Query(params): Query<GetGameParams>,
 ) -> Result<Json<Value>, AppError> {
-    let at_uri = AtUri::parse(&params.uri)?;
+    let did = parse_did_from_at_uri(&params.uri)?;
 
-    let pds = profile::resolve_pds_endpoint(&state.http, &at_uri.did).await?;
+    let row: Option<(Value,)> = sqlx::query_as(
+        "SELECT record FROM records WHERE uri = $1",
+    )
+    .bind(&params.uri)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
 
-    let url = format!(
-        "{}/xrpc/com.atproto.repo.getRecord?repo={}&collection={}&rkey={}",
-        pds.trim_end_matches('/'),
-        at_uri.did,
-        at_uri.collection,
-        at_uri.rkey,
-    );
+    let (mut record,) = row
+        .ok_or_else(|| AppError::NotFound("game record not found".into()))?;
 
-    let resp = state
-        .http
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| AppError::Internal(format!("PDS getRecord failed: {e}")))?;
-
-    if !resp.status().is_success() {
-        return Err(AppError::NotFound("game record not found".into()));
-    }
-
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| AppError::Internal(format!("invalid PDS response: {e}")))?;
-
-    let mut record = body
-        .get("value")
-        .cloned()
-        .ok_or_else(|| AppError::Internal("PDS response missing value field".into()))?;
-
-    enrich_media_blobs(&mut record, &pds, &at_uri.did);
+    let pds = profile::resolve_pds_endpoint(&state.http, &did).await?;
+    enrich_media_blobs(&mut record, &pds, &did);
 
     record
         .as_object_mut()
@@ -513,75 +480,72 @@ pub async fn get_game(
 }
 
 // ---------------------------------------------------------------------------
-// listGames (authenticated)
+// listGames (public, unauthenticated)
 // ---------------------------------------------------------------------------
 
 #[derive(Deserialize)]
 pub struct ListGamesParams {
     cursor: Option<String>,
-    limit: Option<u32>,
+    did: Option<String>,
+    limit: Option<i64>,
 }
 
 pub async fn list_games(
     State(state): State<AppState>,
-    claims: Claims,
     Query(params): Query<ListGamesParams>,
 ) -> Result<Json<Value>, AppError> {
-    let did = claims.did();
-    let pds = profile::resolve_pds_endpoint(&state.http, did).await?;
-
     let limit = params.limit.unwrap_or(20).min(100);
+    let offset: i64 = params
+        .cursor
+        .as_deref()
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
 
-    let mut url = format!(
-        "{}/xrpc/com.atproto.repo.listRecords?repo={}&collection={}&limit={}",
-        pds.trim_end_matches('/'),
-        did,
-        COLLECTION,
-        limit,
-    );
+    let rows: Vec<(String, String, Value)> = if let Some(ref did) = params.did {
+        sqlx::query_as(
+            "SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY indexed_at DESC LIMIT $3 OFFSET $4",
+        )
+        .bind(COLLECTION)
+        .bind(did)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?
+    } else {
+        sqlx::query_as(
+            "SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY indexed_at DESC LIMIT $2 OFFSET $3",
+        )
+        .bind(COLLECTION)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?
+    };
 
-    if let Some(ref cursor) = params.cursor {
-        url.push_str(&format!("&cursor={}", cursor));
+    let has_next_page = rows.len() as i64 == limit;
+
+    // Collect unique DIDs and resolve their PDS endpoints for blob URL enrichment.
+    let unique_dids: std::collections::HashSet<&str> = rows.iter().map(|(_, did, _)| did.as_str()).collect();
+    let mut pds_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for did in unique_dids {
+        if let Ok(pds) = profile::resolve_pds_endpoint(&state.http, did).await {
+            pds_map.insert(did.to_string(), pds);
+        }
     }
 
-    let resp = state
-        .http
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| AppError::Internal(format!("PDS listRecords failed: {e}")))?;
-
-    if !resp.status().is_success() {
-        return Err(AppError::Internal(format!(
-            "PDS listRecords returned {}",
-            resp.status()
-        )));
-    }
-
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| AppError::Internal(format!("invalid PDS listRecords response: {e}")))?;
-
-    let cursor = body.get("cursor").and_then(|c| c.as_str()).map(|s| s.to_string());
-
-    let records = body
-        .get("records")
-        .and_then(|r| r.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    let games: Vec<Value> = records
+    let games: Vec<Value> = rows
         .into_iter()
-        .filter_map(|record| {
-            let uri = record.get("uri")?.as_str()?.to_string();
-            let mut value = record.get("value")?.clone();
+        .filter_map(|(uri, did, record)| {
+            let mut record = record;
+            if let Some(pds) = pds_map.get(&did) {
+                enrich_media_blobs(&mut record, pds, &did);
+            }
 
-            enrich_media_blobs(&mut value, &pds, did);
-
-            let name = value.get("name")?.as_str()?.to_string();
-            let summary = value.get("summary").and_then(|s| s.as_str()).map(|s| s.to_string());
-            let media = value.get("media").cloned();
+            let name = record.get("name")?.as_str()?.to_string();
+            let summary = record.get("summary").and_then(|s| s.as_str()).map(|s| s.to_string());
+            let media = record.get("media").cloned();
 
             let mut game = json!({
                 "uri": uri,
@@ -601,8 +565,9 @@ pub async fn list_games(
         .collect();
 
     let mut result = json!({ "games": games });
-    if let Some(cursor) = cursor {
-        result.as_object_mut().unwrap().insert("cursor".to_string(), json!(cursor));
+    if has_next_page {
+        let next_cursor = (offset + limit).to_string();
+        result.as_object_mut().unwrap().insert("cursor".to_string(), json!(next_cursor));
     }
 
     Ok(Json(result))
