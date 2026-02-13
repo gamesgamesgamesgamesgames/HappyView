@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::AppError;
-use crate::lexicon::ParsedLexicon;
+use crate::lexicon::{LexiconType, ParsedLexicon};
 use crate::AppState;
 
 // ---------------------------------------------------------------------------
@@ -56,6 +56,17 @@ impl axum::extract::FromRequestParts<AppState> for AdminAuth {
         extract_admin_token(&parts.headers, &state.config.admin_secret)?;
         Ok(AdminAuth)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Jetstream notification
+// ---------------------------------------------------------------------------
+
+/// Send the current record collection list to the Jetstream task so it
+/// reconnects with the updated filter.
+async fn notify_jetstream(state: &AppState) {
+    let collections = state.lexicons.get_record_collections().await;
+    let _ = state.collections_tx.send(collections);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +165,12 @@ async fn upload_lexicon(
     // Update in-memory registry with correct revision
     let parsed = ParsedLexicon::parse(body.lexicon_json, revision)
         .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;
+    let is_record = parsed.lexicon_type == LexiconType::Record;
     state.lexicons.upsert(parsed).await;
+
+    if is_record {
+        notify_jetstream(&state).await;
+    }
 
     let status = if revision == 1 {
         StatusCode::CREATED
@@ -250,6 +266,7 @@ async fn delete_lexicon(
     }
 
     state.lexicons.remove(&id).await;
+    notify_jetstream(&state).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
