@@ -10,7 +10,11 @@ env:
   ATCR_IMAGE: atcr.io/${{ secrets.ATCR_NAMESPACE }}/happyview
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
