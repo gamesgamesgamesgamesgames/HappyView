@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod error;
+mod jetstream;
 mod profile;
 mod repo;
 mod server;
@@ -35,11 +36,18 @@ async fn main() {
 
     info!("connected to database");
 
+    sqlx::migrate!()
+        .run(&db)
+        .await
+        .expect("failed to run migrations");
+
     let state = AppState {
         config: config.clone(),
         http: reqwest::Client::new(),
         db,
     };
+
+    jetstream::spawn(state.db.clone(), config.jetstream_url.clone());
 
     let app = server::router(state);
     let addr = config.listen_addr();
