@@ -126,7 +126,7 @@ async fn handle_query(
     let unique_dids: HashSet<&str> = rows.iter().map(|(_, did, _)| did.as_str()).collect();
     let mut pds_map: HashMap<String, String> = HashMap::new();
     for did in unique_dids {
-        if let Ok(pds) = profile::resolve_pds_endpoint(&state.http, did).await {
+        if let Ok(pds) = profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, did).await {
             pds_map.insert(did.to_string(), pds);
         }
     }
@@ -169,7 +169,7 @@ async fn handle_get_record(state: &AppState, uri: &str) -> Result<Response, AppE
     let (mut record,) =
         row.ok_or_else(|| AppError::NotFound("record not found".into()))?;
 
-    let pds = profile::resolve_pds_endpoint(&state.http, &did).await?;
+    let pds = profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, &did).await?;
     repo::enrich_media_blobs(&mut record, &pds, &did);
 
     record

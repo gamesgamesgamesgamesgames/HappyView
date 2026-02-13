@@ -183,3 +183,230 @@ impl LexiconRegistry {
         inner.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // -----------------------------------------------------------------------
+    // ParsedLexicon::parse
+    // -----------------------------------------------------------------------
+
+    fn record_lexicon_json() -> Value {
+        json!({
+            "lexicon": 1,
+            "id": "games.gamesgamesgamesgames.game",
+            "defs": {
+                "main": {
+                    "type": "record",
+                    "key": "tid",
+                    "record": {
+                        "type": "object",
+                        "properties": {
+                            "title": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    fn query_lexicon_json() -> Value {
+        json!({
+            "lexicon": 1,
+            "id": "games.gamesgamesgamesgames.listGames",
+            "defs": {
+                "main": {
+                    "type": "query",
+                    "parameters": {
+                        "type": "params",
+                        "properties": {
+                            "limit": { "type": "integer" }
+                        }
+                    },
+                    "output": {
+                        "encoding": "application/json"
+                    }
+                }
+            }
+        })
+    }
+
+    fn procedure_lexicon_json() -> Value {
+        json!({
+            "lexicon": 1,
+            "id": "games.gamesgamesgamesgames.createGame",
+            "defs": {
+                "main": {
+                    "type": "procedure",
+                    "input": {
+                        "encoding": "application/json"
+                    },
+                    "output": {
+                        "encoding": "application/json"
+                    }
+                }
+            }
+        })
+    }
+
+    fn definitions_lexicon_json() -> Value {
+        json!({
+            "lexicon": 1,
+            "id": "games.gamesgamesgamesgames.defs",
+            "defs": {
+                "genre": {
+                    "type": "string",
+                    "knownValues": ["action", "rpg"]
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn parse_record_lexicon() {
+        let parsed = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        assert_eq!(parsed.id, "games.gamesgamesgamesgames.game");
+        assert_eq!(parsed.lexicon_type, LexiconType::Record);
+        assert_eq!(parsed.record_key, Some("tid".into()));
+        assert!(parsed.record_schema.is_some());
+        assert!(parsed.parameters.is_none());
+        assert!(parsed.input.is_none());
+    }
+
+    #[test]
+    fn parse_query_lexicon() {
+        let parsed = ParsedLexicon::parse(query_lexicon_json(), 2, Some("games.gamesgamesgamesgames.game".into())).unwrap();
+        assert_eq!(parsed.lexicon_type, LexiconType::Query);
+        assert!(parsed.parameters.is_some());
+        assert!(parsed.output.is_some());
+        assert_eq!(parsed.target_collection, Some("games.gamesgamesgamesgames.game".into()));
+        assert_eq!(parsed.revision, 2);
+    }
+
+    #[test]
+    fn parse_procedure_lexicon() {
+        let parsed = ParsedLexicon::parse(procedure_lexicon_json(), 1, None).unwrap();
+        assert_eq!(parsed.lexicon_type, LexiconType::Procedure);
+        assert!(parsed.input.is_some());
+        assert!(parsed.output.is_some());
+    }
+
+    #[test]
+    fn parse_definitions_lexicon() {
+        let parsed = ParsedLexicon::parse(definitions_lexicon_json(), 1, None).unwrap();
+        assert_eq!(parsed.lexicon_type, LexiconType::Definitions);
+    }
+
+    #[test]
+    fn parse_missing_id_returns_error() {
+        let raw = json!({"lexicon": 1, "defs": {}});
+        let result = ParsedLexicon::parse(raw, 1, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("id"));
+    }
+
+    #[test]
+    fn parse_preserves_raw_json() {
+        let raw = record_lexicon_json();
+        let parsed = ParsedLexicon::parse(raw.clone(), 1, None).unwrap();
+        assert_eq!(parsed.raw, raw);
+    }
+
+    #[test]
+    fn parse_target_collection_passthrough() {
+        let parsed = ParsedLexicon::parse(
+            query_lexicon_json(),
+            1,
+            Some("custom.collection".into()),
+        )
+        .unwrap();
+        assert_eq!(parsed.target_collection, Some("custom.collection".into()));
+    }
+
+    // -----------------------------------------------------------------------
+    // LexiconRegistry
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn registry_new_is_empty() {
+        let reg = LexiconRegistry::new();
+        assert_eq!(reg.count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn registry_upsert_and_get() {
+        let reg = LexiconRegistry::new();
+        let parsed = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        reg.upsert(parsed).await;
+
+        let got = reg.get("games.gamesgamesgamesgames.game").await;
+        assert!(got.is_some());
+        assert_eq!(got.unwrap().lexicon_type, LexiconType::Record);
+    }
+
+    #[tokio::test]
+    async fn registry_upsert_replaces() {
+        let reg = LexiconRegistry::new();
+        let v1 = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        reg.upsert(v1).await;
+
+        let v2 = ParsedLexicon::parse(record_lexicon_json(), 5, None).unwrap();
+        reg.upsert(v2).await;
+
+        assert_eq!(reg.count().await, 1);
+        assert_eq!(reg.get("games.gamesgamesgamesgames.game").await.unwrap().revision, 5);
+    }
+
+    #[tokio::test]
+    async fn registry_remove_existing() {
+        let reg = LexiconRegistry::new();
+        let parsed = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        reg.upsert(parsed).await;
+
+        assert!(reg.remove("games.gamesgamesgamesgames.game").await);
+        assert_eq!(reg.count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn registry_remove_nonexistent() {
+        let reg = LexiconRegistry::new();
+        assert!(!reg.remove("nonexistent").await);
+    }
+
+    #[tokio::test]
+    async fn registry_get_nonexistent() {
+        let reg = LexiconRegistry::new();
+        assert!(reg.get("nonexistent").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn registry_type_filtered_collections() {
+        let reg = LexiconRegistry::new();
+
+        let record = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        let query = ParsedLexicon::parse(query_lexicon_json(), 1, None).unwrap();
+        let procedure = ParsedLexicon::parse(procedure_lexicon_json(), 1, None).unwrap();
+        let defs = ParsedLexicon::parse(definitions_lexicon_json(), 1, None).unwrap();
+
+        reg.upsert(record).await;
+        reg.upsert(query).await;
+        reg.upsert(procedure).await;
+        reg.upsert(defs).await;
+
+        assert_eq!(reg.count().await, 4);
+
+        let records = reg.get_record_collections().await;
+        assert_eq!(records.len(), 1);
+        assert!(records.contains(&"games.gamesgamesgamesgames.game".to_string()));
+
+        let queries = reg.get_queries().await;
+        assert_eq!(queries.len(), 1);
+        assert!(queries.contains(&"games.gamesgamesgamesgames.listGames".to_string()));
+
+        let procedures = reg.get_procedures().await;
+        assert_eq!(procedures.len(), 1);
+        assert!(procedures.contains(&"games.gamesgamesgamesgames.createGame".to_string()));
+    }
+}

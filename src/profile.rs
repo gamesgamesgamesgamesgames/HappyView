@@ -36,8 +36,8 @@ struct GetRecordResponse {
 }
 
 /// Resolve a full profile for the given DID: DID document -> handle + PDS -> profile record.
-pub async fn resolve_profile(http: &reqwest::Client, did: &str) -> Result<Profile, AppError> {
-    let did_doc = resolve_did_document(http, did).await?;
+pub async fn resolve_profile(http: &reqwest::Client, plc_url: &str, did: &str) -> Result<Profile, AppError> {
+    let did_doc = resolve_did_document(http, plc_url, did).await?;
 
     let handle = did_doc
         .also_known_as
@@ -67,8 +67,8 @@ pub async fn resolve_profile(http: &reqwest::Client, did: &str) -> Result<Profil
 }
 
 /// Resolve the PDS endpoint for a DID by fetching its DID document.
-pub async fn resolve_pds_endpoint(http: &reqwest::Client, did: &str) -> Result<String, AppError> {
-    let did_doc = resolve_did_document(http, did).await?;
+pub async fn resolve_pds_endpoint(http: &reqwest::Client, plc_url: &str, did: &str) -> Result<String, AppError> {
+    let did_doc = resolve_did_document(http, plc_url, did).await?;
 
     did_doc
         .service
@@ -80,8 +80,8 @@ pub async fn resolve_pds_endpoint(http: &reqwest::Client, did: &str) -> Result<S
 
 /// Fetch a DID document from the PLC directory.
 // TODO: handle did:web:* resolution (fetch https://{domain}/.well-known/did.json)
-async fn resolve_did_document(http: &reqwest::Client, did: &str) -> Result<DidDocument, AppError> {
-    let url = format!("https://plc.directory/{did}");
+async fn resolve_did_document(http: &reqwest::Client, plc_url: &str, did: &str) -> Result<DidDocument, AppError> {
+    let url = format!("{}/{did}", plc_url.trim_end_matches('/'));
 
     let resp = http
         .get(&url)

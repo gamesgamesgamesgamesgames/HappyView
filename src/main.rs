@@ -1,28 +1,8 @@
-mod admin;
-mod auth;
-mod backfill;
-mod config;
-mod error;
-mod jetstream;
-mod lexicon;
-mod profile;
-mod repo;
-mod server;
-mod xrpc;
-
-use config::Config;
-use lexicon::LexiconRegistry;
+use happyview::config::Config;
+use happyview::lexicon::LexiconRegistry;
+use happyview::{admin, backfill, jetstream, server, AppState};
 use tokio::sync::watch;
 use tracing::info;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub config: Config,
-    pub http: reqwest::Client,
-    pub db: sqlx::PgPool,
-    pub lexicons: LexiconRegistry,
-    pub collections_tx: watch::Sender<Vec<String>>,
-}
 
 #[tokio::main]
 async fn main() {
@@ -69,7 +49,7 @@ async fn main() {
     };
 
     jetstream::spawn(state.db.clone(), config.jetstream_url.clone(), collections_rx);
-    backfill::spawn_worker(state.db.clone(), state.http.clone(), config.relay_url.clone());
+    backfill::spawn_worker(state.db.clone(), state.http.clone(), config.relay_url.clone(), config.plc_url.clone());
 
     let app = server::router(state);
     let addr = config.listen_addr();

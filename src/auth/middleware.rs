@@ -22,6 +22,12 @@ impl Claims {
     pub fn token(&self) -> &str {
         &self.token
     }
+
+    /// Test-only constructor.
+    #[cfg(test)]
+    pub fn new_for_test(did: String, token: String) -> Self {
+        Self { did, token }
+    }
 }
 
 #[derive(Deserialize)]

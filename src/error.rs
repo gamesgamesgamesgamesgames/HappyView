@@ -53,3 +53,79 @@ impl IntoResponse for AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+    use http_body_util::BodyExt;
+
+    async fn response_parts(err: AppError) -> (StatusCode, serde_json::Value) {
+        let resp = err.into_response();
+        let status = resp.status();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        (status, json)
+    }
+
+    #[tokio::test]
+    async fn auth_error_returns_401() {
+        let (status, body) = response_parts(AppError::Auth("bad token".into())).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["error"], "bad token");
+    }
+
+    #[tokio::test]
+    async fn bad_request_returns_400() {
+        let (status, body) = response_parts(AppError::BadRequest("missing field".into())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "missing field");
+    }
+
+    #[tokio::test]
+    async fn internal_error_returns_500_and_hides_detail() {
+        let (status, body) = response_parts(AppError::Internal("secret details".into())).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body["error"], "internal server error");
+    }
+
+    #[tokio::test]
+    async fn not_found_returns_404() {
+        let (status, body) = response_parts(AppError::NotFound("no such thing".into())).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "no such thing");
+    }
+
+    #[tokio::test]
+    async fn pds_error_preserves_status_and_body() {
+        let raw_body = Bytes::from(r#"{"error":"upstream"}"#);
+        let resp = AppError::PdsError(StatusCode::BAD_GATEWAY, raw_body.clone()).into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body, raw_body);
+    }
+
+    #[test]
+    fn display_formats() {
+        assert_eq!(
+            AppError::Auth("x".into()).to_string(),
+            "auth error: x"
+        );
+        assert_eq!(
+            AppError::BadRequest("y".into()).to_string(),
+            "bad request: y"
+        );
+        assert_eq!(
+            AppError::Internal("z".into()).to_string(),
+            "internal error: z"
+        );
+        assert_eq!(
+            AppError::NotFound("w".into()).to_string(),
+            "not found: w"
+        );
+        assert_eq!(
+            AppError::PdsError(StatusCode::BAD_GATEWAY, Bytes::new()).to_string(),
+            "PDS error: 502 Bad Gateway"
+        );
+    }
+}

@@ -358,3 +358,221 @@ pub(crate) fn enrich_media_blobs(record: &mut Value, pds: &str, did: &str) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // parse_did_from_at_uri
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_did_from_valid_at_uri() {
+        let did = parse_did_from_at_uri("at://did:plc:abc123/app.bsky.feed.post/3k2bqxyz").unwrap();
+        assert_eq!(did, "did:plc:abc123");
+    }
+
+    #[test]
+    fn parse_did_from_uri_with_no_rkey() {
+        let did = parse_did_from_at_uri("at://did:plc:abc123/collection").unwrap();
+        assert_eq!(did, "did:plc:abc123");
+    }
+
+    #[test]
+    fn parse_did_from_did_web_uri() {
+        let did = parse_did_from_at_uri("at://did:web:example.com/collection/rkey").unwrap();
+        assert_eq!(did, "did:web:example.com");
+    }
+
+    #[test]
+    fn parse_did_from_uri_missing_prefix() {
+        let result = parse_did_from_at_uri("did:plc:abc123/collection/rkey");
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // enrich_media_blobs
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn enrich_media_adds_url() {
+        let mut record = json!({
+            "media": [{
+                "blob": {
+                    "ref": { "$link": "bafyreiabc" },
+                    "mimeType": "image/jpeg",
+                    "size": 1024
+                }
+            }]
+        });
+
+        enrich_media_blobs(&mut record, "https://pds.example.com", "did:plc:test");
+
+        let url = record["media"][0]["blob"]["url"].as_str().unwrap();
+        assert_eq!(
+            url,
+            "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=did:plc:test&cid=bafyreiabc"
+        );
+    }
+
+    #[test]
+    fn enrich_media_noop_without_media() {
+        let mut record = json!({"title": "test"});
+        enrich_media_blobs(&mut record, "https://pds.example.com", "did:plc:test");
+        assert!(record.get("media").is_none());
+    }
+
+    #[test]
+    fn enrich_media_skips_items_without_ref() {
+        let mut record = json!({
+            "media": [{
+                "blob": { "mimeType": "image/png" }
+            }]
+        });
+
+        enrich_media_blobs(&mut record, "https://pds.example.com", "did:plc:test");
+        assert!(record["media"][0]["blob"].get("url").is_none());
+    }
+
+    #[test]
+    fn enrich_media_handles_multiple_items() {
+        let mut record = json!({
+            "media": [
+                { "blob": { "ref": { "$link": "cid1" } } },
+                { "blob": { "ref": { "$link": "cid2" } } }
+            ]
+        });
+
+        enrich_media_blobs(&mut record, "https://pds.example.com/", "did:plc:x");
+
+        let url1 = record["media"][0]["blob"]["url"].as_str().unwrap();
+        let url2 = record["media"][1]["blob"]["url"].as_str().unwrap();
+        assert!(url1.contains("cid1"));
+        assert!(url2.contains("cid2"));
+    }
+
+    #[test]
+    fn enrich_media_trims_trailing_slash() {
+        let mut record = json!({
+            "media": [{
+                "blob": { "ref": { "$link": "bafytest" } }
+            }]
+        });
+
+        enrich_media_blobs(&mut record, "https://pds.example.com/", "did:plc:test");
+
+        let url = record["media"][0]["blob"]["url"].as_str().unwrap();
+        assert!(url.starts_with("https://pds.example.com/xrpc/"));
+        assert!(!url.contains("//xrpc"));
+    }
+
+    // -----------------------------------------------------------------------
+    // generate_dpop_proof
+    // -----------------------------------------------------------------------
+
+    fn test_dpop_jwk() -> DpopJwk {
+        use p256::elliptic_curve::rand_core::OsRng;
+        use p256::elliptic_curve::sec1::ToEncodedPoint;
+        // Generate a valid P-256 key for testing
+        let secret = p256::SecretKey::random(&mut OsRng);
+        let public = secret.public_key();
+        let point = public.to_encoded_point(false);
+
+        DpopJwk {
+            x: base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(point.x().unwrap()),
+            y: base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(point.y().unwrap()),
+            d: base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(secret.to_bytes()),
+        }
+    }
+
+    #[test]
+    fn dpop_proof_produces_valid_jwt_structure() {
+        let jwk = test_dpop_jwk();
+        let token = generate_dpop_proof("POST", "https://pds.example.com/xrpc/test", &jwk, "access-tok", None).unwrap();
+
+        let parts: Vec<&str> = token.split('.').collect();
+        assert_eq!(parts.len(), 3, "JWT should have 3 parts");
+    }
+
+    #[test]
+    fn dpop_proof_header_has_correct_fields() {
+        let jwk = test_dpop_jwk();
+        let token = generate_dpop_proof("POST", "https://pds.example.com/xrpc/test", &jwk, "access-tok", None).unwrap();
+
+        let header_b64 = token.split('.').next().unwrap();
+        let header_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(header_b64)
+            .unwrap();
+        let header: serde_json::Value = serde_json::from_slice(&header_bytes).unwrap();
+
+        assert_eq!(header["typ"], "dpop+jwt");
+        assert_eq!(header["alg"], "ES256");
+        assert!(header.get("jwk").is_some());
+    }
+
+    #[test]
+    fn dpop_proof_claims_have_correct_fields() {
+        let jwk = test_dpop_jwk();
+        let token = generate_dpop_proof("GET", "https://pds.example.com/xrpc/test", &jwk, "my-access-token", None).unwrap();
+
+        let payload_b64 = token.split('.').nth(1).unwrap();
+        let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload_b64)
+            .unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload_bytes).unwrap();
+
+        assert_eq!(claims["htm"], "GET");
+        assert_eq!(claims["htu"], "https://pds.example.com/xrpc/test");
+        assert!(claims.get("jti").is_some());
+        assert!(claims.get("iat").is_some());
+        assert!(claims.get("exp").is_some());
+        assert!(claims.get("ath").is_some());
+        assert!(claims.get("nonce").is_none());
+    }
+
+    #[test]
+    fn dpop_proof_includes_nonce_when_provided() {
+        let jwk = test_dpop_jwk();
+        let token = generate_dpop_proof("POST", "https://pds.example.com/xrpc/test", &jwk, "tok", Some("abc123")).unwrap();
+
+        let payload_b64 = token.split('.').nth(1).unwrap();
+        let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload_b64)
+            .unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload_bytes).unwrap();
+
+        assert_eq!(claims["nonce"], "abc123");
+    }
+
+    #[test]
+    fn dpop_proof_ath_is_sha256_of_access_token() {
+        let jwk = test_dpop_jwk();
+        let access_token = "test-access-token";
+        let token = generate_dpop_proof("POST", "https://example.com", &jwk, access_token, None).unwrap();
+
+        let payload_b64 = token.split('.').nth(1).unwrap();
+        let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload_b64)
+            .unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload_bytes).unwrap();
+
+        let expected_hash = Sha256::digest(access_token.as_bytes());
+        let expected_ath = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(expected_hash);
+        assert_eq!(claims["ath"], expected_ath);
+    }
+
+    #[test]
+    fn dpop_proof_invalid_key_returns_error() {
+        let jwk = DpopJwk {
+            x: "invalid".into(),
+            y: "invalid".into(),
+            d: "invalid".into(),
+        };
+        let result = generate_dpop_proof("POST", "https://example.com", &jwk, "tok", None);
+        assert!(result.is_err());
+    }
+}

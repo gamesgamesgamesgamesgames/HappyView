@@ -150,6 +150,7 @@ async fn run_job(
     db: &PgPool,
     http: &reqwest::Client,
     relay_url: &str,
+    plc_url: &str,
     job_id: &str,
 ) -> Result<(), String> {
     // Fetch the job
@@ -232,9 +233,10 @@ async fn run_job(
             let db = db.clone();
             let collection = collection.clone();
 
+            let plc_url = plc_url.to_string();
             let task = tokio::spawn(async move {
                 let _permit = permit;
-                backfill_repo(&db, &http, &did, &collection).await
+                backfill_repo(&db, &http, &plc_url, &did, &collection).await
             });
             tasks.push(task);
         }
@@ -286,11 +288,12 @@ async fn run_job(
 async fn backfill_repo(
     db: &PgPool,
     http: &reqwest::Client,
+    plc_url: &str,
     did: &str,
     collection: &str,
 ) -> Result<i32, String> {
     // Resolve PDS
-    let pds = profile::resolve_pds_endpoint(http, did)
+    let pds = profile::resolve_pds_endpoint(http, plc_url, did)
         .await
         .map_err(|e| format!("PDS resolution failed for {did}: {e}"))?;
 
@@ -330,7 +333,7 @@ async fn backfill_repo(
 // ---------------------------------------------------------------------------
 
 /// Spawn a background task that polls for pending backfill jobs and runs them.
-pub fn spawn_worker(db: PgPool, http: reqwest::Client, relay_url: String) {
+pub fn spawn_worker(db: PgPool, http: reqwest::Client, relay_url: String, plc_url: String) {
     tokio::spawn(async move {
         info!("backfill worker started");
         loop {
@@ -344,7 +347,7 @@ pub fn spawn_worker(db: PgPool, http: reqwest::Client, relay_url: String) {
 
             if let Some((job_id,)) = job {
                 info!(job = %job_id, "picked up backfill job");
-                if let Err(e) = run_job(&db, &http, &relay_url, &job_id).await {
+                if let Err(e) = run_job(&db, &http, &relay_url, &plc_url, &job_id).await {
                     error!(job = %job_id, error = %e, "backfill job failed");
                     let _ = sqlx::query(
                         "UPDATE backfill_jobs SET status = 'failed', completed_at = NOW(), error = $2 WHERE id::text = $1",
