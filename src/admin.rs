@@ -19,6 +19,8 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route("/lexicons", post(upload_lexicon).get(list_lexicons))
         .route("/lexicons/{id}", get(get_lexicon).delete(delete_lexicon))
         .route("/stats", get(stats))
+        .route("/backfill", post(create_backfill))
+        .route("/backfill/status", get(backfill_status))
 }
 
 /// Extract and validate the admin Bearer token from request headers.
@@ -298,4 +300,101 @@ async fn stats(
             .map(|(collection, count)| CollectionStat { collection, count })
             .collect(),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Backfill endpoints
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CreateBackfillBody {
+    collection: Option<String>,
+    did: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BackfillJob {
+    id: String,
+    collection: Option<String>,
+    did: Option<String>,
+    status: String,
+    total_repos: Option<i32>,
+    processed_repos: Option<i32>,
+    total_records: Option<i32>,
+    error: Option<String>,
+    started_at: Option<chrono::DateTime<chrono::Utc>>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// POST /admin/backfill — create a new backfill job.
+async fn create_backfill(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+    Json(body): Json<CreateBackfillBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let row: (String,) = sqlx::query_as(
+        "INSERT INTO backfill_jobs (collection, did) VALUES ($1, $2) RETURNING id::text",
+    )
+    .bind(&body.collection)
+    .bind(&body.did)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to create backfill job: {e}")))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": row.0,
+            "status": "pending",
+        })),
+    ))
+}
+
+/// GET /admin/backfill/status — list all backfill jobs.
+async fn backfill_status(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+) -> Result<Json<Vec<BackfillJob>>, AppError> {
+    let rows: Vec<(
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<i32>,
+        Option<i32>,
+        Option<i32>,
+        Option<String>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
+        "SELECT id::text, collection, did, status, total_repos, processed_repos, total_records, error, started_at, completed_at, created_at FROM backfill_jobs ORDER BY created_at DESC",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to list backfill jobs: {e}")))?;
+
+    let jobs: Vec<BackfillJob> = rows
+        .into_iter()
+        .map(
+            |(id, collection, did, status, total_repos, processed_repos, total_records, error, started_at, completed_at, created_at)| {
+                BackfillJob {
+                    id,
+                    collection,
+                    did,
+                    status,
+                    total_repos,
+                    processed_repos,
+                    total_records,
+                    error,
+                    started_at,
+                    completed_at,
+                    created_at,
+                }
+            },
+        )
+        .collect();
+
+    Ok(Json(jobs))
 }

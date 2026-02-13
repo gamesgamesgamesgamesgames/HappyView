@@ -1,5 +1,6 @@
 mod admin;
 mod auth;
+mod backfill;
 mod config;
 mod error;
 mod jetstream;
@@ -66,6 +67,7 @@ async fn main() {
     };
 
     jetstream::spawn(state.db.clone(), config.jetstream_url.clone(), collections_rx);
+    backfill::spawn_worker(state.db.clone(), state.http.clone(), config.relay_url.clone());
 
     let app = server::router(state);
     let addr = config.listen_addr();

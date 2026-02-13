@@ -9,6 +9,7 @@ pub struct Config {
     pub aip_url: String,
     pub jetstream_url: String,
     pub admin_secret: Option<String>,
+    pub relay_url: String,
 }
 
 impl Config {
@@ -26,6 +27,8 @@ impl Config {
             jetstream_url: env::var("JETSTREAM_URL")
                 .unwrap_or_else(|_| "wss://jetstream2.us-west.bsky.network/subscribe".into()),
             admin_secret: env::var("ADMIN_SECRET").ok(),
+            relay_url: env::var("RELAY_URL")
+                .unwrap_or_else(|_| "https://bsky.network".into()),
         }
     }
 
