@@ -28,23 +28,21 @@ import {
 } from "@/components/ui/table"
 
 export default function AdminsPage() {
-  const { token } = useAuth()
+  const { getToken } = useAuth()
   const [admins, setAdmins] = useState<AdminSummary[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    if (!token) return
-    getAdmins(token).then(setAdmins).catch((e) => setError(e.message))
-  }, [token])
+    getAdmins(getToken).then(setAdmins).catch((e) => setError(e.message))
+  }, [getToken])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(id: string) {
-    if (!token) return
     try {
-      await deleteAdmin(token, id)
+      await deleteAdmin(getToken, id)
       load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -59,7 +57,7 @@ export default function AdminsPage() {
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Admin Users</h2>
-          <AddAdminDialog token={token!} onSuccess={load} />
+          <AddAdminDialog getToken={getToken} onSuccess={load} />
         </div>
 
         <div className="rounded-lg border">
@@ -116,10 +114,10 @@ export default function AdminsPage() {
 }
 
 function AddAdminDialog({
-  token,
+  getToken,
   onSuccess,
 }: {
-  token: string
+  getToken: () => Promise<string | null>
   onSuccess: () => void
 }) {
   const [did, setDid] = useState("")
@@ -129,7 +127,7 @@ function AddAdminDialog({
   async function handleAdd() {
     setError(null)
     try {
-      await addAdmin(token, { did })
+      await addAdmin(getToken, { did })
       setDid("")
       setOpen(false)
       onSuccess()

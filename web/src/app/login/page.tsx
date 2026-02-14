@@ -6,14 +6,14 @@ import { LoginForm } from "@/components/login-form"
 import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
-  const { token } = useAuth()
+  const { did } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (token) router.replace("/")
-  }, [token, router])
+    if (did) router.replace("/")
+  }, [did, router])
 
-  if (token) return null
+  if (did) return null
 
   return (
     <div className="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">

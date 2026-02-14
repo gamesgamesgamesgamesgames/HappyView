@@ -8,9 +8,12 @@ export class ApiError extends Error {
 
 async function apiFetch<T = unknown>(
   path: string,
-  token: string,
+  getToken: () => Promise<string | null>,
   options?: RequestInit
 ): Promise<T> {
+  const token = await getToken()
+  if (!token) throw new ApiError(401, "Not authenticated")
+
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   }
@@ -46,8 +49,8 @@ export interface StatsResponse {
   collections: CollectionStat[]
 }
 
-export function getStats(token: string) {
-  return apiFetch<StatsResponse>("/admin/stats", token)
+export function getStats(getToken: () => Promise<string | null>) {
+  return apiFetch<StatsResponse>("/admin/stats", getToken)
 }
 
 // Lexicons
@@ -65,16 +68,19 @@ export interface LexiconDetail extends LexiconSummary {
   lexicon_json: Record<string, unknown>
 }
 
-export function getLexicons(token: string) {
-  return apiFetch<LexiconSummary[]>("/admin/lexicons", token)
+export function getLexicons(getToken: () => Promise<string | null>) {
+  return apiFetch<LexiconSummary[]>("/admin/lexicons", getToken)
 }
 
-export function getLexicon(token: string, id: string) {
-  return apiFetch<LexiconDetail>(`/admin/lexicons/${encodeURIComponent(id)}`, token)
+export function getLexicon(getToken: () => Promise<string | null>, id: string) {
+  return apiFetch<LexiconDetail>(
+    `/admin/lexicons/${encodeURIComponent(id)}`,
+    getToken
+  )
 }
 
 export function uploadLexicon(
-  token: string,
+  getToken: () => Promise<string | null>,
   body: {
     lexicon_json: unknown
     backfill?: boolean
@@ -82,14 +88,14 @@ export function uploadLexicon(
     action?: string
   }
 ) {
-  return apiFetch<{ id: string; revision: number }>("/admin/lexicons", token, {
+  return apiFetch<{ id: string; revision: number }>("/admin/lexicons", getToken, {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function deleteLexicon(token: string, id: string) {
-  return apiFetch(`/admin/lexicons/${encodeURIComponent(id)}`, token, {
+export function deleteLexicon(getToken: () => Promise<string | null>, id: string) {
+  return apiFetch(`/admin/lexicons/${encodeURIComponent(id)}`, getToken, {
     method: "DELETE",
   })
 }
@@ -103,25 +109,28 @@ export interface NetworkLexiconSummary {
   created_at: string
 }
 
-export function getNetworkLexicons(token: string) {
-  return apiFetch<NetworkLexiconSummary[]>("/admin/network-lexicons", token)
+export function getNetworkLexicons(getToken: () => Promise<string | null>) {
+  return apiFetch<NetworkLexiconSummary[]>("/admin/network-lexicons", getToken)
 }
 
 export function addNetworkLexicon(
-  token: string,
+  getToken: () => Promise<string | null>,
   body: { nsid: string; target_collection?: string }
 ) {
   return apiFetch<{ nsid: string; authority_did: string; revision: number }>(
     "/admin/network-lexicons",
-    token,
+    getToken,
     { method: "POST", body: JSON.stringify(body) }
   )
 }
 
-export function deleteNetworkLexicon(token: string, nsid: string) {
+export function deleteNetworkLexicon(
+  getToken: () => Promise<string | null>,
+  nsid: string
+) {
   return apiFetch(
     `/admin/network-lexicons/${encodeURIComponent(nsid)}`,
-    token,
+    getToken,
     { method: "DELETE" }
   )
 }
@@ -141,15 +150,15 @@ export interface BackfillJob {
   created_at: string
 }
 
-export function getBackfillJobs(token: string) {
-  return apiFetch<BackfillJob[]>("/admin/backfill/status", token)
+export function getBackfillJobs(getToken: () => Promise<string | null>) {
+  return apiFetch<BackfillJob[]>("/admin/backfill/status", getToken)
 }
 
 export function createBackfillJob(
-  token: string,
+  getToken: () => Promise<string | null>,
   body: { collection?: string; did?: string }
 ) {
-  return apiFetch<{ id: string; status: string }>("/admin/backfill", token, {
+  return apiFetch<{ id: string; status: string }>("/admin/backfill", getToken, {
     method: "POST",
     body: JSON.stringify(body),
   })
@@ -163,19 +172,22 @@ export interface AdminSummary {
   last_used_at: string | null
 }
 
-export function getAdmins(token: string) {
-  return apiFetch<AdminSummary[]>("/admin/admins", token)
+export function getAdmins(getToken: () => Promise<string | null>) {
+  return apiFetch<AdminSummary[]>("/admin/admins", getToken)
 }
 
-export function addAdmin(token: string, body: { did: string }) {
-  return apiFetch<{ id: string; did: string }>("/admin/admins", token, {
+export function addAdmin(
+  getToken: () => Promise<string | null>,
+  body: { did: string }
+) {
+  return apiFetch<{ id: string; did: string }>("/admin/admins", getToken, {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function deleteAdmin(token: string, id: string) {
-  return apiFetch(`/admin/admins/${encodeURIComponent(id)}`, token, {
+export function deleteAdmin(getToken: () => Promise<string | null>, id: string) {
+  return apiFetch(`/admin/admins/${encodeURIComponent(id)}`, getToken, {
     method: "DELETE",
   })
 }

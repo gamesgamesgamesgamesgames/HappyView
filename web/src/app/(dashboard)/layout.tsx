@@ -12,16 +12,16 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { token } = useAuth()
+  const { did } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!token) {
+    if (!did) {
       router.replace("/login")
     }
-  }, [token, router])
+  }, [did, router])
 
-  if (!token) return null
+  if (!did) return null
 
   return (
     <SidebarProvider

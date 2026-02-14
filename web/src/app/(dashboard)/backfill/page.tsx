@@ -46,14 +46,13 @@ function statusVariant(status: string) {
 }
 
 export default function BackfillPage() {
-  const { token } = useAuth()
+  const { getToken } = useAuth()
   const [jobs, setJobs] = useState<BackfillJob[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    if (!token) return
-    getBackfillJobs(token).then(setJobs).catch((e) => setError(e.message))
-  }, [token])
+    getBackfillJobs(getToken).then(setJobs).catch((e) => setError(e.message))
+  }, [getToken])
 
   useEffect(() => {
     load()
@@ -77,7 +76,7 @@ export default function BackfillPage() {
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Backfill Jobs</h2>
-          <CreateDialog token={token!} onSuccess={load} />
+          <CreateDialog getToken={getToken} onSuccess={load} />
         </div>
 
         <div className="rounded-lg border">
@@ -144,10 +143,10 @@ export default function BackfillPage() {
 }
 
 function CreateDialog({
-  token,
+  getToken,
   onSuccess,
 }: {
-  token: string
+  getToken: () => Promise<string | null>
   onSuccess: () => void
 }) {
   const [collection, setCollection] = useState("")
@@ -158,7 +157,7 @@ function CreateDialog({
   async function handleCreate() {
     setError(null)
     try {
-      await createBackfillJob(token, {
+      await createBackfillJob(getToken, {
         collection: collection || undefined,
         did: did || undefined,
       })

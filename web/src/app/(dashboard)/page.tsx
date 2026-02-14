@@ -21,14 +21,13 @@ import {
 } from "@/components/ui/table"
 
 export default function DashboardPage() {
-  const { token } = useAuth()
+  const { getToken } = useAuth()
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!token) return
-    getStats(token).then(setStats).catch((e) => setError(e.message))
-  }, [token])
+    getStats(getToken).then(setStats).catch((e) => setError(e.message))
+  }, [getToken])
 
   return (
     <>

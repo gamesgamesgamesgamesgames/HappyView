@@ -38,24 +38,22 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 
 export default function LexiconsPage() {
-  const { token } = useAuth()
+  const { getToken } = useAuth()
   const [lexicons, setLexicons] = useState<LexiconSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [viewLexicon, setViewLexicon] = useState<LexiconDetail | null>(null)
 
   const load = useCallback(() => {
-    if (!token) return
-    getLexicons(token).then(setLexicons).catch((e) => setError(e.message))
-  }, [token])
+    getLexicons(getToken).then(setLexicons).catch((e) => setError(e.message))
+  }, [getToken])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleView(id: string) {
-    if (!token) return
     try {
-      const detail = await getLexicon(token, id)
+      const detail = await getLexicon(getToken, id)
       setViewLexicon(detail)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -63,9 +61,8 @@ export default function LexiconsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!token) return
     try {
-      await deleteLexicon(token, id)
+      await deleteLexicon(getToken, id)
       load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -80,7 +77,7 @@ export default function LexiconsPage() {
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Uploaded Lexicons</h2>
-          <UploadDialog token={token!} onSuccess={load} />
+          <UploadDialog getToken={getToken} onSuccess={load} />
         </div>
 
         <div className="rounded-lg border">
@@ -157,10 +154,10 @@ export default function LexiconsPage() {
 }
 
 function UploadDialog({
-  token,
+  getToken,
   onSuccess,
 }: {
-  token: string
+  getToken: () => Promise<string | null>
   onSuccess: () => void
 }) {
   const [json, setJson] = useState("")
@@ -174,7 +171,7 @@ function UploadDialog({
     setError(null)
     try {
       const lexiconJson = JSON.parse(json)
-      await uploadLexicon(token, {
+      await uploadLexicon(getToken, {
         lexicon_json: lexiconJson,
         backfill,
         target_collection: targetCollection || undefined,

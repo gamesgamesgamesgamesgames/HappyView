@@ -33,23 +33,21 @@ import {
 } from "@/components/ui/table"
 
 export default function NetworkLexiconsPage() {
-  const { token } = useAuth()
+  const { getToken } = useAuth()
   const [items, setItems] = useState<NetworkLexiconSummary[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    if (!token) return
-    getNetworkLexicons(token).then(setItems).catch((e) => setError(e.message))
-  }, [token])
+    getNetworkLexicons(getToken).then(setItems).catch((e) => setError(e.message))
+  }, [getToken])
 
   useEffect(() => {
     load()
   }, [load])
 
   async function handleDelete(nsid: string) {
-    if (!token) return
     try {
-      await deleteNetworkLexicon(token, nsid)
+      await deleteNetworkLexicon(getToken, nsid)
       load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -64,7 +62,7 @@ export default function NetworkLexiconsPage() {
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Tracked Network Lexicons</h2>
-          <AddDialog token={token!} onSuccess={load} />
+          <AddDialog getToken={getToken} onSuccess={load} />
         </div>
 
         <div className="rounded-lg border">
@@ -125,10 +123,10 @@ export default function NetworkLexiconsPage() {
 }
 
 function AddDialog({
-  token,
+  getToken,
   onSuccess,
 }: {
-  token: string
+  getToken: () => Promise<string | null>
   onSuccess: () => void
 }) {
   const [nsid, setNsid] = useState("")
@@ -139,7 +137,7 @@ function AddDialog({
   async function handleAdd() {
     setError(null)
     try {
-      await addNetworkLexicon(token, {
+      await addNetworkLexicon(getToken, {
         nsid,
         target_collection: targetCollection || undefined,
       })

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -18,15 +17,22 @@ export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const [token, setToken] = useState("")
+  const [handle, setHandle] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { login } = useAuth()
-  const router = useRouter()
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!token.trim()) return
-    login(token.trim())
-    router.push("/")
+    if (!handle.trim()) return
+    setLoading(true)
+    setError(null)
+    try {
+      await login(handle.trim())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Login failed")
+      setLoading(false)
+    }
   }
 
   return (
@@ -36,23 +42,27 @@ export function LoginForm({
           <div className="flex flex-col items-center gap-2 text-center">
             <h1 className="text-xl font-bold">HappyView Admin</h1>
             <FieldDescription>
-              Enter your access token to manage your AppView.
+              Sign in with your ATProto account to manage your AppView.
             </FieldDescription>
           </div>
+          {error && (
+            <p className="text-destructive text-center text-sm">{error}</p>
+          )}
           <Field>
-            <FieldLabel htmlFor="token">Access Token</FieldLabel>
+            <FieldLabel htmlFor="handle">Handle</FieldLabel>
             <Input
-              id="token"
-              type="password"
-              placeholder="eyJ..."
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
+              id="handle"
+              type="text"
+              placeholder="you.bsky.social"
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
               required
+              disabled={loading}
             />
           </Field>
           <Field>
-            <Button type="submit" className="w-full">
-              Sign in
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign in"}
             </Button>
           </Field>
         </FieldGroup>
