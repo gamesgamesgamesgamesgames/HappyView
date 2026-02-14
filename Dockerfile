@@ -1,3 +1,11 @@
+FROM node:22-alpine AS frontend
+
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ .
+RUN npm run build
+
 FROM rust:1.93 AS builder
 
 WORKDIR /app
@@ -18,6 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -r -s /bin/false happyview
 
 COPY --from=builder /app/target/release/happyview /usr/local/bin/happyview
+COPY --from=frontend /app/web/out /srv/static
+
+ENV STATIC_DIR=/srv/static
 
 USER happyview
 

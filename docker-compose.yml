@@ -56,6 +56,18 @@ services:
       aip:
         condition: service_started
 
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: npm run dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    environment:
+      - HOSTNAME=0.0.0.0
+
 volumes:
   pgdata:
   aip-pgdata:
