@@ -7,6 +7,7 @@ pub mod jetstream;
 pub mod lexicon;
 pub mod profile;
 pub mod repo;
+pub mod resolve;
 pub mod server;
 pub mod xrpc;
 
