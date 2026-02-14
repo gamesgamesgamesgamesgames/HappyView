@@ -10,6 +10,7 @@ pub struct Config {
     pub jetstream_url: String,
     pub relay_url: String,
     pub plc_url: String,
+    pub static_dir: String,
 }
 
 impl Config {
@@ -26,6 +27,7 @@ impl Config {
                 .unwrap_or_else(|_| "wss://jetstream2.us-west.bsky.network/subscribe".into()),
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
             plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
+            static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| "./web/out".into()),
         }
     }
 
@@ -74,6 +76,7 @@ mod tests {
             jetstream_url: String::new(),
             relay_url: String::new(),
             plc_url: String::new(),
+            static_dir: String::new(),
         };
         assert_eq!(
             config.listen_addr(),

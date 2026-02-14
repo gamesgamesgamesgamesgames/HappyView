@@ -38,6 +38,7 @@ impl TestApp {
             jetstream_url: String::new(),
             relay_url: mock_url.clone(),
             plc_url: mock_url.clone(),
+            static_dir: "./web/out".into(),
         };
 
         // Seed the admin DID directly so tests don't rely on auto-bootstrap.
