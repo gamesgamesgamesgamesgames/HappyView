@@ -24,6 +24,7 @@ Jetstream ──> HappyView ──> PostgreSQL
 - [Configuration](configuration.md) - environment variables reference
 - [Deployment](deployment.md) - Docker, production, TLS
 - [Lexicons](lexicons.md) - uploading and managing lexicon definitions
+- [Network Lexicons](network-lexicons.md) - loading lexicons from the ATProto network
 - [Backfill](backfill.md) - bulk-indexing historical records
 - [XRPC API](xrpc-api.md) - query and procedure endpoints
 - [Admin API](admin-api.md) - manage lexicons, backfills, and admins

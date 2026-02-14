@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::lexicon::{LexiconRegistry, ParsedLexicon};
+
 // ---------------------------------------------------------------------------
 // Jetstream event types
 // ---------------------------------------------------------------------------
@@ -32,12 +34,21 @@ struct JetstreamCommit {
 // Public API
 // ---------------------------------------------------------------------------
 
+/// The static collection we always watch for lexicon schema updates.
+const LEXICON_SCHEMA_COLLECTION: &str = "com.atproto.lexicon.schema";
+
 /// Spawn a background task that subscribes to the Jetstream firehose and
 /// indexes records for collections specified by the watch channel.
 ///
 /// When the collection list is empty, the task idles without connecting.
 /// When collections change, it disconnects and reconnects with the new filter.
-pub fn spawn(db: PgPool, jetstream_url: String, mut collections_rx: watch::Receiver<Vec<String>>) {
+pub fn spawn(
+    db: PgPool,
+    jetstream_url: String,
+    mut collections_rx: watch::Receiver<Vec<String>>,
+    lexicons: LexiconRegistry,
+    collections_tx: watch::Sender<Vec<String>>,
+) {
     tokio::spawn(async move {
         let cursor: Arc<AtomicI64> = Arc::new(AtomicI64::new(0));
 
@@ -55,14 +66,22 @@ pub fn spawn(db: PgPool, jetstream_url: String, mut collections_rx: watch::Recei
                 continue;
             }
 
+            // Always include the lexicon schema collection alongside the dynamic ones.
+            let mut wanted = collections.clone();
+            if !wanted.contains(&LEXICON_SCHEMA_COLLECTION.to_string()) {
+                wanted.push(LEXICON_SCHEMA_COLLECTION.to_string());
+            }
+
             // Connect and process events. If the collection list changes
             // mid-stream, `run` returns so we can reconnect with new filters.
             match run(
                 &db,
                 &jetstream_url,
                 &cursor,
-                &collections,
+                &wanted,
                 &mut collections_rx,
+                &lexicons,
+                &collections_tx,
             )
             .await
             {
@@ -89,6 +108,8 @@ async fn run(
     cursor: &Arc<AtomicI64>,
     collections: &[String],
     collections_rx: &mut watch::Receiver<Vec<String>>,
+    lexicons: &LexiconRegistry,
+    collections_tx: &watch::Sender<Vec<String>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let wanted: String = collections
         .iter()
@@ -153,6 +174,19 @@ async fn run(
                     event.did, commit.collection, commit.rkey,
                 );
 
+                // Handle lexicon schema events for tracked network lexicons.
+                if commit.collection == LEXICON_SCHEMA_COLLECTION {
+                    handle_lexicon_schema_event(
+                        db,
+                        lexicons,
+                        collections_tx,
+                        &event.did,
+                        &commit,
+                    )
+                    .await;
+                    continue;
+                }
+
                 match commit.operation.as_str() {
                     "create" | "update" => {
                         let record = match commit.record {
@@ -204,4 +238,105 @@ async fn run(
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Lexicon schema event handler
+// ---------------------------------------------------------------------------
+
+/// Handle a `com.atproto.lexicon.schema` commit event for tracked network lexicons.
+async fn handle_lexicon_schema_event(
+    db: &PgPool,
+    lexicons: &LexiconRegistry,
+    collections_tx: &watch::Sender<Vec<String>>,
+    did: &str,
+    commit: &JetstreamCommit,
+) {
+    let nsid = &commit.rkey;
+
+    // Check if this NSID is one we're tracking and the DID matches the authority.
+    let tracked: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT target_collection FROM network_lexicons WHERE nsid = $1 AND authority_did = $2",
+    )
+    .bind(nsid)
+    .bind(did)
+    .fetch_optional(db)
+    .await
+    .unwrap_or(None);
+
+    let target_collection = match tracked {
+        Some((tc,)) => tc,
+        None => return, // Not a tracked network lexicon.
+    };
+
+    match commit.operation.as_str() {
+        "create" | "update" => {
+            let record = match &commit.record {
+                Some(r) => r,
+                None => return,
+            };
+
+            let parsed = match ParsedLexicon::parse(record.clone(), 1, target_collection.clone()) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!(nsid, "failed to parse lexicon schema event: {e}");
+                    return;
+                }
+            };
+
+            let is_record = parsed.lexicon_type == crate::lexicon::LexiconType::Record;
+
+            // Upsert into lexicons table.
+            if let Err(e) = sqlx::query(
+                r#"
+                INSERT INTO lexicons (id, lexicon_json, backfill, target_collection)
+                VALUES ($1, $2, false, $3)
+                ON CONFLICT (id) DO UPDATE SET
+                    lexicon_json = EXCLUDED.lexicon_json,
+                    target_collection = EXCLUDED.target_collection,
+                    revision = lexicons.revision + 1,
+                    updated_at = NOW()
+                "#,
+            )
+            .bind(nsid)
+            .bind(record)
+            .bind(&target_collection)
+            .execute(db)
+            .await
+            {
+                tracing::warn!(nsid, "failed to upsert lexicon from event: {e}");
+                return;
+            }
+
+            // Update last_fetched_at.
+            let _ =
+                sqlx::query("UPDATE network_lexicons SET last_fetched_at = NOW() WHERE nsid = $1")
+                    .bind(nsid)
+                    .execute(db)
+                    .await;
+
+            lexicons.upsert(parsed).await;
+            tracing::info!(nsid, "updated network lexicon from jetstream event");
+
+            if is_record {
+                let collections = lexicons.get_record_collections().await;
+                let _ = collections_tx.send(collections);
+            }
+        }
+        "delete" => {
+            // Remove from lexicons table and registry.
+            let _ = sqlx::query("DELETE FROM lexicons WHERE id = $1")
+                .bind(nsid)
+                .execute(db)
+                .await;
+
+            let was_present = lexicons.remove(nsid).await;
+            if was_present {
+                tracing::info!(nsid, "removed network lexicon from jetstream delete event");
+                let collections = lexicons.get_record_collections().await;
+                let _ = collections_tx.send(collections);
+            }
+        }
+        _ => {}
+    }
 }

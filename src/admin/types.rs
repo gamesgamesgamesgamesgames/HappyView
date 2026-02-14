@@ -69,6 +69,25 @@ pub(super) struct BackfillJob {
 }
 
 // ---------------------------------------------------------------------------
+// Network lexicon types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct AddNetworkLexiconBody {
+    pub(super) nsid: String,
+    pub(super) target_collection: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(super) struct NetworkLexiconSummary {
+    pub(super) nsid: String,
+    pub(super) authority_did: String,
+    pub(super) target_collection: Option<String>,
+    pub(super) last_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+}
+
+// ---------------------------------------------------------------------------
 // Admin management types
 // ---------------------------------------------------------------------------
 

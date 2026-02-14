@@ -102,6 +102,84 @@ curl -X DELETE http://localhost:3000/admin/lexicons/example.record -H "$AUTH"
 
 ---
 
+## Network Lexicons
+
+Network lexicons are fetched from the ATProto network via DNS TXT resolution and kept updated via Jetstream. See [Network Lexicons](network-lexicons.md) for background.
+
+### Add a network lexicon
+
+```
+POST /admin/network-lexicons
+```
+
+```sh
+curl -X POST http://localhost:3000/admin/network-lexicons \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nsid": "games.gamesgamesgamesgames.game",
+    "target_collection": null
+  }'
+```
+
+| Field               | Type   | Required | Description                                                         |
+| ------------------- | ------ | -------- | ------------------------------------------------------------------- |
+| `nsid`              | string | yes      | The NSID of the lexicon to watch                                    |
+| `target_collection` | string | no       | For query/procedure lexicons, the record collection they operate on |
+
+HappyView resolves the NSID authority via DNS TXT, fetches the lexicon from the authority's PDS, parses it, and stores it.
+
+**Response**: `201 Created`
+
+```json
+{
+  "nsid": "games.gamesgamesgamesgames.game",
+  "authority_did": "did:plc:authority",
+  "revision": 1
+}
+```
+
+### List network lexicons
+
+```
+GET /admin/network-lexicons
+```
+
+```sh
+curl http://localhost:3000/admin/network-lexicons -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+[
+  {
+    "nsid": "games.gamesgamesgamesgames.game",
+    "authority_did": "did:plc:authority",
+    "target_collection": null,
+    "last_fetched_at": "2025-01-01T00:00:00Z",
+    "created_at": "2025-01-01T00:00:00Z"
+  }
+]
+```
+
+### Remove a network lexicon
+
+```
+DELETE /admin/network-lexicons/{nsid}
+```
+
+```sh
+curl -X DELETE http://localhost:3000/admin/network-lexicons/games.gamesgamesgamesgames.game \
+  -H "$AUTH"
+```
+
+Removes the network lexicon tracking and also deletes the lexicon from the `lexicons` table and in-memory registry.
+
+**Response**: `204 No Content`
+
+---
+
 ## Stats
 
 ### Record counts
