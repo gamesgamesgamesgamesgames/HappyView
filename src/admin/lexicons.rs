@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::AppState;
 use crate::error::AppError;
-use crate::lexicon::{LexiconType, ParsedLexicon};
+use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 
 use super::auth::AdminAuth;
 use super::types::{LexiconSummary, UploadLexiconBody};
@@ -45,19 +45,31 @@ pub(super) async fn upload_lexicon(
         .ok_or_else(|| AppError::BadRequest("lexicon JSON must have a string 'id' field".into()))?
         .to_string();
 
+    // Validate action
+    let action =
+        ProcedureAction::from_optional_str(body.action.as_deref()).map_err(AppError::BadRequest)?;
+
     // Validate it parses correctly
-    ParsedLexicon::parse(body.lexicon_json.clone(), 1, body.target_collection.clone())
-        .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
+    ParsedLexicon::parse(
+        body.lexicon_json.clone(),
+        1,
+        body.target_collection.clone(),
+        action.clone(),
+    )
+    .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
+
+    let action_str = action.to_optional_str();
 
     // Upsert into database
     let row: (i32,) = sqlx::query_as(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, action)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             backfill = EXCLUDED.backfill,
             target_collection = EXCLUDED.target_collection,
+            action = EXCLUDED.action,
             revision = lexicons.revision + 1,
             updated_at = NOW()
         RETURNING revision
@@ -67,6 +79,7 @@ pub(super) async fn upload_lexicon(
     .bind(&body.lexicon_json)
     .bind(body.backfill)
     .bind(&body.target_collection)
+    .bind(action_str)
     .fetch_one(&state.db)
     .await
     .map_err(|e| AppError::Internal(format!("failed to upsert lexicon: {e}")))?;
@@ -74,7 +87,7 @@ pub(super) async fn upload_lexicon(
     let revision = row.0;
 
     // Update in-memory registry with correct revision
-    let parsed = ParsedLexicon::parse(body.lexicon_json, revision, body.target_collection)
+    let parsed = ParsedLexicon::parse(body.lexicon_json, revision, body.target_collection, action)
         .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;
     let is_record = parsed.lexicon_type == LexiconType::Record;
     state.lexicons.upsert(parsed).await;
@@ -104,9 +117,9 @@ pub(super) async fn list_lexicons(
     _admin: AdminAuth,
 ) -> Result<Json<Vec<LexiconSummary>>, AppError> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, i32, Value, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
+    let rows: Vec<(String, i32, Value, bool, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, created_at, updated_at FROM lexicons ORDER BY id",
+            "SELECT id, revision, lexicon_json, backfill, action, created_at, updated_at FROM lexicons ORDER BY id",
         )
         .fetch_all(&state.db)
         .await
@@ -114,20 +127,24 @@ pub(super) async fn list_lexicons(
 
     let summaries: Vec<LexiconSummary> = rows
         .into_iter()
-        .map(|(id, revision, json, backfill, created_at, updated_at)| {
-            let lexicon_type = ParsedLexicon::parse(json, revision, None)
-                .map(|p| format!("{:?}", p.lexicon_type).to_lowercase())
-                .unwrap_or_else(|_| "unknown".into());
+        .map(
+            |(id, revision, json, backfill, action, created_at, updated_at)| {
+                let lexicon_type =
+                    ParsedLexicon::parse(json, revision, None, ProcedureAction::Upsert)
+                        .map(|p| format!("{:?}", p.lexicon_type).to_lowercase())
+                        .unwrap_or_else(|_| "unknown".into());
 
-            LexiconSummary {
-                id,
-                revision,
-                lexicon_type,
-                backfill,
-                created_at,
-                updated_at,
-            }
-        })
+                LexiconSummary {
+                    id,
+                    revision,
+                    lexicon_type,
+                    backfill,
+                    action,
+                    created_at,
+                    updated_at,
+                }
+            },
+        )
         .collect();
 
     Ok(Json(summaries))
@@ -140,16 +157,16 @@ pub(super) async fn get_lexicon(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, AppError> {
     #[allow(clippy::type_complexity)]
-    let row: Option<(String, i32, Value, bool, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
+    let row: Option<(String, i32, Value, bool, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, created_at, updated_at FROM lexicons WHERE id = $1",
+            "SELECT id, revision, lexicon_json, backfill, action, created_at, updated_at FROM lexicons WHERE id = $1",
         )
         .bind(&id)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to get lexicon: {e}")))?;
 
-    let (id, revision, lexicon_json, backfill, created_at, updated_at) =
+    let (id, revision, lexicon_json, backfill, action, created_at, updated_at) =
         row.ok_or_else(|| AppError::NotFound(format!("lexicon '{id}' not found")))?;
 
     Ok(Json(serde_json::json!({
@@ -157,6 +174,7 @@ pub(super) async fn get_lexicon(
         "revision": revision,
         "lexicon_json": lexicon_json,
         "backfill": backfill,
+        "action": action,
         "created_at": created_at,
         "updated_at": updated_at,
     })))

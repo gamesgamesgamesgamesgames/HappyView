@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::auth::Claims;
 use crate::error::AppError;
+use crate::lexicon::ProcedureAction;
 use crate::repo;
 
 pub(super) async fn handle_procedure(
@@ -20,13 +21,25 @@ pub(super) async fn handle_procedure(
 
     let session = repo::get_atp_session(state, claims.token()).await?;
 
-    // Determine create vs put based on whether input has a `uri` field.
-    let has_uri = input.get("uri").and_then(|v| v.as_str()).is_some();
-
-    if has_uri {
-        handle_put_record(state, claims, input, collection, &session).await
-    } else {
-        handle_create_record(state, claims, input, collection, &session).await
+    match &lexicon.action {
+        ProcedureAction::Create => {
+            handle_create_record(state, claims, input, collection, &session).await
+        }
+        ProcedureAction::Update => {
+            handle_put_record(state, claims, input, collection, &session).await
+        }
+        ProcedureAction::Delete => {
+            handle_delete_record(state, claims, input, collection, &session).await
+        }
+        ProcedureAction::Upsert => {
+            // Backwards-compatible: sniff for `uri` field to decide create vs put.
+            let has_uri = input.get("uri").and_then(|v| v.as_str()).is_some();
+            if has_uri {
+                handle_put_record(state, claims, input, collection, &session).await
+            } else {
+                handle_create_record(state, claims, input, collection, &session).await
+            }
+        }
     }
 }
 
@@ -165,6 +178,55 @@ async fn handle_put_record(
         .bind(cid)
         .execute(&state.db)
         .await;
+
+        Ok((
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            bytes,
+        )
+            .into_response())
+    } else {
+        repo::forward_pds_response(resp).await
+    }
+}
+
+async fn handle_delete_record(
+    state: &AppState,
+    claims: &Claims,
+    input: &Value,
+    collection: &str,
+    session: &repo::AtpSession,
+) -> Result<Response, AppError> {
+    let uri = input
+        .get("uri")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::BadRequest("missing uri field".into()))?;
+
+    let rkey = uri
+        .split('/')
+        .next_back()
+        .ok_or_else(|| AppError::Internal("invalid AT URI".into()))?;
+
+    let pds_body = json!({
+        "repo": claims.did(),
+        "collection": collection,
+        "rkey": rkey,
+    });
+
+    let resp =
+        repo::pds_post_json_raw(state, session, "com.atproto.repo.deleteRecord", &pds_body).await?;
+
+    if resp.status().is_success() {
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to read PDS response: {e}")))?;
+
+        // Remove from local records table.
+        let _ = sqlx::query("DELETE FROM records WHERE uri = $1")
+            .bind(uri)
+            .execute(&state.db)
+            .await;
 
         Ok((
             StatusCode::OK,

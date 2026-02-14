@@ -61,6 +61,25 @@ pub fn create_game_procedure_lexicon() -> Value {
     })
 }
 
+/// A procedure-type lexicon JSON for deleting a game record.
+pub fn delete_game_procedure_lexicon() -> Value {
+    json!({
+        "lexicon": 1,
+        "id": "games.gamesgamesgamesgames.deleteGame",
+        "defs": {
+            "main": {
+                "type": "procedure",
+                "input": {
+                    "encoding": "application/json"
+                },
+                "output": {
+                    "encoding": "application/json"
+                }
+            }
+        }
+    })
+}
+
 /// A fake DID document for testing PLC directory resolution.
 pub fn did_document(did: &str, pds_endpoint: &str) -> Value {
     json!({

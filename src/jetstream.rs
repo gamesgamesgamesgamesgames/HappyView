@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::lexicon::{LexiconRegistry, ParsedLexicon};
+use crate::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 
 // ---------------------------------------------------------------------------
 // Jetstream event types
@@ -276,7 +276,12 @@ async fn handle_lexicon_schema_event(
                 None => return,
             };
 
-            let parsed = match ParsedLexicon::parse(record.clone(), 1, target_collection.clone()) {
+            let parsed = match ParsedLexicon::parse(
+                record.clone(),
+                1,
+                target_collection.clone(),
+                ProcedureAction::Upsert,
+            ) {
                 Ok(p) => p,
                 Err(e) => {
                     tracing::warn!(nsid, "failed to parse lexicon schema event: {e}");

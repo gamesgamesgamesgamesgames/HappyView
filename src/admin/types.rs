@@ -11,6 +11,7 @@ pub(super) struct LexiconSummary {
     pub(super) revision: i32,
     pub(super) lexicon_type: String,
     pub(super) backfill: bool,
+    pub(super) action: Option<String>,
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -21,6 +22,7 @@ pub(super) struct UploadLexiconBody {
     #[serde(default = "default_backfill")]
     pub(super) backfill: bool,
     pub(super) target_collection: Option<String>,
+    pub(super) action: Option<String>,
 }
 
 fn default_backfill() -> bool {

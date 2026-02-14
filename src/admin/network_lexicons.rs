@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::AppState;
 use crate::error::AppError;
-use crate::lexicon::{LexiconType, ParsedLexicon};
+use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 use crate::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 
 use super::auth::AdminAuth;
@@ -35,8 +35,13 @@ pub(super) async fn add(
         fetch_lexicon_from_pds(&state.http, &pds_endpoint, &authority_did, nsid).await?;
 
     // Parse to validate.
-    let parsed = ParsedLexicon::parse(lexicon_json.clone(), 1, body.target_collection.clone())
-        .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
+    let parsed = ParsedLexicon::parse(
+        lexicon_json.clone(),
+        1,
+        body.target_collection.clone(),
+        ProcedureAction::Upsert,
+    )
+    .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
 
     // Insert into network_lexicons table.
     sqlx::query(
@@ -80,8 +85,13 @@ pub(super) async fn add(
 
     // Update in-memory registry.
     let is_record = parsed.lexicon_type == LexiconType::Record;
-    let parsed = ParsedLexicon::parse(lexicon_json, revision, body.target_collection)
-        .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;
+    let parsed = ParsedLexicon::parse(
+        lexicon_json,
+        revision,
+        body.target_collection,
+        ProcedureAction::Upsert,
+    )
+    .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;
     state.lexicons.upsert(parsed).await;
 
     if is_record {

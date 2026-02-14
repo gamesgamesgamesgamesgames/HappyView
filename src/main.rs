@@ -1,5 +1,5 @@
 use happyview::config::Config;
-use happyview::lexicon::{LexiconRegistry, ParsedLexicon};
+use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 use happyview::{AppState, backfill, jetstream, server};
 use tokio::sync::watch;
@@ -53,6 +53,7 @@ async fn main() {
                             lexicon_json.clone(),
                             1,
                             target_collection.clone(),
+                            ProcedureAction::Upsert,
                         ) {
                             Ok(parsed) => {
                                 // Upsert into lexicons table.

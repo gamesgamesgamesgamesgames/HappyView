@@ -16,6 +16,44 @@ pub enum LexiconType {
     Definitions,
 }
 
+/// The action a procedure lexicon performs on its target collection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcedureAction {
+    Create,
+    Update,
+    Delete,
+    /// Backwards-compatible default: sniff for `uri` in input to decide create vs put.
+    Upsert,
+}
+
+impl ProcedureAction {
+    /// Parse an optional action string into a `ProcedureAction`.
+    /// Returns `Upsert` for `None`, or an error for unrecognized values.
+    pub fn from_optional_str(s: Option<&str>) -> Result<Self, String> {
+        match s {
+            None => Ok(Self::Upsert),
+            Some("create") => Ok(Self::Create),
+            Some("update") => Ok(Self::Update),
+            Some("delete") => Ok(Self::Delete),
+            Some("upsert") => Ok(Self::Upsert),
+            Some(other) => Err(format!(
+                "invalid action '{other}': must be create, update, delete, or upsert"
+            )),
+        }
+    }
+
+    /// Convert to an optional string for database storage.
+    /// `Upsert` maps to `None` (the default).
+    pub fn to_optional_str(&self) -> Option<&'static str> {
+        match self {
+            Self::Create => Some("create"),
+            Self::Update => Some("update"),
+            Self::Delete => Some("delete"),
+            Self::Upsert => None,
+        }
+    }
+}
+
 /// Metadata extracted from a raw lexicon JSON document.
 #[derive(Debug, Clone)]
 pub struct ParsedLexicon {
@@ -39,6 +77,8 @@ pub struct ParsedLexicon {
     pub revision: i32,
     /// For queries/procedures: the backing record collection NSID.
     pub target_collection: Option<String>,
+    /// For procedures: the action this procedure performs (create, update, delete, upsert).
+    pub action: ProcedureAction,
 }
 
 impl ParsedLexicon {
@@ -47,6 +87,7 @@ impl ParsedLexicon {
         raw: Value,
         revision: i32,
         target_collection: Option<String>,
+        action: ProcedureAction,
     ) -> Result<Self, String> {
         let id = raw
             .get("id")
@@ -88,6 +129,7 @@ impl ParsedLexicon {
             raw,
             revision,
             target_collection,
+            action,
         })
     }
 }
@@ -113,18 +155,27 @@ impl LexiconRegistry {
 
     /// Load all lexicons from the database, replacing any existing entries.
     pub async fn load_from_db(&self, db: &sqlx::PgPool) -> Result<(), String> {
-        let rows: Vec<(String, Value, i32, Option<String>)> =
-            sqlx::query_as("SELECT id, lexicon_json, revision, target_collection FROM lexicons")
-                .fetch_all(db)
-                .await
-                .map_err(|e| format!("failed to load lexicons: {e}"))?;
+        #[allow(clippy::type_complexity)]
+        let rows: Vec<(String, Value, i32, Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT id, lexicon_json, revision, target_collection, action FROM lexicons",
+        )
+        .fetch_all(db)
+        .await
+        .map_err(|e| format!("failed to load lexicons: {e}"))?;
 
         let mut inner = self.inner.write().await;
         inner.clear();
 
         let mut loaded = 0u32;
-        for (id, json, revision, target_collection) in rows {
-            match ParsedLexicon::parse(json, revision, target_collection) {
+        for (id, json, revision, target_collection, action_str) in rows {
+            let action = match ProcedureAction::from_optional_str(action_str.as_deref()) {
+                Ok(a) => a,
+                Err(e) => {
+                    warn!(%id, "invalid action value: {e}");
+                    ProcedureAction::Upsert
+                }
+            };
+            match ParsedLexicon::parse(json, revision, target_collection, action) {
                 Ok(parsed) => {
                     inner.insert(id, parsed);
                     loaded += 1;
@@ -276,7 +327,8 @@ mod tests {
 
     #[test]
     fn parse_record_lexicon() {
-        let parsed = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        let parsed =
+            ParsedLexicon::parse(record_lexicon_json(), 1, None, ProcedureAction::Upsert).unwrap();
         assert_eq!(parsed.id, "games.gamesgamesgamesgames.game");
         assert_eq!(parsed.lexicon_type, LexiconType::Record);
         assert_eq!(parsed.record_key, Some("tid".into()));
@@ -291,6 +343,7 @@ mod tests {
             query_lexicon_json(),
             2,
             Some("games.gamesgamesgamesgames.game".into()),
+            ProcedureAction::Upsert,
         )
         .unwrap();
         assert_eq!(parsed.lexicon_type, LexiconType::Query);
@@ -305,22 +358,34 @@ mod tests {
 
     #[test]
     fn parse_procedure_lexicon() {
-        let parsed = ParsedLexicon::parse(procedure_lexicon_json(), 1, None).unwrap();
+        let parsed =
+            ParsedLexicon::parse(procedure_lexicon_json(), 1, None, ProcedureAction::Upsert)
+                .unwrap();
         assert_eq!(parsed.lexicon_type, LexiconType::Procedure);
         assert!(parsed.input.is_some());
         assert!(parsed.output.is_some());
     }
 
     #[test]
+    fn parse_procedure_with_action() {
+        let parsed =
+            ParsedLexicon::parse(procedure_lexicon_json(), 1, None, ProcedureAction::Delete)
+                .unwrap();
+        assert_eq!(parsed.action, ProcedureAction::Delete);
+    }
+
+    #[test]
     fn parse_definitions_lexicon() {
-        let parsed = ParsedLexicon::parse(definitions_lexicon_json(), 1, None).unwrap();
+        let parsed =
+            ParsedLexicon::parse(definitions_lexicon_json(), 1, None, ProcedureAction::Upsert)
+                .unwrap();
         assert_eq!(parsed.lexicon_type, LexiconType::Definitions);
     }
 
     #[test]
     fn parse_missing_id_returns_error() {
         let raw = json!({"lexicon": 1, "defs": {}});
-        let result = ParsedLexicon::parse(raw, 1, None);
+        let result = ParsedLexicon::parse(raw, 1, None, ProcedureAction::Upsert);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("id"));
     }
@@ -328,15 +393,19 @@ mod tests {
     #[test]
     fn parse_preserves_raw_json() {
         let raw = record_lexicon_json();
-        let parsed = ParsedLexicon::parse(raw.clone(), 1, None).unwrap();
+        let parsed = ParsedLexicon::parse(raw.clone(), 1, None, ProcedureAction::Upsert).unwrap();
         assert_eq!(parsed.raw, raw);
     }
 
     #[test]
     fn parse_target_collection_passthrough() {
-        let parsed =
-            ParsedLexicon::parse(query_lexicon_json(), 1, Some("custom.collection".into()))
-                .unwrap();
+        let parsed = ParsedLexicon::parse(
+            query_lexicon_json(),
+            1,
+            Some("custom.collection".into()),
+            ProcedureAction::Upsert,
+        )
+        .unwrap();
         assert_eq!(parsed.target_collection, Some("custom.collection".into()));
     }
 
@@ -353,7 +422,8 @@ mod tests {
     #[tokio::test]
     async fn registry_upsert_and_get() {
         let reg = LexiconRegistry::new();
-        let parsed = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        let parsed =
+            ParsedLexicon::parse(record_lexicon_json(), 1, None, ProcedureAction::Upsert).unwrap();
         reg.upsert(parsed).await;
 
         let got = reg.get("games.gamesgamesgamesgames.game").await;
@@ -364,10 +434,12 @@ mod tests {
     #[tokio::test]
     async fn registry_upsert_replaces() {
         let reg = LexiconRegistry::new();
-        let v1 = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        let v1 =
+            ParsedLexicon::parse(record_lexicon_json(), 1, None, ProcedureAction::Upsert).unwrap();
         reg.upsert(v1).await;
 
-        let v2 = ParsedLexicon::parse(record_lexicon_json(), 5, None).unwrap();
+        let v2 =
+            ParsedLexicon::parse(record_lexicon_json(), 5, None, ProcedureAction::Upsert).unwrap();
         reg.upsert(v2).await;
 
         assert_eq!(reg.count().await, 1);
@@ -383,7 +455,8 @@ mod tests {
     #[tokio::test]
     async fn registry_remove_existing() {
         let reg = LexiconRegistry::new();
-        let parsed = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
+        let parsed =
+            ParsedLexicon::parse(record_lexicon_json(), 1, None, ProcedureAction::Upsert).unwrap();
         reg.upsert(parsed).await;
 
         assert!(reg.remove("games.gamesgamesgamesgames.game").await);
@@ -406,10 +479,16 @@ mod tests {
     async fn registry_type_filtered_collections() {
         let reg = LexiconRegistry::new();
 
-        let record = ParsedLexicon::parse(record_lexicon_json(), 1, None).unwrap();
-        let query = ParsedLexicon::parse(query_lexicon_json(), 1, None).unwrap();
-        let procedure = ParsedLexicon::parse(procedure_lexicon_json(), 1, None).unwrap();
-        let defs = ParsedLexicon::parse(definitions_lexicon_json(), 1, None).unwrap();
+        let record =
+            ParsedLexicon::parse(record_lexicon_json(), 1, None, ProcedureAction::Upsert).unwrap();
+        let query =
+            ParsedLexicon::parse(query_lexicon_json(), 1, None, ProcedureAction::Upsert).unwrap();
+        let procedure =
+            ParsedLexicon::parse(procedure_lexicon_json(), 1, None, ProcedureAction::Upsert)
+                .unwrap();
+        let defs =
+            ParsedLexicon::parse(definitions_lexicon_json(), 1, None, ProcedureAction::Upsert)
+                .unwrap();
 
         reg.upsert(record).await;
         reg.upsert(query).await;
@@ -429,5 +508,52 @@ mod tests {
         let procedures = reg.get_procedures().await;
         assert_eq!(procedures.len(), 1);
         assert!(procedures.contains(&"games.gamesgamesgamesgames.createGame".to_string()));
+    }
+
+    // -----------------------------------------------------------------------
+    // ProcedureAction
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn procedure_action_from_none_is_upsert() {
+        assert_eq!(
+            ProcedureAction::from_optional_str(None).unwrap(),
+            ProcedureAction::Upsert
+        );
+    }
+
+    #[test]
+    fn procedure_action_from_known_values() {
+        assert_eq!(
+            ProcedureAction::from_optional_str(Some("create")).unwrap(),
+            ProcedureAction::Create
+        );
+        assert_eq!(
+            ProcedureAction::from_optional_str(Some("update")).unwrap(),
+            ProcedureAction::Update
+        );
+        assert_eq!(
+            ProcedureAction::from_optional_str(Some("delete")).unwrap(),
+            ProcedureAction::Delete
+        );
+        assert_eq!(
+            ProcedureAction::from_optional_str(Some("upsert")).unwrap(),
+            ProcedureAction::Upsert
+        );
+    }
+
+    #[test]
+    fn procedure_action_from_invalid_returns_error() {
+        let result = ProcedureAction::from_optional_str(Some("invalid"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid"));
+    }
+
+    #[test]
+    fn procedure_action_to_optional_str_roundtrip() {
+        assert_eq!(ProcedureAction::Create.to_optional_str(), Some("create"));
+        assert_eq!(ProcedureAction::Update.to_optional_str(), Some("update"));
+        assert_eq!(ProcedureAction::Delete.to_optional_str(), Some("delete"));
+        assert_eq!(ProcedureAction::Upsert.to_optional_str(), None);
     }
 }
