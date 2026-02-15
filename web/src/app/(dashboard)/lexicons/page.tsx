@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -26,6 +26,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -167,6 +174,18 @@ function UploadDialog({
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
+  const mainType = useMemo(() => {
+    try {
+      const parsed = JSON.parse(json)
+      return parsed?.defs?.main?.type as string | undefined
+    } catch {
+      return undefined
+    }
+  }, [json])
+
+  const showTargetCollection = mainType === "query" || mainType === "procedure"
+  const showAction = mainType === "procedure"
+
   async function handleUpload() {
     setError(null)
     try {
@@ -174,8 +193,10 @@ function UploadDialog({
       await uploadLexicon(getToken, {
         lexicon_json: lexiconJson,
         backfill,
-        target_collection: targetCollection || undefined,
-        action: action || undefined,
+        target_collection: showTargetCollection
+          ? targetCollection || undefined
+          : undefined,
+        action: showAction ? action || undefined : undefined,
       })
       setJson("")
       setTargetCollection("")
@@ -200,7 +221,7 @@ function UploadDialog({
             Paste the lexicon JSON document below.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4 overflow-hidden">
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex flex-col gap-2">
             <Label htmlFor="lexicon-json">Lexicon JSON</Label>
@@ -213,26 +234,35 @@ function UploadDialog({
               placeholder='{"lexicon": 1, "id": "com.example.record", ...}'
             />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="target-collection">
-              Target Collection (optional)
-            </Label>
-            <Input
-              id="target-collection"
-              value={targetCollection}
-              onChange={(e) => setTargetCollection(e.target.value)}
-              placeholder="com.example.record"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="action">Action (optional)</Label>
-            <Input
-              id="action"
-              value={action}
-              onChange={(e) => setAction(e.target.value)}
-              placeholder="create, put, or leave empty for auto"
-            />
-          </div>
+          {showTargetCollection && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="target-collection">
+                Target Collection (optional)
+              </Label>
+              <Input
+                id="target-collection"
+                value={targetCollection}
+                onChange={(e) => setTargetCollection(e.target.value)}
+                placeholder="com.example.record"
+              />
+            </div>
+          )}
+          {showAction && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="action">Action (optional)</Label>
+              <Select value={action} onValueChange={setAction}>
+                <SelectTrigger id="action" className="w-full">
+                  <SelectValue placeholder="Upsert (default)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="upsert">Upsert (default)</SelectItem>
+                  <SelectItem value="create">Create</SelectItem>
+                  <SelectItem value="update">Update</SelectItem>
+                  <SelectItem value="delete">Delete</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Switch
               id="backfill"

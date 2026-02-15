@@ -25,7 +25,10 @@ services:
       STORAGE_BACKEND: postgres
       EXTERNAL_BASE: http://localhost:8080
       DPOP_NONCE_SEED: ${DPOP_NONCE_SEED}
-      HTTP_PORT: 8080
+      OAUTH_SIGNING_KEYS: ${OAUTH_SIGNING_KEYS}
+      ATPROTO_OAUTH_SIGNING_KEYS: ${ATPROTO_OAUTH_SIGNING_KEYS}
+      ENABLE_CLIENT_API: "true"
+      PORT: 8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,7 +46,8 @@ services:
       - cargo-target:/app/target
     environment:
       DATABASE_URL: postgres://happyview:happyview@postgres/happyview
-      AIP_URL: http://aip:8080
+      AIP_URL: https://aip.gamesgamesgamesgames.games
+      PORT: 3000
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,6 +65,9 @@ services:
       - web-node-modules:/app/node_modules
     environment:
       - HOSTNAME=0.0.0.0
+      - API_URL=http://happyview:3000
+      - AIP_PROXY_URL=https://aip.gamesgamesgamesgames.games
+      - NEXT_PUBLIC_AIP_URL=https://aip.gamesgamesgamesgames.games
 
 volumes:
   pgdata:
