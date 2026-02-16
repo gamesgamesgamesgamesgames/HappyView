@@ -43,7 +43,7 @@ pub async fn aip_proxy(
     let upstream_resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!("AIP proxy error: {e}");
+            tracing::error!("AIP proxy error: {e:#}");
             return Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
                 .body(Body::from("upstream request failed"))

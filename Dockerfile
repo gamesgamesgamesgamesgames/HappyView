@@ -10,11 +10,15 @@ FROM rust:1.93 AS builder
 
 WORKDIR /app
 
+# Build dependencies first (cached until Cargo.toml/Cargo.lock change)
 COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs && touch src/lib.rs
+ENV SQLX_OFFLINE=true
+RUN cargo build --release && rm -rf src target/release/.fingerprint/happyview-*
+
+# Build application code
 COPY src/ src/
 COPY migrations/ migrations/
-
-ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 FROM debian:bookworm-slim
