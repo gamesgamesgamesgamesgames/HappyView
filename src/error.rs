@@ -5,6 +5,8 @@ use bytes::Bytes;
 #[derive(Debug)]
 pub enum AppError {
     Auth(String),
+    /// Auth failure with a DPoP nonce that the client should retry with.
+    AuthDpopNonce(String),
     BadRequest(String),
     Forbidden(String),
     Internal(String),
@@ -16,6 +18,7 @@ impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AppError::Auth(msg) => write!(f, "auth error: {msg}"),
+            AppError::AuthDpopNonce(nonce) => write!(f, "auth error: use_dpop_nonce ({nonce})"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
             AppError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
@@ -34,6 +37,14 @@ impl IntoResponse for AppError {
                 body,
             )
                 .into_response(),
+            AppError::AuthDpopNonce(nonce) => {
+                let body = serde_json::json!({ "error": "use_dpop_nonce", "dpop_nonce": nonce });
+                let mut response = (StatusCode::UNAUTHORIZED, axum::Json(body)).into_response();
+                if let Ok(val) = axum::http::HeaderValue::from_str(&nonce) {
+                    response.headers_mut().insert("dpop-nonce", val);
+                }
+                response
+            }
             other => {
                 let (status, message) = match &other {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
@@ -47,7 +58,7 @@ impl IntoResponse for AppError {
                         )
                     }
                     AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-                    AppError::PdsError(..) => unreachable!(),
+                    AppError::PdsError(..) | AppError::AuthDpopNonce(..) => unreachable!(),
                 };
 
                 let body = serde_json::json!({ "error": message });

@@ -1,3 +1,10 @@
+import { createDpopProof, setDpopNonce } from "./dpop"
+
+// The DPoP proof for admin API calls must target AIP's userinfo URL,
+// because the backend forwards the proof to AIP for token validation.
+const AIP_URL = process.env.NEXT_PUBLIC_AIP_URL || ""
+const AIP_USERINFO_URL = `${AIP_URL}/oauth/userinfo`
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -9,13 +16,19 @@ export class ApiError extends Error {
 async function apiFetch<T = unknown>(
   path: string,
   getToken: () => Promise<string | null>,
-  options?: RequestInit
+  options?: RequestInit,
+  dpopNonce?: string
 ): Promise<T> {
   const token = await getToken()
   if (!token) throw new ApiError(401, "Not authenticated")
 
+  // Proof targets AIP's userinfo endpoint (GET) since the backend
+  // forwards it there for token validation.
+  const dpopProof = await createDpopProof("GET", AIP_USERINFO_URL, token, dpopNonce)
+
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
+    Authorization: `DPoP ${token}`,
+    DPoP: dpopProof,
   }
   if (
     options?.method === "POST" ||
@@ -29,6 +42,21 @@ async function apiFetch<T = unknown>(
     ...options,
     headers: { ...headers, ...options?.headers },
   })
+
+  // If AIP requires a DPoP nonce, the backend relays it via both
+  // the dpop-nonce response header and the JSON body. Retry once.
+  if (res.status === 401 && !dpopNonce) {
+    const text = await res.text().catch(() => "")
+    let nonce = res.headers.get("dpop-nonce")
+    if (!nonce) {
+      try { nonce = JSON.parse(text).dpop_nonce } catch { /* not JSON */ }
+    }
+    if (nonce) {
+      setDpopNonce(nonce)
+      return apiFetch<T>(path, getToken, options, nonce)
+    }
+    throw new ApiError(res.status, text)
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)

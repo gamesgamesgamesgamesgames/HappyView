@@ -8,6 +8,8 @@ import {
   useState,
 } from "react"
 
+import { clearDpopKeypair, createDpopProof, ensureDpopKeypair, setDpopNonce } from "./dpop"
+
 interface AuthContextType {
   did: string | null
   getToken: () => Promise<string | null>
@@ -103,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const state = params.get("state")
 
         if (code && state) {
+          console.log("[auth] OAuth callback detected, exchanging code")
           await handleOAuthCallback(code, state, cancelled, {
             setAccessToken,
             setDid,
@@ -111,9 +114,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Restore session from storage
           const savedToken = sessionStorage.getItem("oauth_access_token")
           const savedDid = sessionStorage.getItem("oauth_did")
-          if (savedToken && savedDid && !cancelled) {
+          const savedDpopKey = sessionStorage.getItem("dpop_private_jwk")
+
+          console.log("[auth] Session restore check:", {
+            hasToken: !!savedToken,
+            hasDid: !!savedDid,
+            hasDpopKey: !!savedDpopKey,
+          })
+
+          if (savedToken && !savedDpopKey) {
+            console.log("[auth] Clearing pre-DPoP session")
+            sessionStorage.removeItem("oauth_access_token")
+            sessionStorage.removeItem("oauth_did")
+            sessionStorage.removeItem("oauth_client_id")
+          } else if (savedToken && savedDid && !cancelled) {
+            console.log("[auth] Restoring session from storage")
             setAccessToken(savedToken)
             setDid(savedDid)
+          } else {
+            console.log("[auth] No session to restore")
           }
         }
       } catch (e) {
@@ -142,6 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setError(null)
+
+    await ensureDpopKeypair()
 
     const redirectUri = `${window.location.origin}/`
     const clientId = await getOrRegisterClient(redirectUri)
@@ -186,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setAccessToken(null)
     setDid(null)
+    clearDpopKeypair()
     sessionStorage.removeItem("oauth_access_token")
     sessionStorage.removeItem("oauth_did")
     sessionStorage.removeItem("oauth_client_id")
@@ -245,18 +267,45 @@ async function handleOAuthCallback(
 
   const redirectUri = `${window.location.origin}/`
 
-  // Token exchange via proxied path (avoids CORS)
-  const resp = await fetch("/aip/oauth/token", {
+  // Token exchange via proxied path (avoids CORS).
+  // AIP may require a DPoP nonce — retry once if we get one back.
+  const tokenUrl = `${AIP_URL}/oauth/token`
+  const tokenBody = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    code_verifier: codeVerifier,
+  }).toString()
+
+  let tokenDpopProof = await createDpopProof("POST", tokenUrl)
+  let resp = await fetch("/aip/oauth/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      code_verifier: codeVerifier,
-    }).toString(),
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      DPoP: tokenDpopProof,
+    },
+    body: tokenBody,
   })
+
+  if (!resp.ok) {
+    // AIP returns the nonce via header and/or JSON body
+    let nonce = resp.headers.get("dpop-nonce")
+    if (!nonce) {
+      const errBody = await resp.text().catch(() => "")
+      try { nonce = JSON.parse(errBody).dpop_nonce ?? null } catch { /* not JSON */ }
+      if (!nonce) throw new Error(`Token exchange failed: ${errBody}`)
+    }
+    tokenDpopProof = await createDpopProof("POST", tokenUrl, undefined, nonce)
+    resp = await fetch("/aip/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        DPoP: tokenDpopProof,
+      },
+      body: tokenBody,
+    })
+  }
 
   if (!resp.ok) {
     const text = await resp.text()
@@ -264,6 +313,9 @@ async function handleOAuthCallback(
   }
 
   const tokens = await resp.json()
+  // Capture the DPoP nonce from the token response for use in subsequent requests
+  const dpopNonce = resp.headers.get("dpop-nonce")
+  if (dpopNonce) setDpopNonce(dpopNonce)
 
   // Clean URL and session storage
   window.history.replaceState({}, "", window.location.pathname)
@@ -279,9 +331,37 @@ async function handleOAuthCallback(
   // Get DID from token response or userinfo
   let userDid: string | undefined = tokens.sub
   if (!userDid) {
-    const userinfoResp = await fetch("/aip/oauth/userinfo", {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const userinfoUrl = `${AIP_URL}/oauth/userinfo`
+    // Use the nonce from the token response if available
+    let currentNonce = dpopNonce
+    let userinfoDpopProof = await createDpopProof("GET", userinfoUrl, accessToken, currentNonce ?? undefined)
+
+    let userinfoResp = await fetch("/aip/oauth/userinfo", {
+      headers: {
+        Authorization: `DPoP ${accessToken}`,
+        DPoP: userinfoDpopProof,
+      },
     })
+
+    // Retry with nonce if AIP requires one
+    if (!userinfoResp.ok) {
+      let nonce = userinfoResp.headers.get("dpop-nonce")
+      if (!nonce) {
+        const errBody = await userinfoResp.text().catch(() => "")
+        try { nonce = JSON.parse(errBody).dpop_nonce ?? null } catch { /* not JSON */ }
+      }
+      if (nonce) {
+        currentNonce = nonce
+        userinfoDpopProof = await createDpopProof("GET", userinfoUrl, accessToken, nonce)
+        userinfoResp = await fetch("/aip/oauth/userinfo", {
+          headers: {
+            Authorization: `DPoP ${accessToken}`,
+            DPoP: userinfoDpopProof,
+          },
+        })
+      }
+    }
+
     if (userinfoResp.ok) {
       const info = await userinfoResp.json()
       userDid = info.sub
