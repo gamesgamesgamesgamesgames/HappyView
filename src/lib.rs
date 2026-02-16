@@ -1,14 +1,13 @@
 pub mod admin;
 pub mod auth;
-pub mod backfill;
 pub mod config;
 pub mod error;
-pub mod jetstream;
 pub mod lexicon;
 pub mod profile;
 pub mod repo;
 pub mod resolve;
 pub mod server;
+pub mod tap;
 pub mod xrpc;
 
 use config::Config;

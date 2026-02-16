@@ -35,7 +35,8 @@ impl TestApp {
             port: 0,
             database_url: String::new(), // not used — pool is already connected
             aip_url: mock_url.clone(),
-            jetstream_url: String::new(),
+            tap_url: "http://localhost:2480".into(),
+            tap_admin_password: None,
             relay_url: mock_url.clone(),
             plc_url: mock_url.clone(),
             static_dir: "./web/out".into(),

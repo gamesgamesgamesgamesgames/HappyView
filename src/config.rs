@@ -7,7 +7,8 @@ pub struct Config {
     pub port: u16,
     pub database_url: String,
     pub aip_url: String,
-    pub jetstream_url: String,
+    pub tap_url: String,
+    pub tap_admin_password: Option<String>,
     pub relay_url: String,
     pub plc_url: String,
     pub static_dir: String,
@@ -23,8 +24,8 @@ impl Config {
                 .unwrap_or(3000),
             database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
             aip_url: env::var("AIP_URL").expect("AIP_URL must be set"),
-            jetstream_url: env::var("JETSTREAM_URL")
-                .unwrap_or_else(|_| "wss://jetstream2.us-west.bsky.network/subscribe".into()),
+            tap_url: env::var("TAP_URL").unwrap_or_else(|_| "http://localhost:2480".into()),
+            tap_admin_password: env::var("TAP_ADMIN_PASSWORD").ok(),
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
             plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
             static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| "./web/out".into()),
@@ -49,7 +50,8 @@ mod tests {
             "PORT",
             "DATABASE_URL",
             "AIP_URL",
-            "JETSTREAM_URL",
+            "TAP_URL",
+            "TAP_ADMIN_PASSWORD",
             "RELAY_URL",
             "PLC_URL",
         ] {
@@ -73,7 +75,8 @@ mod tests {
             port: 8080,
             database_url: String::new(),
             aip_url: String::new(),
-            jetstream_url: String::new(),
+            tap_url: String::new(),
+            tap_admin_password: None,
             relay_url: String::new(),
             plc_url: String::new(),
             static_dir: String::new(),
@@ -106,7 +109,8 @@ mod tests {
         let config = Config::from_env();
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 3000);
-        assert!(config.jetstream_url.contains("jetstream"));
+        assert_eq!(config.tap_url, "http://localhost:2480");
+        assert!(config.tap_admin_password.is_none());
         assert_eq!(config.relay_url, "https://bsky.network");
         assert_eq!(config.plc_url, "https://plc.directory");
     }

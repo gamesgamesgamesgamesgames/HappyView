@@ -10,9 +10,9 @@ use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 use super::auth::AdminAuth;
 use super::types::{LexiconSummary, UploadLexiconBody};
 
-/// Send the current record collection list to the Jetstream task so it
-/// reconnects with the updated filter.
-async fn notify_jetstream(state: &AppState) {
+/// Send the current record collection list to the Tap task so it
+/// syncs the updated filter.
+async fn notify_collections(state: &AppState) {
     let collections = state.lexicons.get_record_collections().await;
     let _ = state.collections_tx.send(collections);
 }
@@ -93,7 +93,7 @@ pub(super) async fn upload_lexicon(
     state.lexicons.upsert(parsed).await;
 
     if is_record {
-        notify_jetstream(&state).await;
+        notify_collections(&state).await;
     }
 
     let status = if revision == 1 {
@@ -197,7 +197,7 @@ pub(super) async fn delete_lexicon(
     }
 
     state.lexicons.remove(&id).await;
-    notify_jetstream(&state).await;
+    notify_collections(&state).await;
 
     Ok(StatusCode::NO_CONTENT)
 }

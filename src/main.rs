@@ -1,7 +1,7 @@
 use happyview::config::Config;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
-use happyview::{AppState, backfill, jetstream, server};
+use happyview::{AppState, server, tap};
 use tokio::sync::watch;
 use tracing::{info, warn};
 
@@ -107,6 +107,7 @@ async fn main() {
     }
 
     let initial_collections = lexicons.get_record_collections().await;
+    let initial_collections_for_sync = initial_collections.clone();
     let (collections_tx, collections_rx) = watch::channel(initial_collections);
 
     let state = AppState {
@@ -117,18 +118,31 @@ async fn main() {
         collections_tx,
     };
 
-    jetstream::spawn(
+    // Sync initial collections to Tap on startup.
+    {
+        let mut wanted = initial_collections_for_sync;
+        if !wanted.contains(&"com.atproto.lexicon.schema".to_string()) {
+            wanted.push("com.atproto.lexicon.schema".to_string());
+        }
+        if let Err(e) = tap::sync_collections(
+            &state.http,
+            &config.tap_url,
+            config.tap_admin_password.as_deref(),
+            &wanted,
+        )
+        .await
+        {
+            warn!("failed to sync initial collections to tap: {e}");
+        }
+    }
+
+    tap::spawn(
         state.db.clone(),
-        config.jetstream_url.clone(),
+        config.tap_url.clone(),
+        config.tap_admin_password.clone(),
         collections_rx,
         state.lexicons.clone(),
         state.collections_tx.clone(),
-    );
-    backfill::spawn_worker(
-        state.db.clone(),
-        state.http.clone(),
-        config.relay_url.clone(),
-        config.plc_url.clone(),
     );
 
     let app = server::router(state);
