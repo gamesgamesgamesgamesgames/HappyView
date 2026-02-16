@@ -9,6 +9,7 @@ import {
 } from "react"
 
 import { clearDpopKeypair, createDpopProof, ensureDpopKeypair, setDpopNonce } from "./dpop"
+import { useConfig } from "./config-context"
 
 interface AuthContextType {
   did: string | null
@@ -27,9 +28,6 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   error: null,
 })
-
-// AIP URL for browser redirects (authorization endpoint)
-const AIP_URL = process.env.NEXT_PUBLIC_AIP_URL || ""
 
 // PKCE helpers
 
@@ -54,8 +52,8 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 
 // Dynamic client registration with AIP.
 // Caches the client_id in localStorage so we only register once.
-async function getOrRegisterClient(redirectUri: string): Promise<string> {
-  const cacheKey = `oauth_client_id:${AIP_URL}:${redirectUri}`
+async function getOrRegisterClient(aipUrl: string, redirectUri: string): Promise<string> {
+  const cacheKey = `oauth_client_id:${aipUrl}:${redirectUri}`
   const cached = localStorage.getItem(cacheKey)
   if (cached) return cached
 
@@ -84,6 +82,7 @@ async function getOrRegisterClient(redirectUri: string): Promise<string> {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { aip_url } = useConfig()
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [did, setDid] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -106,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (code && state) {
           console.log("[auth] OAuth callback detected, exchanging code")
-          await handleOAuthCallback(code, state, cancelled, {
+          await handleOAuthCallback(aip_url, code, state, cancelled, {
             setAccessToken,
             setDid,
           })
@@ -149,15 +148,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [aip_url])
 
   const getToken = useCallback(async (): Promise<string | null> => {
     return accessToken
   }, [accessToken])
 
   const login = useCallback(async (handle: string) => {
-    if (!AIP_URL) {
-      throw new Error("AIP URL not configured (set NEXT_PUBLIC_AIP_URL)")
+    if (!aip_url) {
+      throw new Error("AIP URL not configured")
     }
 
     setError(null)
@@ -165,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await ensureDpopKeypair()
 
     const redirectUri = `${window.location.origin}/`
-    const clientId = await getOrRegisterClient(redirectUri)
+    const clientId = await getOrRegisterClient(aip_url, redirectUri)
 
     const codeVerifier = generateRandomString(32)
     const codeChallenge = await generateCodeChallenge(codeVerifier)
@@ -186,8 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login_hint: handle,
     })
 
-    window.location.href = `${AIP_URL}/oauth/authorize?${params.toString()}`
-  }, [])
+    window.location.href = `${aip_url}/oauth/authorize?${params.toString()}`
+  }, [aip_url])
 
   const logout = useCallback(async () => {
     const clientId = sessionStorage.getItem("oauth_client_id")
@@ -232,6 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 async function handleOAuthCallback(
+  aipUrl: string,
   code: string,
   state: string,
   cancelled: boolean,
@@ -269,7 +269,7 @@ async function handleOAuthCallback(
 
   // Token exchange via proxied path (avoids CORS).
   // AIP may require a DPoP nonce — retry once if we get one back.
-  const tokenUrl = `${AIP_URL}/oauth/token`
+  const tokenUrl = `${aipUrl}/oauth/token`
   const tokenBody = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -331,7 +331,7 @@ async function handleOAuthCallback(
   // Get DID from token response or userinfo
   let userDid: string | undefined = tokens.sub
   if (!userDid) {
-    const userinfoUrl = `${AIP_URL}/oauth/userinfo`
+    const userinfoUrl = `${aipUrl}/oauth/userinfo`
     // Use the nonce from the token response if available
     let currentNonce = dpopNonce
     let userinfoDpopProof = await createDpopProof("GET", userinfoUrl, accessToken, currentNonce ?? undefined)

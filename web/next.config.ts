@@ -16,6 +16,7 @@ if (process.env.NODE_ENV === "production") {
     { source: "/xrpc/:path*", destination: `${apiBase}/xrpc/:path*` },
     { source: "/health", destination: `${apiBase}/health` },
     { source: "/aip/:path*", destination: `${aipBase}/:path*` },
+    { source: "/config", destination: `${apiBase}/config` },
   ];
 }
 

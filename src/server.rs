@@ -7,6 +7,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::AppState;
 use crate::admin;
+use crate::aip;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::profile;
@@ -28,6 +29,8 @@ pub fn router(state: AppState) -> Router {
         )
         // Catch-all for dynamically registered lexicons
         .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
+        .route("/config", get(config_endpoint))
+        .route("/aip/{*path}", get(aip::aip_proxy).post(aip::aip_proxy))
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
@@ -36,6 +39,10 @@ pub fn router(state: AppState) -> Router {
 
 async fn health() -> &'static str {
     "ok"
+}
+
+async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "aip_url": state.config.aip_url }))
 }
 
 async fn get_profile(

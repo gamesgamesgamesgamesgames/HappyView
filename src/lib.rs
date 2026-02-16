@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod aip;
 pub mod auth;
 pub mod config;
 pub mod error;

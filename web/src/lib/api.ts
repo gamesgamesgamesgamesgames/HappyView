@@ -2,8 +2,9 @@ import { createDpopProof, setDpopNonce } from "./dpop"
 
 // The DPoP proof for admin API calls must target AIP's userinfo URL,
 // because the backend forwards the proof to AIP for token validation.
-const AIP_URL = process.env.NEXT_PUBLIC_AIP_URL || ""
-const AIP_USERINFO_URL = `${AIP_URL}/oauth/userinfo`
+// Set at runtime via ConfigProvider.
+let aipUrl = ""
+export function setAipUrl(url: string) { aipUrl = url }
 
 export class ApiError extends Error {
   status: number
@@ -24,7 +25,7 @@ async function apiFetch<T = unknown>(
 
   // Proof targets AIP's userinfo endpoint (GET) since the backend
   // forwards it there for token validation.
-  const dpopProof = await createDpopProof("GET", AIP_USERINFO_URL, token, dpopNonce)
+  const dpopProof = await createDpopProof("GET", `${aipUrl}/oauth/userinfo`, token, dpopNonce)
 
   const headers: Record<string, string> = {
     Authorization: `DPoP ${token}`,
