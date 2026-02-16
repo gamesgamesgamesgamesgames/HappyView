@@ -88,6 +88,7 @@ export interface LexiconSummary {
   lexicon_type: string
   backfill: boolean
   action: string | null
+  target_collection: string | null
   created_at: string
   updated_at: string
 }
@@ -218,4 +219,18 @@ export function deleteAdmin(getToken: () => Promise<string | null>, id: string) 
   return apiFetch(`/admin/admins/${encodeURIComponent(id)}`, getToken, {
     method: "DELETE",
   })
+}
+
+// XRPC (public, no auth needed)
+export async function xrpcQuery<T = unknown>(
+  method: string,
+  params?: Record<string, string>
+): Promise<T> {
+  const search = params ? `?${new URLSearchParams(params)}` : ""
+  const res = await fetch(`/xrpc/${encodeURIComponent(method)}${search}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new ApiError(res.status, text)
+  }
+  return res.json()
 }

@@ -117,9 +117,9 @@ pub(super) async fn list_lexicons(
     _admin: AdminAuth,
 ) -> Result<Json<Vec<LexiconSummary>>, AppError> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, i32, Value, bool, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
+    let rows: Vec<(String, i32, Value, bool, Option<String>, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, action, created_at, updated_at FROM lexicons ORDER BY id",
+            "SELECT id, revision, lexicon_json, backfill, action, target_collection, created_at, updated_at FROM lexicons ORDER BY id",
         )
         .fetch_all(&state.db)
         .await
@@ -128,7 +128,7 @@ pub(super) async fn list_lexicons(
     let summaries: Vec<LexiconSummary> = rows
         .into_iter()
         .map(
-            |(id, revision, json, backfill, action, created_at, updated_at)| {
+            |(id, revision, json, backfill, action, target_collection, created_at, updated_at)| {
                 let lexicon_type =
                     ParsedLexicon::parse(json, revision, None, ProcedureAction::Upsert)
                         .map(|p| format!("{:?}", p.lexicon_type).to_lowercase())
@@ -140,6 +140,7 @@ pub(super) async fn list_lexicons(
                     lexicon_type,
                     backfill,
                     action,
+                    target_collection,
                     created_at,
                     updated_at,
                 }
