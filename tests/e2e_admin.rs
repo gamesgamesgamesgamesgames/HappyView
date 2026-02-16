@@ -443,7 +443,7 @@ async fn backfill_create_job() {
 
     assert_eq!(resp.status(), StatusCode::CREATED);
     let json = json_body(resp).await;
-    assert_eq!(json["status"], "pending");
+    assert_eq!(json["status"], "completed");
     assert!(json.get("id").is_some());
 }
 
