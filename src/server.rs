@@ -42,7 +42,7 @@ async fn health() -> &'static str {
 }
 
 async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "aip_url": state.config.aip_url }))
+    Json(serde_json::json!({ "aip_url": state.config.aip_public_url }))
 }
 
 async fn get_profile(

@@ -102,6 +102,7 @@ mod tests {
             port: 3000,
             database_url: String::new(),
             aip_url: aip_url.into(),
+            aip_public_url: String::new(),
             tap_url: String::new(),
             tap_admin_password: None,
             relay_url: String::new(),

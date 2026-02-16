@@ -35,6 +35,7 @@ impl TestApp {
             port: 0,
             database_url: String::new(), // not used — pool is already connected
             aip_url: mock_url.clone(),
+            aip_public_url: mock_url.clone(),
             tap_url: "http://localhost:2480".into(),
             tap_admin_password: None,
             relay_url: mock_url.clone(),
