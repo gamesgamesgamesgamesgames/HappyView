@@ -1,6 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
 
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -34,14 +40,16 @@ import {
 } from "@/components/ui/table"
 
 function parseAtUri(uri: string): { did: string; rkey: string } {
-  // at://did:plc:xxx/collection/rkey
   const parts = uri.replace("at://", "").split("/")
   return { did: parts[0] ?? "", rkey: parts[2] ?? "" }
 }
 
-function truncateJson(record: AdminRecord, maxLen = 120): string {
-  const str = JSON.stringify(record.record)
-  return str.length > maxLen ? str.slice(0, maxLen) + "..." : str
+function formatCellValue(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value)
+  return JSON.stringify(value)
 }
 
 export default function RecordsPage() {
@@ -55,7 +63,6 @@ export default function RecordsPage() {
   const [error, setError] = useState<string | null>(null)
   const [viewRecord, setViewRecord] = useState<AdminRecord | null>(null)
 
-  // Load collections from stats
   useEffect(() => {
     getStats(getToken)
       .then((stats) => setCollections(stats.collections))
@@ -81,6 +88,68 @@ export default function RecordsPage() {
     [getToken]
   )
 
+  // Build columns dynamically from the union of all record keys
+  const columns = useMemo<ColumnDef<AdminRecord>[]>(() => {
+    const keySet = new Set<string>()
+    for (const r of records) {
+      for (const key of Object.keys(r.record)) {
+        keySet.add(key)
+      }
+    }
+
+    const cols: ColumnDef<AdminRecord>[] = [
+      {
+        id: "did",
+        header: "DID",
+        accessorFn: (row) => parseAtUri(row.uri).did,
+        cell: ({ getValue }) => (
+          <span className="font-mono text-xs whitespace-nowrap">
+            {getValue<string>()}
+          </span>
+        ),
+      },
+      {
+        id: "rkey",
+        header: "Rkey",
+        accessorFn: (row) => parseAtUri(row.uri).rkey,
+        cell: ({ getValue }) => (
+          <span className="font-mono text-xs whitespace-nowrap">
+            {getValue<string>()}
+          </span>
+        ),
+      },
+    ]
+
+    for (const key of keySet) {
+      cols.push({
+        id: key,
+        header: key,
+        accessorFn: (row) => row.record[key],
+        cell: ({ getValue }) => {
+          const val = getValue<unknown>()
+          const str = formatCellValue(val)
+          return (
+            <span
+              className="font-mono text-xs block max-w-xs truncate"
+              title={str}
+            >
+              {str}
+            </span>
+          )
+        },
+      })
+    }
+
+    return cols
+  }, [records])
+
+  const table = useReactTable({
+    data: records,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => row.uri,
+  })
+
   function handleSelectCollection(collection: string) {
     setSelectedCollection(collection)
     setCursorStack([])
@@ -97,7 +166,7 @@ export default function RecordsPage() {
   function handlePrevious() {
     if (cursorStack.length === 0 || !selectedCollection) return
     const stack = [...cursorStack]
-    stack.pop() // remove current page's cursor
+    stack.pop()
     const prevCursor = stack.length > 0 ? stack[stack.length - 1] : undefined
     setCursorStack(stack)
     fetchRecords(selectedCollection, prevCursor)
@@ -110,7 +179,10 @@ export default function RecordsPage() {
         {error && <p className="text-destructive text-sm">{error}</p>}
 
         <div className="flex items-center gap-4">
-          <Select value={selectedCollection} onValueChange={handleSelectCollection}>
+          <Select
+            value={selectedCollection}
+            onValueChange={handleSelectCollection}
+          >
             <SelectTrigger className="w-80">
               <SelectValue placeholder="Select a collection" />
             </SelectTrigger>
@@ -126,30 +198,39 @@ export default function RecordsPage() {
 
         {selectedCollection && (
           <>
-            <div className="rounded-lg border">
+            <div className="overflow-x-auto rounded-lg border">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>DID</TableHead>
-                    <TableHead>Rkey</TableHead>
-                    <TableHead>Record</TableHead>
-                  </TableRow>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id} className="whitespace-nowrap">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
                 </TableHeader>
                 <TableBody>
                   {loading && (
                     <TableRow>
                       <TableCell
-                        colSpan={3}
+                        colSpan={columns.length}
                         className="text-muted-foreground text-center"
                       >
                         Loading...
                       </TableCell>
                     </TableRow>
                   )}
-                  {!loading && records.length === 0 && (
+                  {!loading && table.getRowModel().rows.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={3}
+                        colSpan={columns.length}
                         className="text-muted-foreground text-center"
                       >
                         No records found.
@@ -157,26 +238,22 @@ export default function RecordsPage() {
                     </TableRow>
                   )}
                   {!loading &&
-                    records.map((record) => {
-                      const { did, rkey } = parseAtUri(record.uri)
-                      return (
-                        <TableRow
-                          key={record.uri}
-                          className="cursor-pointer"
-                          onClick={() => setViewRecord(record)}
-                        >
-                          <TableCell className="font-mono text-xs">
-                            {did}
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="cursor-pointer"
+                        onClick={() => setViewRecord(row.original)}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {rkey}
-                          </TableCell>
-                          <TableCell className="max-w-md truncate font-mono text-xs">
-                            {truncateJson(record)}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
+                        ))}
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
             </div>
