@@ -5,6 +5,7 @@ const aipBase = process.env.AIP_PROXY_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  trailingSlash: true,
   images: { unoptimized: true },
 };
 
