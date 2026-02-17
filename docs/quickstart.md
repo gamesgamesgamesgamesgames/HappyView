@@ -6,6 +6,16 @@ The fastest way to get HappyView running is with Railway. This template deploys 
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/I1jvZl?referralCode=0QOgj_)
 
+### Required configuration
+
+After deploying the template, you'll need to configure a few things before the stack works properly:
+
+1. **Set your admin DID.** In the AIP service variables, set `ADMIN_DIDS` to your AT Protocol DID (e.g. `did:plc:abc123...`). You can find your DID by looking up your handle on [Internect](https://internect.info/).
+
+2. **Generate AIP signing keys.** The `OAUTH_SIGNING_KEYS` and `ATPROTO_OAUTH_SIGNING_KEYS` variables require multibase-encoded P-256 private keys. See the [AIP Signing Keys documentation](https://github.com/graze-social/aip/blob/main/CONFIGURATION.md#signing-keys) for generation instructions.
+
+3. **Generate public URLs.** The services won't work until HappyView and AIP have public domains assigned in Railway.
+
 ## Local development
 
 ### Prerequisites
