@@ -15,6 +15,7 @@ import {
   type CollectionStat,
   type AdminRecord,
 } from "@/lib/api";
+import { CodeBlock } from "@/components/code-block";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableViewOptions } from "@/components/data-table/data-table-view-options";
 import { SiteHeader } from "@/components/site-header";
@@ -245,15 +246,13 @@ export default function RecordsPage() {
 
         {viewRecord && (
           <Dialog open onOpenChange={() => setViewRecord(null)}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="sm:max-w-4xl">
               <DialogHeader>
-                <DialogTitle className="font-mono text-sm">
+                <DialogTitle className="truncate font-mono text-sm">
                   {viewRecord.uri}
                 </DialogTitle>
               </DialogHeader>
-              <pre className="bg-muted max-h-96 overflow-auto rounded-md p-4 text-xs">
-                {JSON.stringify(viewRecord, null, 2)}
-              </pre>
+              <CodeBlock code={JSON.stringify(viewRecord, null, 2)} />
             </DialogContent>
           </Dialog>
         )}

@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
+import { CodeBlock } from "@/components/code-block";
 import {
   addNetworkLexicon,
   deleteLexicon,
@@ -279,7 +280,7 @@ export default function LexiconsPage() {
 
         {viewLexicon && (
           <Dialog open onOpenChange={() => setViewLexicon(null)}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="sm:max-w-2xl">
               <DialogHeader>
                 <DialogTitle>{viewLexicon.id}</DialogTitle>
                 <DialogDescription>
@@ -287,9 +288,9 @@ export default function LexiconsPage() {
                   {viewLexicon.lexicon_type}
                 </DialogDescription>
               </DialogHeader>
-              <pre className="bg-muted max-h-96 overflow-auto rounded-md p-4 text-xs">
-                {JSON.stringify(viewLexicon.lexicon_json, null, 2)}
-              </pre>
+              <CodeBlock
+                code={JSON.stringify(viewLexicon.lexicon_json, null, 2)}
+              />
             </DialogContent>
           </Dialog>
         )}
