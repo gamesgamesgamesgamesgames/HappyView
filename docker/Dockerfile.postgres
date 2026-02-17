@@ -1,0 +1,2 @@
+FROM ghcr.io/railwayapp-templates/postgres-ssl:17
+COPY init-databases.sh /docker-entrypoint-initdb.d/

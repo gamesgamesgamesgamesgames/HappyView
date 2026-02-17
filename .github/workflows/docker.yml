@@ -9,7 +9,7 @@ env:
   ATCR_IMAGE: atcr.io/${{ secrets.ATCR_NAMESPACE }}/happyview
 
 jobs:
-  build:
+  happyview:
     runs-on: ubuntu-latest
     permissions:
       contents: read
