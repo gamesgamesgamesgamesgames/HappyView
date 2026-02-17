@@ -3,6 +3,7 @@ pub(crate) mod auth;
 mod backfill;
 mod lexicons;
 mod network_lexicons;
+mod records;
 mod stats;
 mod types;
 
@@ -29,6 +30,7 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             post(admins::create_admin).get(admins::list_admins),
         )
         .route("/admins/{id}", delete(admins::delete_admin))
+        .route("/records", get(records::list_records))
         .route(
             "/network-lexicons",
             post(network_lexicons::add).get(network_lexicons::list),

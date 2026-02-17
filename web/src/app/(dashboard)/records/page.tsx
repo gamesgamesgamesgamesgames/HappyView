@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react"
 
 import { useAuth } from "@/lib/auth-context"
 import {
-  getLexicons,
-  xrpcQuery,
-  type LexiconSummary,
+  getStats,
+  getAdminRecords,
+  type CollectionStat,
+  type AdminRecord,
 } from "@/lib/api"
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/button"
@@ -32,56 +33,41 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-interface XrpcRecord {
-  uri: string
-  [key: string]: unknown
-}
-
-interface XrpcListResponse {
-  records: XrpcRecord[]
-  cursor?: string
-}
-
 function parseAtUri(uri: string): { did: string; rkey: string } {
   // at://did:plc:xxx/collection/rkey
   const parts = uri.replace("at://", "").split("/")
   return { did: parts[0] ?? "", rkey: parts[2] ?? "" }
 }
 
-function truncateJson(record: XrpcRecord, maxLen = 120): string {
-  const { uri, ...rest } = record
-  const str = JSON.stringify(rest)
+function truncateJson(record: AdminRecord, maxLen = 120): string {
+  const str = JSON.stringify(record.record)
   return str.length > maxLen ? str.slice(0, maxLen) + "..." : str
 }
 
 export default function RecordsPage() {
   const { getToken } = useAuth()
-  const [queryLexicons, setQueryLexicons] = useState<LexiconSummary[]>([])
-  const [selectedMethod, setSelectedMethod] = useState<string>("")
-  const [records, setRecords] = useState<XrpcRecord[]>([])
+  const [collections, setCollections] = useState<CollectionStat[]>([])
+  const [selectedCollection, setSelectedCollection] = useState<string>("")
+  const [records, setRecords] = useState<AdminRecord[]>([])
   const [cursorStack, setCursorStack] = useState<string[]>([])
   const [nextCursor, setNextCursor] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [viewRecord, setViewRecord] = useState<XrpcRecord | null>(null)
+  const [viewRecord, setViewRecord] = useState<AdminRecord | null>(null)
 
-  // Load query-type lexicons for the collection selector
+  // Load collections from stats
   useEffect(() => {
-    getLexicons(getToken)
-      .then((lexicons) =>
-        setQueryLexicons(lexicons.filter((l) => l.lexicon_type === "query"))
-      )
+    getStats(getToken)
+      .then((stats) => setCollections(stats.collections))
       .catch((e) => setError(e.message))
   }, [getToken])
 
   const fetchRecords = useCallback(
-    async (method: string, cursor?: string) => {
+    async (collection: string, cursor?: string) => {
       setLoading(true)
       setError(null)
       try {
-        const params: Record<string, string> = { limit: "20" }
-        if (cursor) params.cursor = cursor
-        const data = await xrpcQuery<XrpcListResponse>(method, params)
+        const data = await getAdminRecords(getToken, collection, 20, cursor)
         setRecords(data.records)
         setNextCursor(data.cursor)
       } catch (e: unknown) {
@@ -92,33 +78,30 @@ export default function RecordsPage() {
         setLoading(false)
       }
     },
-    []
+    [getToken]
   )
 
-  function handleSelectCollection(method: string) {
-    setSelectedMethod(method)
+  function handleSelectCollection(collection: string) {
+    setSelectedCollection(collection)
     setCursorStack([])
     setNextCursor(undefined)
-    fetchRecords(method)
+    fetchRecords(collection)
   }
 
   function handleNext() {
-    if (!nextCursor || !selectedMethod) return
+    if (!nextCursor || !selectedCollection) return
     setCursorStack((prev) => [...prev, nextCursor])
-    fetchRecords(selectedMethod, nextCursor)
+    fetchRecords(selectedCollection, nextCursor)
   }
 
   function handlePrevious() {
-    if (cursorStack.length === 0 || !selectedMethod) return
+    if (cursorStack.length === 0 || !selectedCollection) return
     const stack = [...cursorStack]
     stack.pop() // remove current page's cursor
     const prevCursor = stack.length > 0 ? stack[stack.length - 1] : undefined
     setCursorStack(stack)
-    fetchRecords(selectedMethod, prevCursor)
+    fetchRecords(selectedCollection, prevCursor)
   }
-
-  // Find the selected lexicon to show its target_collection label
-  const selectedLexicon = queryLexicons.find((l) => l.id === selectedMethod)
 
   return (
     <>
@@ -127,26 +110,21 @@ export default function RecordsPage() {
         {error && <p className="text-destructive text-sm">{error}</p>}
 
         <div className="flex items-center gap-4">
-          <Select value={selectedMethod} onValueChange={handleSelectCollection}>
+          <Select value={selectedCollection} onValueChange={handleSelectCollection}>
             <SelectTrigger className="w-80">
               <SelectValue placeholder="Select a collection" />
             </SelectTrigger>
             <SelectContent>
-              {queryLexicons.map((lex) => (
-                <SelectItem key={lex.id} value={lex.id}>
-                  {lex.target_collection ?? lex.id}
+              {collections.map((col) => (
+                <SelectItem key={col.collection} value={col.collection}>
+                  {col.collection} ({col.count.toLocaleString()})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {selectedLexicon && (
-            <span className="text-muted-foreground text-sm">
-              via {selectedLexicon.id}
-            </span>
-          )}
         </div>
 
-        {selectedMethod && (
+        {selectedCollection && (
           <>
             <div className="rounded-lg border">
               <Table>

@@ -235,3 +235,30 @@ export async function xrpcQuery<T = unknown>(
   }
   return res.json()
 }
+
+// Admin records browsing
+export interface AdminRecord {
+  uri: string
+  did: string
+  record: Record<string, unknown>
+}
+
+export interface AdminListRecordsResponse {
+  records: AdminRecord[]
+  cursor?: string
+}
+
+export function getAdminRecords(
+  getToken: () => Promise<string | null>,
+  collection: string,
+  limit?: number,
+  cursor?: string
+) {
+  const params = new URLSearchParams({ collection })
+  if (limit) params.set("limit", String(limit))
+  if (cursor) params.set("cursor", cursor)
+  return apiFetch<AdminListRecordsResponse>(
+    `/admin/records?${params}`,
+    getToken
+  )
+}
