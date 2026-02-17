@@ -384,7 +384,7 @@ async fn handle_lexicon_schema_event(
 
     // Check if this NSID is one we're tracking and the DID matches the authority.
     let tracked: Option<(Option<String>,)> = sqlx::query_as(
-        "SELECT target_collection FROM network_lexicons WHERE nsid = $1 AND authority_did = $2",
+        "SELECT target_collection FROM lexicons WHERE id = $1 AND source = 'network' AND authority_did = $2",
     )
     .bind(nsid)
     .bind(did)
@@ -419,14 +419,15 @@ async fn handle_lexicon_schema_event(
 
             let is_record = parsed.lexicon_type == crate::lexicon::LexiconType::Record;
 
-            // Upsert into lexicons table.
+            // Upsert into lexicons table with last_fetched_at.
             if let Err(e) = sqlx::query(
                 r#"
-                INSERT INTO lexicons (id, lexicon_json, backfill, target_collection)
-                VALUES ($1, $2, false, $3)
+                INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at)
+                VALUES ($1, $2, false, $3, 'network', $4, NOW())
                 ON CONFLICT (id) DO UPDATE SET
                     lexicon_json = EXCLUDED.lexicon_json,
                     target_collection = EXCLUDED.target_collection,
+                    last_fetched_at = NOW(),
                     revision = lexicons.revision + 1,
                     updated_at = NOW()
                 "#,
@@ -434,19 +435,13 @@ async fn handle_lexicon_schema_event(
             .bind(nsid)
             .bind(rec)
             .bind(&target_collection)
+            .bind(did)
             .execute(db)
             .await
             {
                 tracing::warn!(nsid, "failed to upsert lexicon from event: {e}");
                 return;
             }
-
-            // Update last_fetched_at.
-            let _ =
-                sqlx::query("UPDATE network_lexicons SET last_fetched_at = NOW() WHERE nsid = $1")
-                    .bind(nsid)
-                    .execute(db)
-                    .await;
 
             lexicons.upsert(parsed).await;
             tracing::info!(nsid, "updated network lexicon from tap event");

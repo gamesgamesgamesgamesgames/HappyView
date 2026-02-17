@@ -1,3 +1,5 @@
+"use no memo";
+
 import { flexRender, type Table as TanstackTable } from "@tanstack/react-table";
 import type * as React from "react";
 

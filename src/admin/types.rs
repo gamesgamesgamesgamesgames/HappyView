@@ -13,6 +13,9 @@ pub(super) struct LexiconSummary {
     pub(super) backfill: bool,
     pub(super) action: Option<String>,
     pub(super) target_collection: Option<String>,
+    pub(super) source: String,
+    pub(super) authority_did: Option<String>,
+    pub(super) last_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) updated_at: chrono::DateTime<chrono::Utc>,
 }

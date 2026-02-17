@@ -43,32 +43,17 @@ pub(super) async fn add(
     )
     .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
 
-    // Insert into network_lexicons table.
-    sqlx::query(
-        r#"
-        INSERT INTO network_lexicons (nsid, authority_did, target_collection, last_fetched_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (nsid) DO UPDATE SET
-            authority_did = EXCLUDED.authority_did,
-            target_collection = EXCLUDED.target_collection,
-            last_fetched_at = NOW()
-        "#,
-    )
-    .bind(nsid)
-    .bind(&authority_did)
-    .bind(&body.target_collection)
-    .execute(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to insert network lexicon: {e}")))?;
-
-    // Upsert into lexicons table.
+    // Upsert into lexicons table with network source.
     let row: (i32,) = sqlx::query_as(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection)
-        VALUES ($1, $2, false, $3)
+        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at)
+        VALUES ($1, $2, false, $3, 'network', $4, NOW())
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             target_collection = EXCLUDED.target_collection,
+            source = 'network',
+            authority_did = EXCLUDED.authority_did,
+            last_fetched_at = NOW(),
             revision = lexicons.revision + 1,
             updated_at = NOW()
         RETURNING revision
@@ -77,9 +62,10 @@ pub(super) async fn add(
     .bind(nsid)
     .bind(&lexicon_json)
     .bind(&body.target_collection)
+    .bind(&authority_did)
     .fetch_one(&state.db)
     .await
-    .map_err(|e| AppError::Internal(format!("failed to upsert lexicon: {e}")))?;
+    .map_err(|e| AppError::Internal(format!("failed to upsert network lexicon: {e}")))?;
 
     let revision = row.0;
 
@@ -114,9 +100,9 @@ pub(super) async fn list(
     _admin: AdminAuth,
 ) -> Result<Json<Vec<NetworkLexiconSummary>>, AppError> {
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)> =
+    let rows: Vec<(String, Option<String>, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
-            "SELECT nsid, authority_did, target_collection, last_fetched_at, created_at FROM network_lexicons ORDER BY nsid",
+            "SELECT id, authority_did, target_collection, last_fetched_at, created_at FROM lexicons WHERE source = 'network' ORDER BY id",
         )
         .fetch_all(&state.db)
         .await
@@ -128,7 +114,7 @@ pub(super) async fn list(
             |(nsid, authority_did, target_collection, last_fetched_at, created_at)| {
                 NetworkLexiconSummary {
                     nsid,
-                    authority_did,
+                    authority_did: authority_did.unwrap_or_default(),
                     target_collection,
                     last_fetched_at,
                     created_at,
@@ -146,7 +132,7 @@ pub(super) async fn remove(
     _admin: AdminAuth,
     Path(nsid): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    let result = sqlx::query("DELETE FROM network_lexicons WHERE nsid = $1")
+    let result = sqlx::query("DELETE FROM lexicons WHERE id = $1 AND source = 'network'")
         .bind(&nsid)
         .execute(&state.db)
         .await
@@ -157,12 +143,6 @@ pub(super) async fn remove(
             "network lexicon '{nsid}' not found"
         )));
     }
-
-    // Also remove from lexicons table and registry.
-    let _ = sqlx::query("DELETE FROM lexicons WHERE id = $1")
-        .bind(&nsid)
-        .execute(&state.db)
-        .await;
 
     state.lexicons.remove(&nsid).await;
     notify_collections(&state).await;

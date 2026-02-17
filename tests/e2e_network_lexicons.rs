@@ -41,35 +41,22 @@ fn admin_delete(uri: &str, token: &str) -> Request<Body> {
 
 /// Set up mocks for NSID authority resolution:
 /// - DNS TXT is not mockable in e2e, so we test at the API level by mocking
-///   the PLC directory and PDS responses and seeding the network_lexicons table directly.
+///   the PLC directory and PDS responses and seeding the lexicons table directly.
 async fn seed_network_lexicon(app: &TestApp, nsid: &str, authority_did: &str) {
-    sqlx::query(
-        r#"
-        INSERT INTO network_lexicons (nsid, authority_did, last_fetched_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (nsid) DO NOTHING
-        "#,
-    )
-    .bind(nsid)
-    .bind(authority_did)
-    .execute(&app.state.db)
-    .await
-    .expect("failed to seed network lexicon");
-
-    // Also seed the lexicons table so it's consistent.
     let lexicon_json = fixtures::game_record_lexicon();
     sqlx::query(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill)
-        VALUES ($1, $2, false)
+        INSERT INTO lexicons (id, lexicon_json, backfill, source, authority_did, last_fetched_at)
+        VALUES ($1, $2, false, 'network', $3, NOW())
         ON CONFLICT (id) DO NOTHING
         "#,
     )
     .bind(nsid)
     .bind(&lexicon_json)
+    .bind(authority_did)
     .execute(&app.state.db)
     .await
-    .expect("failed to seed lexicon");
+    .expect("failed to seed network lexicon");
 }
 
 // ---------------------------------------------------------------------------
@@ -136,20 +123,13 @@ async fn network_lexicon_delete_removes_tracking_and_lexicon() {
 
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
-    // Verify network_lexicons table is empty.
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM network_lexicons WHERE nsid = $1")
-        .bind(nsid)
-        .fetch_one(&app.state.db)
-        .await
-        .unwrap();
-    assert_eq!(count.0, 0);
-
-    // Verify lexicons table is also cleaned up.
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM lexicons WHERE id = $1")
-        .bind(nsid)
-        .fetch_one(&app.state.db)
-        .await
-        .unwrap();
+    // Verify lexicon is removed.
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM lexicons WHERE id = $1 AND source = 'network'")
+            .bind(nsid)
+            .fetch_one(&app.state.db)
+            .await
+            .unwrap();
     assert_eq!(count.0, 0);
 }
 

@@ -38,11 +38,12 @@ async fn main() {
 
     // Re-fetch all network lexicons from their respective PDSes.
     let http = reqwest::Client::new();
-    let network_rows: Vec<(String, String, Option<String>)> =
-        sqlx::query_as("SELECT nsid, authority_did, target_collection FROM network_lexicons")
-            .fetch_all(&db)
-            .await
-            .unwrap_or_default();
+    let network_rows: Vec<(String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, authority_did, target_collection FROM lexicons WHERE source = 'network'",
+    )
+    .fetch_all(&db)
+    .await
+    .unwrap_or_default();
 
     for (nsid, _authority_did, target_collection) in &network_rows {
         match resolve_nsid_authority(&http, &config.plc_url, nsid).await {
@@ -56,35 +57,24 @@ async fn main() {
                             ProcedureAction::Upsert,
                         ) {
                             Ok(parsed) => {
-                                // Upsert into lexicons table.
                                 if let Err(e) = sqlx::query(
                                     r#"
-                                    INSERT INTO lexicons (id, lexicon_json, backfill, target_collection)
-                                    VALUES ($1, $2, false, $3)
-                                    ON CONFLICT (id) DO UPDATE SET
-                                        lexicon_json = EXCLUDED.lexicon_json,
-                                        target_collection = EXCLUDED.target_collection,
-                                        revision = lexicons.revision + 1,
+                                    UPDATE lexicons
+                                    SET lexicon_json = $2,
+                                        last_fetched_at = NOW(),
+                                        revision = revision + 1,
                                         updated_at = NOW()
+                                    WHERE id = $1 AND source = 'network'
                                     "#,
                                 )
                                 .bind(nsid)
                                 .bind(&lexicon_json)
-                                .bind(target_collection)
                                 .execute(&db)
                                 .await
                                 {
-                                    warn!(nsid, "failed to upsert network lexicon into DB: {e}");
+                                    warn!(nsid, "failed to update network lexicon in DB: {e}");
                                     continue;
                                 }
-
-                                // Update last_fetched_at.
-                                let _ = sqlx::query(
-                                    "UPDATE network_lexicons SET last_fetched_at = NOW() WHERE nsid = $1",
-                                )
-                                .bind(nsid)
-                                .execute(&db)
-                                .await;
 
                                 lexicons.upsert(parsed).await;
                                 info!(nsid, "refreshed network lexicon");

@@ -3,7 +3,6 @@
 import {
   IconDashboard,
   IconFileDescription,
-  IconWorld,
   IconDatabase,
   IconTable,
   IconUsers,
@@ -28,7 +27,6 @@ import {
 const navItems = [
   { title: "Dashboard", url: "/", icon: IconDashboard },
   { title: "Lexicons", url: "/lexicons", icon: IconFileDescription },
-  { title: "Network Lexicons", url: "/network-lexicons", icon: IconWorld },
   { title: "Backfill", url: "/backfill", icon: IconDatabase },
   { title: "Records", url: "/records", icon: IconTable },
   { title: "Admins", url: "/admins", icon: IconUsers },
