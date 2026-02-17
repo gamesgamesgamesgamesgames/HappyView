@@ -31,16 +31,12 @@ export function DataTableViewOptions<TData>({
   disabled,
   ...props
 }: DataTableViewOptionsProps<TData>) {
-  const columns = React.useMemo(
-    () =>
-      table
-        .getAllColumns()
-        .filter(
-          (column) =>
-            typeof column.accessorFn !== "undefined" && column.getCanHide(),
-        ),
-    [table],
-  );
+  const columns = table
+    .getAllColumns()
+    .filter(
+      (column) =>
+        typeof column.accessorFn !== "undefined" && column.getCanHide(),
+    );
 
   return (
     <Popover>
