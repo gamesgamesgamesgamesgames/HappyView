@@ -1,12 +1,20 @@
 # Quickstart
 
-## Prerequisites
+## Deploy on Railway
+
+The fastest way to get HappyView running is with Railway. This template deploys HappyView, AIP, Tap, and Postgres with a single click:
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/I1jvZl?referralCode=0QOgj_)
+
+## Local development
+
+### Prerequisites
 
 - Rust (stable)
 - PostgreSQL 17+
 - A running [AIP](https://github.com/graze-social/aip) instance
 
-## 1. Clone and configure
+### 1. Clone and configure
 
 ```sh
 git clone https://github.com/graze-social/happyview.git
@@ -23,7 +31,7 @@ AIP_URL=http://localhost:8080
 
 See [Configuration](configuration.md) for all available variables.
 
-## 2. Start Postgres and run migrations
+### 2. Start Postgres and run migrations
 
 ```sh
 docker compose up -d postgres
@@ -32,7 +40,7 @@ cargo run
 
 Migrations run automatically on startup.
 
-## 3. Upload a lexicon
+### 3. Upload a lexicon
 
 The first authenticated request to an admin endpoint auto-creates you as the initial admin. Authenticate with an AIP-issued Bearer token:
 
@@ -63,7 +71,7 @@ curl -X POST http://localhost:3000/admin/lexicons \
 
 HappyView now subscribes to `games.gamesgamesgamesgames.game` on Jetstream and starts indexing records.
 
-## 4. Query records
+### 4. Query records
 
 ```sh
 curl http://localhost:3000/xrpc/games.gamesgamesgamesgames.listGames?limit=10
