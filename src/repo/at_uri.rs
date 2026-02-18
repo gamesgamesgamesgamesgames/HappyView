@@ -1,6 +1,7 @@
 use crate::error::AppError;
 
 /// Extract the DID from an AT URI (at://did/collection/rkey).
+#[allow(dead_code)]
 pub(crate) fn parse_did_from_at_uri(uri: &str) -> Result<String, AppError> {
     let stripped = uri
         .strip_prefix("at://")

@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 
 /// Walk `media[]` and add a `url` field to each blob so the frontend can
 /// display images directly.
+#[allow(dead_code)]
 pub(crate) fn enrich_media_blobs(record: &mut Value, pds: &str, did: &str) {
     let media = match record.get_mut("media").and_then(|m| m.as_array_mut()) {
         Some(arr) => arr,
