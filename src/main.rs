@@ -55,6 +55,7 @@ async fn main() {
                             1,
                             target_collection.clone(),
                             ProcedureAction::Upsert,
+                            None,
                         ) {
                             Ok(parsed) => {
                                 if let Err(e) = sqlx::query(

@@ -54,10 +54,6 @@ export function setDpopNonce(nonce: string): void {
   cachedNonce = nonce
 }
 
-export function getDpopNonce(): string | null {
-  return cachedNonce
-}
-
 export async function createDpopProof(
   method: string,
   url: string,

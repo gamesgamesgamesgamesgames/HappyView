@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { BundledLanguage } from "shiki/bundle/web";
-import type React from "react";
+import { codeToHast } from "shiki/bundle/web";
 import { cn } from "@/lib/utils";
+import { ComponentProps, type ReactNode, useEffect, useState } from "react";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 
 async function highlight(code: string, lang: BundledLanguage) {
-  const { codeToHast } = await import("shiki/bundle/web");
-  const { toJsxRuntime } = await import("hast-util-to-jsx-runtime");
-  const { Fragment, jsx, jsxs } = await import("react/jsx-runtime");
-
   const hast = await codeToHast(code, {
     lang,
     themes: {
@@ -24,9 +22,9 @@ async function highlight(code: string, lang: BundledLanguage) {
     jsx,
     jsxs,
     components: {
-      pre: ({ style, ...props }: React.ComponentProps<"pre">) => (
+      pre: ({ className, style, ...props }: ComponentProps<"pre">) => (
         <pre
-          className="p-4 text-xs"
+          className={cn(className, "p-4 text-xs")}
           style={{
             ...style,
             backgroundColor: "transparent",
@@ -34,37 +32,33 @@ async function highlight(code: string, lang: BundledLanguage) {
           {...props}
         />
       ),
-      code: (props: React.ComponentProps<"code">) => (
+      code: (props: ComponentProps<"code">) => (
         <code className="whitespace-pre" {...props} />
       ),
     },
-  }) as React.JSX.Element;
+  }) as ReactNode;
 }
 
 interface CodeBlockProps {
   code: string;
-  lang?: BundledLanguage;
+  lang?: string;
   className?: string;
 }
 
 export function CodeBlock({ code, lang = "json", className }: CodeBlockProps) {
-  const [nodes, setNodes] = useState<React.JSX.Element | null>(null);
+  const [nodes, setNodes] = useState<ReactNode | null>(null);
 
   useEffect(() => {
-    void highlight(code, lang).then(setNodes);
+    void highlight(code, lang as BundledLanguage)
+      .then(setNodes)
+      .catch(() => {
+        // Unsupported language — leave plain text fallback
+      });
   }, [code, lang]);
 
   return (
-    <div
-      className={cn(
-        "bg-muted min-w-0 max-h-[70vh] overflow-auto rounded-md",
-        className,
-      )}
-    >
+    <div className={cn("bg-muted min-w-0 overflow-auto", className)}>
       <div className="w-fit min-w-full">
-        <div className="bg-muted-foreground/10 sticky top-0 px-4 py-2 text-xs font-medium text-muted-foreground">
-          {lang}
-        </div>
         {nodes ?? (
           <pre className="p-4 text-xs">
             <code className="whitespace-pre">{code}</code>

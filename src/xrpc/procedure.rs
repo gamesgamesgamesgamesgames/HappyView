@@ -15,6 +15,11 @@ pub(super) async fn handle_procedure(
     input: &Value,
     lexicon: &crate::lexicon::ParsedLexicon,
 ) -> Result<Response, AppError> {
+    if let Some(ref script) = lexicon.script {
+        return crate::lua::execute_procedure_script(state, method, claims, input, lexicon, script)
+            .await;
+    }
+
     let collection = lexicon.target_collection.as_deref().ok_or_else(|| {
         AppError::BadRequest(format!("{method} has no target_collection configured"))
     })?;

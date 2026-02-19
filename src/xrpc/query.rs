@@ -1,12 +1,10 @@
 use axum::Json;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::AppState;
 use crate::error::AppError;
-use crate::profile;
-use crate::repo;
 
 pub(super) async fn handle_query(
     state: &AppState,
@@ -14,6 +12,10 @@ pub(super) async fn handle_query(
     params: &HashMap<String, String>,
     lexicon: &crate::lexicon::ParsedLexicon,
 ) -> Result<Response, AppError> {
+    if let Some(ref script) = lexicon.script {
+        return crate::lua::execute_query_script(state, method, params, lexicon, script).await;
+    }
+
     // Single-record query: has a `uri` parameter
     if let Some(uri) = params.get("uri") {
         return handle_get_record(state, uri).await;
@@ -64,23 +66,9 @@ pub(super) async fn handle_query(
 
     let has_next_page = rows.len() as i64 == limit;
 
-    // Resolve PDS endpoints for blob URL enrichment.
-    let unique_dids: HashSet<&str> = rows.iter().map(|(_, did, _)| did.as_str()).collect();
-    let mut pds_map: HashMap<String, String> = HashMap::new();
-    for did in unique_dids {
-        if let Ok(pds) =
-            profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, did).await
-        {
-            pds_map.insert(did.to_string(), pds);
-        }
-    }
-
     let records: Vec<Value> = rows
         .into_iter()
-        .map(|(uri, did, mut record)| {
-            if let Some(pds) = pds_map.get(&did) {
-                repo::enrich_media_blobs(&mut record, pds, &did);
-            }
+        .map(|(uri, _did, mut record)| {
             record
                 .as_object_mut()
                 .map(|obj| obj.insert("uri".to_string(), json!(uri)));
@@ -101,8 +89,6 @@ pub(super) async fn handle_query(
 }
 
 pub(super) async fn handle_get_record(state: &AppState, uri: &str) -> Result<Response, AppError> {
-    let did = repo::parse_did_from_at_uri(uri)?;
-
     let row: Option<(Value,)> = sqlx::query_as("SELECT record FROM records WHERE uri = $1")
         .bind(uri)
         .fetch_optional(&state.db)
@@ -110,9 +96,6 @@ pub(super) async fn handle_get_record(state: &AppState, uri: &str) -> Result<Res
         .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
 
     let (mut record,) = row.ok_or_else(|| AppError::NotFound("record not found".into()))?;
-
-    let pds = profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, &did).await?;
-    repo::enrich_media_blobs(&mut record, &pds, &did);
 
     record
         .as_object_mut()

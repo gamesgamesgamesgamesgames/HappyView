@@ -90,6 +90,7 @@ export interface LexiconSummary {
   backfill: boolean
   action: string | null
   target_collection: string | null
+  has_script: boolean
   source: string
   authority_did: string | null
   last_fetched_at: string | null
@@ -99,6 +100,7 @@ export interface LexiconSummary {
 
 export interface LexiconDetail extends LexiconSummary {
   lexicon_json: Record<string, unknown>
+  script: string | null
 }
 
 export function getLexicons(getToken: () => Promise<string | null>) {
@@ -119,6 +121,7 @@ export function uploadLexicon(
     backfill?: boolean
     target_collection?: string
     action?: string
+    script?: string
   }
 ) {
   return apiFetch<{ id: string; revision: number }>("/admin/lexicons", getToken, {

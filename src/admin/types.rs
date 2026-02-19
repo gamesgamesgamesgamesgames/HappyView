@@ -13,11 +13,15 @@ pub(super) struct LexiconSummary {
     pub(super) backfill: bool,
     pub(super) action: Option<String>,
     pub(super) target_collection: Option<String>,
+    pub(super) has_script: bool,
     pub(super) source: String,
     pub(super) authority_did: Option<String>,
     pub(super) last_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+    /// For record-type lexicons: the `properties` object from `defs.main.record`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) record_schema: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -27,6 +31,7 @@ pub(super) struct UploadLexiconBody {
     pub(super) backfill: bool,
     pub(super) target_collection: Option<String>,
     pub(super) action: Option<String>,
+    pub(super) script: Option<String>,
 }
 
 fn default_backfill() -> bool {

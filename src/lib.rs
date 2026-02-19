@@ -4,6 +4,7 @@ pub mod auth;
 pub mod config;
 pub mod error;
 pub mod lexicon;
+pub mod lua;
 pub mod profile;
 pub mod repo;
 pub mod resolve;

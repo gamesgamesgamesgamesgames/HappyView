@@ -22,6 +22,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 hickory-resolver = "0.25"
+mlua = { version = "0.11", features = ["lua54", "async", "serialize", "vendored", "send"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 

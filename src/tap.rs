@@ -409,6 +409,7 @@ async fn handle_lexicon_schema_event(
                 1,
                 target_collection.clone(),
                 ProcedureAction::Upsert,
+                None,
             ) {
                 Ok(p) => p,
                 Err(e) => {
