@@ -12,7 +12,8 @@ import {
 } from "@/lib/lua-completions";
 import { lexiconJsonSchema, LEXICON_SCHEMA_URI } from "@/lib/lexicon-schema";
 import { resolveCssColor } from "@/lib/css-utils";
-import { parseLuaIdentifiers, parseRecordVariables } from "@/lib/lua-parser";
+import { parseLuaIdentifiers, parseRecordVariables, parseDbQueryVariables, parseDbQueryRecordIterators } from "@/lib/lua-parser";
+import { HOVER_DOCS } from "@/lib/lua-hover";
 
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -172,6 +173,135 @@ export function MonacoEditor({
               }),
             );
 
+            // Provider 3: Hover documentation
+            disposablesRef.current.push(
+              monaco.languages.registerHoverProvider("lua", {
+                provideHover(
+                  model: editor.ITextModel,
+                  position: Position,
+                ) {
+                  const word = model.getWordAtPosition(position);
+                  if (!word) return null;
+
+                  const lineContent = model.getLineContent(position.lineNumber);
+                  const charBefore = lineContent[word.startColumn - 2];
+                  let key = word.word;
+
+                  if (charBefore === "." || charBefore === ":") {
+                    // Find the module/object prefix before the dot/colon
+                    const textBefore = lineContent.substring(0, word.startColumn - 2);
+                    const prefixMatch = textBefore.match(/(\w+)$/);
+                    if (prefixMatch) {
+                      const sep = charBefore === ":" ? ":" : ".";
+                      key = `${prefixMatch[1]}${sep}${word.word}`;
+                    }
+                  }
+
+                  const entry = HOVER_DOCS.get(key);
+                  if (!entry) return null;
+
+                  const range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn,
+                  };
+
+                  return {
+                    range,
+                    contents: [
+                      { value: `\`\`\`lua\n${entry.signature}\n\`\`\`` },
+                      { value: entry.description },
+                    ],
+                  };
+                },
+              }),
+            );
+
+            // Provider 4: Signature help
+            disposablesRef.current.push(
+              monaco.languages.registerSignatureHelpProvider("lua", {
+                signatureHelpTriggerCharacters: ["(", ","],
+                provideSignatureHelp(
+                  model: editor.ITextModel,
+                  position: Position,
+                ) {
+                  const lineContent = model.getLineContent(position.lineNumber);
+                  const textBeforeCursor = lineContent.substring(0, position.column - 1);
+
+                  // Walk backward to find the opening ( and the function name
+                  let depth = 0;
+                  let parenPos = -1;
+                  let activeParam = 0;
+                  for (let i = textBeforeCursor.length - 1; i >= 0; i--) {
+                    const ch = textBeforeCursor[i];
+                    if (ch === ")") depth++;
+                    else if (ch === "(") {
+                      if (depth === 0) {
+                        parenPos = i;
+                        break;
+                      }
+                      depth--;
+                    } else if (ch === "," && depth === 0) {
+                      activeParam++;
+                    }
+                  }
+
+                  if (parenPos < 0) return null;
+
+                  // Extract the function name before the (
+                  const textBeforeParen = textBeforeCursor.substring(0, parenPos);
+                  const fnMatch = textBeforeParen.match(/([\w.]+[:.]\w+|\w+)\s*$/);
+                  if (!fnMatch) return null;
+
+                  const fnName = fnMatch[1];
+                  // Normalize colon to look up both Record:save and Record.save
+                  const entry = HOVER_DOCS.get(fnName) ?? HOVER_DOCS.get(fnName.replace(":", "."));
+                  if (!entry) return null;
+
+                  // Parse parameters from the signature: extract content inside parens
+                  const sigParenMatch = entry.signature.match(/\(([^)]*)\)/);
+                  if (!sigParenMatch) return null;
+
+                  const paramString = sigParenMatch[1].trim();
+                  if (!paramString) return null;
+
+                  // Split parameters on commas, respecting brackets
+                  const params: string[] = [];
+                  let current = "";
+                  let bracketDepth = 0;
+                  for (const ch of paramString) {
+                    if (ch === "[") bracketDepth++;
+                    else if (ch === "]") bracketDepth--;
+                    else if (ch === "," && bracketDepth === 0) {
+                      params.push(current.trim());
+                      current = "";
+                      continue;
+                    }
+                    current += ch;
+                  }
+                  if (current.trim()) params.push(current.trim());
+
+                  return {
+                    value: {
+                      signatures: [
+                        {
+                          label: entry.signature,
+                          documentation: entry.description,
+                          parameters: params.map((p) => ({
+                            label: p.replace(/^\[?\s*/, "").replace(/\s*\]?\s*$/, ""),
+                          })),
+                        },
+                      ],
+                      activeSignature: 0,
+                      activeParameter: Math.min(activeParam, params.length - 1),
+                    },
+                    dispose() {},
+                  };
+                },
+              }),
+            );
+
             // Provider 2: HappyView-specific completions (Record, db, collections)
             if (!completions) return;
             disposablesRef.current.push(
@@ -187,10 +317,64 @@ export function MonacoEditor({
                     position.column - 1,
                   );
 
+                  // Inside db.query({ ... }) — suggest option keys
+                  if (/db\.query\(\s*\{[^}]*$/.test(textBeforeCursor)) {
+                    const optionEntries =
+                      completionsRef.current?.["db.query"] ?? [];
+                    if (optionEntries.length) {
+                      // Check for collection = " inside db.query — offer NSID completions
+                      const collectionQuoteMatch = textBeforeCursor.match(
+                        /collection\s*=\s*"([^"]*)$/,
+                      );
+                      if (collectionQuoteMatch) {
+                        const cols = collectionsRef.current;
+                        if (!cols?.length) return { suggestions: [] };
+                        const quoteCol = textBeforeCursor.lastIndexOf('"');
+                        const range = {
+                          startLineNumber: position.lineNumber,
+                          endLineNumber: position.lineNumber,
+                          startColumn: quoteCol + 2,
+                          endColumn: position.column,
+                        };
+                        return {
+                          suggestions: cols.map((col) => ({
+                            label: col,
+                            kind: monaco.languages.CompletionItemKind.Value,
+                            insertText: col,
+                            range,
+                          })),
+                        };
+                      }
+
+                      const word = model.getWordUntilPosition(position);
+                      const range = {
+                        startLineNumber: position.lineNumber,
+                        endLineNumber: position.lineNumber,
+                        startColumn: word.startColumn,
+                        endColumn: word.endColumn,
+                      };
+                      return {
+                        suggestions: optionEntries.map((entry) => ({
+                          label: entry.label,
+                          kind: monaco.languages.CompletionItemKind.Property,
+                          detail: entry.detail,
+                          documentation: entry.description,
+                          insertText: entry.label,
+                          range,
+                        })),
+                      };
+                    }
+                  }
+
+                  // Collection NSID completions for collection = " (outside db.query) and db.count
+                  const collectionAssignMatch = textBeforeCursor.match(
+                    /(?:db\.count\(\s*"([^"]*)$|collection\s*=\s*"([^"]*)$)/,
+                  );
+
                   // Record("...") collection completions
                   const recordMatch =
                     textBeforeCursor.match(/Record\(\s*"([^"]*)$/);
-                  if (recordMatch) {
+                  if (recordMatch || collectionAssignMatch) {
                     const cols = collectionsRef.current;
                     if (!cols?.length) return { suggestions: [] };
                     const quoteCol = textBeforeCursor.lastIndexOf('"');
@@ -223,24 +407,53 @@ export function MonacoEditor({
                   let entries = completionsRef.current?.[prefix];
 
                   if (!entries && prefix !== "Record" && prefix !== "db") {
-                    // Variable access — check if it's a Record variable
                     const fullSource = model.getValue();
-                    const varMap = parseRecordVariables(fullSource);
-                    const collection = varMap[prefix];
 
-                    if (collection) {
-                      // Record instance methods/fields
-                      const instanceEntries =
-                        completionsRef.current?.["Record"]?.filter(
-                          (e) =>
-                            e.detail === "method" || e.detail?.endsWith("?"),
-                        ) ?? [];
+                    // Check if it's a db.query() result variable
+                    const dbQueryVars = parseDbQueryVariables(fullSource);
+                    if (prefix in dbQueryVars) {
+                      entries =
+                        completionsRef.current?.["db.query_result"] ?? [];
+                    }
 
-                      // Collection-specific record properties (merged into completions by parent)
-                      const schemaEntries =
-                        completionsRef.current?.[collection] ?? [];
+                    // Check if it's an iterator over db.query().records
+                    if (!entries) {
+                      const iterMap = parseDbQueryRecordIterators(
+                        fullSource,
+                        dbQueryVars,
+                      );
+                      const iterCollection = iterMap[prefix];
+                      if (iterCollection) {
+                        const schemaEntries =
+                          completionsRef.current?.[iterCollection] ?? [];
+                        const uriEntry = {
+                          label: "uri",
+                          detail: "string",
+                          description: "AT URI of the record",
+                        };
+                        entries = [uriEntry, ...schemaEntries];
+                      }
+                    }
 
-                      entries = [...instanceEntries, ...schemaEntries];
+                    if (!entries) {
+                      // Variable access — check if it's a Record variable
+                      const varMap = parseRecordVariables(fullSource);
+                      const collection = varMap[prefix];
+
+                      if (collection) {
+                        // Record instance methods/fields
+                        const instanceEntries =
+                          completionsRef.current?.["Record"]?.filter(
+                            (e) =>
+                              e.detail === "method" || e.detail?.endsWith("?"),
+                          ) ?? [];
+
+                        // Collection-specific record properties (merged into completions by parent)
+                        const schemaEntries =
+                          completionsRef.current?.[collection] ?? [];
+
+                        entries = [...instanceEntries, ...schemaEntries];
+                      }
                     }
                   }
 
@@ -274,7 +487,14 @@ export function MonacoEditor({
                           : monaco.languages.CompletionItemKind.Field,
                       detail: entry.detail,
                       documentation: entry.description,
-                      insertText: entry.label,
+                      insertText: entry.insertText ?? entry.label,
+                      ...(entry.insertText
+                        ? {
+                            insertTextRules:
+                              monaco.languages.CompletionItemInsertTextRule
+                                .InsertAsSnippet,
+                          }
+                        : {}),
                       range,
                     })),
                   };

@@ -2,6 +2,7 @@ export interface LuaCompletionEntry {
   label: string;
   detail?: string;
   description?: string;
+  insertText?: string;
 }
 
 export interface LuaSnippetEntry {
@@ -12,14 +13,17 @@ export interface LuaSnippetEntry {
 }
 
 export const LUA_KEYWORDS = [
-  "and", "break", "do", "else", "end", "false",
-  "in", "nil", "not", "or", "then", "true", "until",
+  "and", "break", "do", "else", "elseif", "end", "false",
+  "for", "function", "goto", "if", "in", "local", "nil",
+  "not", "or", "repeat", "return", "then", "true", "until", "while",
 ];
 
 export const LUA_BUILTINS = [
   "print", "tostring", "tonumber", "type", "pairs", "ipairs", "next",
   "select", "unpack", "error", "pcall", "xpcall", "assert",
   "setmetatable", "getmetatable", "rawget", "rawset", "rawequal",
+  // Standard library modules
+  "string", "table", "math", "coroutine", "utf8",
   // HappyView sandbox globals
   "input", "params", "caller_did", "collection", "method",
   "now", "log", "TID",
@@ -114,9 +118,34 @@ const STATIC_COMPLETIONS: LuaCompletions = {
     { label: "_rkey", detail: "string?", description: "Record key (set via set_rkey or generate_rkey)" },
   ],
   db: [
-    { label: "query", detail: "function", description: "Execute a SQL query and return rows" },
-    { label: "get", detail: "function", description: "Execute a SQL query and return a single row" },
-    { label: "count", detail: "function", description: "Execute a count query" },
+    {
+      label: "query",
+      detail: "function",
+      description: "Query records — db.query({ collection, did?, limit?, offset? }) → { records, cursor? }",
+      insertText: "query({\n\tcollection = ${1:collection},\n})",
+    },
+    {
+      label: "get",
+      detail: "function",
+      description: "Get a single record by AT URI — db.get(uri) → record or nil",
+      insertText: "get(${1:uri})",
+    },
+    {
+      label: "count",
+      detail: "function",
+      description: "Count records — db.count(collection, did?) → integer",
+      insertText: "count(${1:collection})",
+    },
+  ],
+  "db.query": [
+    { label: "collection", detail: "string", description: "Collection NSID (required)" },
+    { label: "did", detail: "string?", description: "Filter records by DID" },
+    { label: "limit", detail: "integer?", description: "Max records to return (max 100, default 20)" },
+    { label: "offset", detail: "integer?", description: "Pagination offset (default 0)" },
+  ],
+  "db.query_result": [
+    { label: "records", detail: "table[]", description: "Array of record tables (each includes uri)" },
+    { label: "cursor", detail: "string?", description: "Pagination cursor (present when more results exist)" },
   ],
   // Lua standard library modules
   string: [
@@ -137,20 +166,58 @@ const STATIC_COMPLETIONS: LuaCompletions = {
   table: [
     { label: "concat", detail: "function", description: "Concatenate table elements — table.concat(list [, sep [, i [, j]]])" },
     { label: "insert", detail: "function", description: "Insert element — table.insert(list, [pos,] value)" },
+    { label: "move", detail: "function", description: "Move elements between tables — table.move(a1, f, e, t [, a2])" },
+    { label: "pack", detail: "function", description: "Pack arguments into table with n field — table.pack(···)" },
     { label: "remove", detail: "function", description: "Remove element — table.remove(list [, pos])" },
     { label: "sort", detail: "function", description: "Sort table in-place — table.sort(list [, comp])" },
     { label: "unpack", detail: "function", description: "Unpack table elements — table.unpack(list [, i [, j]])" },
   ],
   math: [
     { label: "abs", detail: "function", description: "Absolute value — math.abs(x)" },
+    { label: "acos", detail: "function", description: "Arc cosine — math.acos(x)" },
+    { label: "asin", detail: "function", description: "Arc sine — math.asin(x)" },
+    { label: "atan", detail: "function", description: "Arc tangent — math.atan(y [, x])" },
     { label: "ceil", detail: "function", description: "Round up — math.ceil(x)" },
+    { label: "cos", detail: "function", description: "Cosine — math.cos(x)" },
+    { label: "deg", detail: "function", description: "Radians to degrees — math.deg(x)" },
+    { label: "exp", detail: "function", description: "e^x — math.exp(x)" },
     { label: "floor", detail: "function", description: "Round down — math.floor(x)" },
+    { label: "fmod", detail: "function", description: "Remainder — math.fmod(x, y)" },
+    { label: "log", detail: "function", description: "Logarithm — math.log(x [, base])" },
     { label: "max", detail: "function", description: "Maximum value — math.max(x, ···)" },
+    { label: "maxinteger", detail: "number", description: "Maximum integer value" },
     { label: "min", detail: "function", description: "Minimum value — math.min(x, ···)" },
+    { label: "mininteger", detail: "number", description: "Minimum integer value" },
+    { label: "modf", detail: "function", description: "Integer and fractional parts — math.modf(x)" },
+    { label: "rad", detail: "function", description: "Degrees to radians — math.rad(x)" },
     { label: "random", detail: "function", description: "Generate random number — math.random([m [, n]])" },
+    { label: "randomseed", detail: "function", description: "Set random seed — math.randomseed([x [, y]])" },
+    { label: "sin", detail: "function", description: "Sine — math.sin(x)" },
     { label: "sqrt", detail: "function", description: "Square root — math.sqrt(x)" },
+    { label: "tan", detail: "function", description: "Tangent — math.tan(x)" },
+    { label: "tointeger", detail: "function", description: "Convert to integer or nil — math.tointeger(x)" },
+    { label: "type", detail: "function", description: "Number type (\"integer\", \"float\", or false) — math.type(x)" },
+    { label: "ult", detail: "function", description: "Unsigned integer comparison — math.ult(m, n)" },
     { label: "huge", detail: "number", description: "Infinity value" },
     { label: "pi", detail: "number", description: "Pi constant (3.14159...)" },
+  ],
+  coroutine: [
+    { label: "create", detail: "function", description: "Create a coroutine — coroutine.create(f)" },
+    { label: "resume", detail: "function", description: "Resume a coroutine — coroutine.resume(co [, val1, ···])" },
+    { label: "yield", detail: "function", description: "Suspend coroutine — coroutine.yield(···)" },
+    { label: "status", detail: "function", description: "Coroutine status — coroutine.status(co)" },
+    { label: "wrap", detail: "function", description: "Create iterator from coroutine — coroutine.wrap(f)" },
+    { label: "isyieldable", detail: "function", description: "Check if running coroutine can yield — coroutine.isyieldable()" },
+    { label: "running", detail: "function", description: "Returns running coroutine — coroutine.running()" },
+    { label: "close", detail: "function", description: "Close a coroutine — coroutine.close(co)" },
+  ],
+  utf8: [
+    { label: "char", detail: "function", description: "UTF-8 string from codepoints — utf8.char(···)" },
+    { label: "charpattern", detail: "string", description: "Pattern matching one UTF-8 character" },
+    { label: "codepoint", detail: "function", description: "Codepoints from string — utf8.codepoint(s [, i [, j [, lax]]])" },
+    { label: "codes", detail: "function", description: "Iterator over UTF-8 codepoints — utf8.codes(s [, lax])" },
+    { label: "len", detail: "function", description: "UTF-8 string length — utf8.len(s [, i [, j [, lax]]])" },
+    { label: "offset", detail: "function", description: "Byte offset of nth character — utf8.offset(s, n [, i])" },
   ],
 };
 
