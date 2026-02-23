@@ -1,5 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::PgPool;
 use tokio::sync::watch;
@@ -93,6 +93,76 @@ async fn tap_post(
         return Err(format!("tap returned {status}: {body}"));
     }
     Ok(())
+}
+
+async fn tap_get<T: serde::de::DeserializeOwned>(
+    http: &reqwest::Client,
+    tap_url: &str,
+    path: &str,
+    password: Option<&str>,
+) -> Result<T, String> {
+    let url = format!("{}{}", tap_url.trim_end_matches('/'), path);
+    let mut req = http.get(&url);
+    if let Some(pw) = password {
+        req = req.basic_auth("admin", Some(pw));
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("tap HTTP request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("tap returned {status}: {body}"));
+    }
+    resp.json::<T>()
+        .await
+        .map_err(|e| format!("failed to parse tap response: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Tap stats
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct TapStats {
+    pub repo_count: u64,
+    pub record_count: u64,
+    pub outbox_buffer: u64,
+}
+
+#[derive(Deserialize)]
+struct RepoCountResponse {
+    repo_count: u64,
+}
+
+#[derive(Deserialize)]
+struct RecordCountResponse {
+    record_count: u64,
+}
+
+#[derive(Deserialize)]
+struct OutboxBufferResponse {
+    outbox_buffer: u64,
+}
+
+/// Fetch aggregate stats from Tap's monitoring endpoints in parallel.
+pub async fn get_stats(
+    http: &reqwest::Client,
+    tap_url: &str,
+    tap_admin_password: Option<&str>,
+) -> Result<TapStats, String> {
+    let (repo, record, outbox) = tokio::try_join!(
+        tap_get::<RepoCountResponse>(http, tap_url, "/stats/repo-count", tap_admin_password),
+        tap_get::<RecordCountResponse>(http, tap_url, "/stats/record-count", tap_admin_password),
+        tap_get::<OutboxBufferResponse>(http, tap_url, "/stats/outbox-buffer", tap_admin_password),
+    )?;
+
+    Ok(TapStats {
+        repo_count: repo.repo_count,
+        record_count: record.record_count,
+        outbox_buffer: outbox.outbox_buffer,
+    })
 }
 
 /// Sync Tap's collection filters and signal collections with HappyView's

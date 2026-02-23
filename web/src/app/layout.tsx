@@ -1,35 +1,40 @@
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import { ThemeProvider } from "next-themes"
-import "./globals.css"
-import { ConfigProvider } from "@/lib/config-context"
-import { AuthProvider } from "@/lib/auth-context"
-import { TooltipProvider } from "@/components/ui/tooltip"
+import type { Metadata } from "next";
+import { Geist, Geist_Mono, Zen_Tokyo_Zoo } from "next/font/google";
+import { ThemeProvider } from "next-themes";
+import "./globals.css";
+import { ConfigProvider } from "@/lib/config-context";
+import { AuthProvider } from "@/lib/auth-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+const zenTokyoZoo = Zen_Tokyo_Zoo({
+  subsets: ["latin"],
+  weight: "400",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-})
+});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-})
+});
 
 export const metadata: Metadata = {
   title: "HappyView Admin",
   description: "Admin dashboard for HappyView AppView",
-}
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${zenTokyoZoo} antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ConfigProvider>
@@ -40,5 +45,5 @@ export default function RootLayout({
         </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }

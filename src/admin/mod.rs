@@ -5,6 +5,7 @@ mod lexicons;
 mod network_lexicons;
 mod records;
 mod stats;
+mod tap_stats;
 mod types;
 
 use axum::Router;
@@ -31,6 +32,7 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         )
         .route("/admins/{id}", delete(admins::delete_admin))
         .route("/records", get(records::list_records))
+        .route("/tap/stats", get(tap_stats::tap_stats))
         .route(
             "/network-lexicons",
             post(network_lexicons::add).get(network_lexicons::list),

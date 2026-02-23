@@ -1,16 +1,23 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/lib/auth-context"
+import { useAuth } from "@/lib/auth-context";
 import {
   createBackfillJob,
   getBackfillJobs,
+  getTapStats,
   type BackfillJob,
-} from "@/lib/api"
-import { SiteHeader } from "@/components/site-header"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+  type TapStatsResponse,
+} from "@/lib/api";
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -20,9 +27,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -30,49 +37,65 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-
-function statusVariant(status: string) {
-  switch (status) {
-    case "completed":
-      return "default" as const
-    case "running":
-      return "secondary" as const
-    case "failed":
-      return "destructive" as const
-    default:
-      return "outline" as const
-  }
-}
+} from "@/components/ui/table";
 
 export default function BackfillPage() {
-  const { getToken } = useAuth()
-  const [jobs, setJobs] = useState<BackfillJob[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const { getToken } = useAuth();
+  const [jobs, setJobs] = useState<BackfillJob[]>([]);
+  const [tapStats, setTapStats] = useState<TapStatsResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getBackfillJobs(getToken).then(setJobs).catch((e) => setError(e.message))
-  }, [getToken])
+    getBackfillJobs(getToken)
+      .then(setJobs)
+      .catch((e) => setError(e.message));
+    getTapStats(getToken)
+      .then(setTapStats)
+      .catch(() => setTapStats(null));
+  }, [getToken]);
 
   useEffect(() => {
-    load()
-  }, [load])
+    load();
+  }, [load]);
 
-  // Auto-refresh every 5 seconds when there are active jobs
+  // Auto-refresh every 5 seconds
   useEffect(() => {
-    const hasActive = jobs.some(
-      (j) => j.status === "pending" || j.status === "running"
-    )
-    if (!hasActive) return
-    const interval = setInterval(load, 5000)
-    return () => clearInterval(interval)
-  }, [jobs, load])
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   return (
     <>
       <SiteHeader title="Backfill" />
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         {error && <p className="text-destructive text-sm">{error}</p>}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Card>
+            <CardHeader className={"text-center sm:text-left"}>
+              <CardDescription>Tap Repos</CardDescription>
+              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
+                {tapStats ? tapStats.repo_count.toLocaleString() : "--"}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className={"text-center sm:text-left"}>
+              <CardDescription>Tap Records</CardDescription>
+              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
+                {tapStats ? tapStats.record_count.toLocaleString() : "--"}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className={"text-center sm:text-left"}>
+              <CardDescription>Outbox Buffer</CardDescription>
+              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
+                {tapStats ? tapStats.outbox_buffer.toLocaleString() : "--"}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Backfill Jobs</h2>
@@ -86,7 +109,6 @@ export default function BackfillPage() {
                 <TableHead>ID</TableHead>
                 <TableHead>Collection</TableHead>
                 <TableHead>DID</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Progress</TableHead>
                 <TableHead>Records</TableHead>
                 <TableHead>Started</TableHead>
@@ -96,7 +118,7 @@ export default function BackfillPage() {
               {jobs.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={6}
                     className="text-muted-foreground text-center"
                   >
                     No backfill jobs yet.
@@ -113,11 +135,6 @@ export default function BackfillPage() {
                   </TableCell>
                   <TableCell className="font-mono text-sm">
                     {job.did ?? "All"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariant(job.status)}>
-                      {job.status}
-                    </Badge>
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {job.processed_repos != null && job.total_repos != null
@@ -139,34 +156,34 @@ export default function BackfillPage() {
         </div>
       </div>
     </>
-  )
+  );
 }
 
 function CreateDialog({
   getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>
-  onSuccess: () => void
+  getToken: () => Promise<string | null>;
+  onSuccess: () => void;
 }) {
-  const [collection, setCollection] = useState("")
-  const [did, setDid] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
+  const [collection, setCollection] = useState("");
+  const [did, setDid] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   async function handleCreate() {
-    setError(null)
+    setError(null);
     try {
       await createBackfillJob(getToken, {
         collection: collection || undefined,
         did: did || undefined,
-      })
-      setCollection("")
-      setDid("")
-      setOpen(false)
-      onSuccess()
+      });
+      setCollection("");
+      setDid("");
+      setOpen(false);
+      onSuccess();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -212,5 +229,5 @@ function CreateDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import { useAuth } from "@/lib/auth-context"
-import { getStats, type StatsResponse } from "@/lib/api"
-import { SiteHeader } from "@/components/site-header"
+import { useAuth } from "@/lib/auth-context";
+import { getStats, type StatsResponse } from "@/lib/api";
+import { SiteHeader } from "@/components/site-header";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -18,37 +18,37 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 
 export default function DashboardPage() {
-  const { getToken } = useAuth()
-  const [stats, setStats] = useState<StatsResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { getToken } = useAuth();
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getStats(getToken).then(setStats).catch((e) => setError(e.message))
-  }, [getToken])
+    getStats(getToken)
+      .then(setStats)
+      .catch((e) => setError(e.message));
+  }, [getToken]);
 
   return (
     <>
       <SiteHeader title="Dashboard" />
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-        {error && (
-          <p className="text-destructive text-sm">{error}</p>
-        )}
-        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @3xl:grid-cols-3">
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Card>
-            <CardHeader>
+            <CardHeader className={"text-center sm:text-left"}>
               <CardDescription>Total Records</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums">
+              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
                 {stats ? stats.total_records.toLocaleString() : "--"}
               </CardTitle>
             </CardHeader>
           </Card>
           <Card>
-            <CardHeader>
+            <CardHeader className={"text-center sm:text-left"}>
               <CardDescription>Collections</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums">
+              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
                 {stats ? stats.collections.length : "--"}
               </CardTitle>
             </CardHeader>
@@ -81,5 +81,5 @@ export default function DashboardPage() {
         )}
       </div>
     </>
-  )
+  );
 }

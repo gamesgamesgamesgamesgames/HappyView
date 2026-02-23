@@ -171,6 +171,17 @@ export function deleteNetworkLexicon(
   )
 }
 
+// Tap Stats
+export interface TapStatsResponse {
+  repo_count: number
+  record_count: number
+  outbox_buffer: number
+}
+
+export function getTapStats(getToken: () => Promise<string | null>) {
+  return apiFetch<TapStatsResponse>("/admin/tap/stats", getToken)
+}
+
 // Backfill
 export interface BackfillJob {
   id: string

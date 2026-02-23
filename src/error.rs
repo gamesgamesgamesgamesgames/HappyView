@@ -7,6 +7,7 @@ pub enum AppError {
     Auth(String),
     /// Auth failure with a DPoP nonce that the client should retry with.
     AuthDpopNonce(String),
+    BadGateway(String),
     BadRequest(String),
     Forbidden(String),
     Internal(String),
@@ -19,6 +20,7 @@ impl std::fmt::Display for AppError {
         match self {
             AppError::Auth(msg) => write!(f, "auth error: {msg}"),
             AppError::AuthDpopNonce(nonce) => write!(f, "auth error: use_dpop_nonce ({nonce})"),
+            AppError::BadGateway(msg) => write!(f, "bad gateway: {msg}"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
             AppError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
@@ -48,7 +50,9 @@ impl IntoResponse for AppError {
             other => {
                 let (status, message) = match &other {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+                    AppError::BadGateway(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
                     AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+
                     AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
                     AppError::Internal(msg) => {
                         tracing::error!("{msg}");
