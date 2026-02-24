@@ -263,7 +263,7 @@ export default function RecordsPage() {
               <SelectContent>
                 {collections.map((col) => (
                   <SelectItem key={col.collection} value={col.collection}>
-                    {col.collection} ({col.count.toLocaleString()})
+                    {col.collection}
                   </SelectItem>
                 ))}
               </SelectContent>
