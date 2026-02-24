@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -30,9 +31,11 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Eye, Trash2 } from "lucide-react";
 
 export default function LexiconsPage() {
   const { getToken } = useAuth();
+  const router = useRouter();
   const [lexicons, setLexicons] = useState<LexiconSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,20 +185,30 @@ export default function LexiconsPage() {
       },
       {
         id: "actions",
-        header: () => <span className="sr-only">Actions</span>,
+        header: "",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" asChild>
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 text-muted-foreground"
+              asChild
+            >
               <Link href={`/lexicons/${encodeURIComponent(row.original.id)}`}>
-                View
+                <Eye className="size-4" />
               </Link>
             </Button>
+
             <Button
               variant="destructive"
-              size="sm"
-              onClick={() => handleDelete(row.original)}
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(row.original);
+              }}
             >
-              Delete
+              <Trash2 className="size-4" />
             </Button>
           </div>
         ),
@@ -225,6 +238,7 @@ export default function LexiconsPage() {
       columnFilters,
       columnVisibility,
       pagination,
+      columnPinning: { right: ["actions"] },
     },
     defaultColumn: {
       enableColumnFilter: false,
@@ -248,7 +262,12 @@ export default function LexiconsPage() {
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         {error && <p className="text-destructive text-sm">{error}</p>}
 
-        <DataTable table={table}>
+        <DataTable
+          table={table}
+          onRowClick={(lex) =>
+            router.push(`/lexicons/${encodeURIComponent(lex.id)}`)
+          }
+        >
           <DataTableToolbar table={table}>
             <Button asChild>
               <Link href="/lexicons/new">Add Lexicon</Link>

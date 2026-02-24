@@ -1,11 +1,12 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/lib/auth-context"
-import { addAdmin, deleteAdmin, getAdmins, type AdminSummary } from "@/lib/api"
-import { SiteHeader } from "@/components/site-header"
-import { Button } from "@/components/ui/button"
+import { useAuth } from "@/lib/auth-context";
+import { addAdmin, deleteAdmin, getAdmins, type AdminSummary } from "@/lib/api";
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -15,9 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -25,27 +26,29 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 
 export default function AdminsPage() {
-  const { getToken } = useAuth()
-  const [admins, setAdmins] = useState<AdminSummary[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const { getToken } = useAuth();
+  const [admins, setAdmins] = useState<AdminSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getAdmins(getToken).then(setAdmins).catch((e) => setError(e.message))
-  }, [getToken])
+    getAdmins(getToken)
+      .then(setAdmins)
+      .catch((e) => setError(e.message));
+  }, [getToken]);
 
   useEffect(() => {
-    load()
-  }, [load])
+    load();
+  }, [load]);
 
   async function handleDelete(id: string) {
     try {
-      await deleteAdmin(getToken, id)
-      load()
+      await deleteAdmin(getToken, id);
+      load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -60,14 +63,14 @@ export default function AdminsPage() {
           <AddAdminDialog getToken={getToken} onSuccess={load} />
         </div>
 
-        <div className="rounded-lg border">
+        <div className="overflow-clip rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>DID</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Last Used</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="w-10 sticky right-0 bg-inherit z-[1]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,13 +97,14 @@ export default function AdminsPage() {
                       ? new Date(admin.last_used_at).toLocaleString()
                       : "Never"}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="w-10 sticky right-0 bg-inherit z-[1]">
                     <Button
                       variant="destructive"
-                      size="sm"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive"
                       onClick={() => handleDelete(admin.id)}
                     >
-                      Delete
+                      <Trash2 className="size-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -110,29 +114,29 @@ export default function AdminsPage() {
         </div>
       </div>
     </>
-  )
+  );
 }
 
 function AddAdminDialog({
   getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>
-  onSuccess: () => void
+  getToken: () => Promise<string | null>;
+  onSuccess: () => void;
 }) {
-  const [did, setDid] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
+  const [did, setDid] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   async function handleAdd() {
-    setError(null)
+    setError(null);
     try {
-      await addAdmin(getToken, { did })
-      setDid("")
-      setOpen(false)
-      onSuccess()
+      await addAdmin(getToken, { did });
+      setDid("");
+      setOpen(false);
+      onSuccess();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -144,9 +148,7 @@ function AddAdminDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Admin</DialogTitle>
-          <DialogDescription>
-            Add a new admin by their DID.
-          </DialogDescription>
+          <DialogDescription>Add a new admin by their DID.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
@@ -168,5 +170,5 @@ function AddAdminDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
