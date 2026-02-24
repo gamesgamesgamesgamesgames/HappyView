@@ -37,10 +37,11 @@ const config: Config = {
 
   themeConfig: {
     navbar: {
-      title: "HappyView",
+      title: "",
       logo: {
-        alt: "HappyView Logo",
-        src: "img/logo.png",
+        alt: "HappyView",
+        src: "img/logo.light.png",
+        srcDark: "img/logo.dark.png",
       },
       items: [
         {
