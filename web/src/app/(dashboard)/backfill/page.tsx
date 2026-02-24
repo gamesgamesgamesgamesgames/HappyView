@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   createBackfillJob,
   getBackfillJobs,
+  getLexicons,
   getTapStats,
   type BackfillJob,
   type TapStatsResponse,
@@ -18,6 +19,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 import {
   Dialog,
   DialogClose,
@@ -166,10 +175,26 @@ function CreateDialog({
   getToken: () => Promise<string | null>;
   onSuccess: () => void;
 }) {
-  const [collection, setCollection] = useState("");
+  const [collection, setCollection] = useState<string | null>(null);
   const [did, setDid] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [recordLexicons, setRecordLexicons] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      getLexicons(getToken)
+        .then((lexicons) =>
+          setRecordLexicons(
+            lexicons
+              .filter((l) => l.lexicon_type === "record")
+              .map((l) => l.id)
+              .sort(),
+          ),
+        )
+        .catch(() => {});
+    }
+  }, [open, getToken]);
 
   async function handleCreate() {
     setError(null);
@@ -178,7 +203,7 @@ function CreateDialog({
         collection: collection || undefined,
         did: did || undefined,
       });
-      setCollection("");
+      setCollection(null);
       setDid("");
       setOpen(false);
       onSuccess();
@@ -203,13 +228,23 @@ function CreateDialog({
         <div className="flex flex-col gap-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="bf-collection">Collection (optional)</Label>
-            <Input
-              id="bf-collection"
-              value={collection}
-              onChange={(e) => setCollection(e.target.value)}
-              placeholder="com.example.record"
-            />
+            <Label>Collection (optional)</Label>
+            <Combobox value={collection} onValueChange={setCollection}>
+              <ComboboxInput
+                placeholder="Select or type a collection..."
+                showClear
+              />
+              <ComboboxContent>
+                <ComboboxList>
+                  <ComboboxEmpty>No matching lexicons.</ComboboxEmpty>
+                  {recordLexicons.map((id) => (
+                    <ComboboxItem key={id} value={id}>
+                      {id}
+                    </ComboboxItem>
+                  ))}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="bf-did">DID (optional)</Label>
