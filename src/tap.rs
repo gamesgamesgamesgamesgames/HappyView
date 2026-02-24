@@ -6,7 +6,7 @@ use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-use crate::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
+use crate::lexicon::{LexiconRegistry, LexiconType, ParsedLexicon, ProcedureAction};
 
 // ---------------------------------------------------------------------------
 // Tap event types (matches Tap's outbox JSON format)
@@ -392,6 +392,20 @@ async fn handle_record_event(
     // Handle lexicon schema events for tracked network lexicons.
     if record.collection == LEXICON_SCHEMA_COLLECTION {
         handle_lexicon_schema_event(db, lexicons, collections_tx, &record.did, record).await;
+        return;
+    }
+
+    // Skip records whose collection is not tracked by a registered record-type lexicon.
+    let is_tracked = lexicons
+        .get(&record.collection)
+        .await
+        .is_some_and(|lex| lex.lexicon_type == LexiconType::Record);
+
+    if !is_tracked {
+        tracing::debug!(
+            collection = %record.collection,
+            "skipping record for untracked collection"
+        );
         return;
     }
 
