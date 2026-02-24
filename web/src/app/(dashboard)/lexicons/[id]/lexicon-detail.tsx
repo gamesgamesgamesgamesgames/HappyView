@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth-context";
 import { CodePanels } from "@/components/code-panels";
@@ -20,7 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 export default function LexiconDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const id = decodeURIComponent(pathname.split("/").filter(Boolean).pop() ?? "");
   const { getToken } = useAuth();
   const router = useRouter();
   const [lexicon, setLexicon] = useState<LexiconDetail | null>(null);

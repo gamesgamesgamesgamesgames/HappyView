@@ -20,7 +20,9 @@ sha2 = "0.10"
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "json", "chrono", "migrate"] }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
+http-body-util = "0.1"
 hickory-resolver = "0.25"
 mlua = { version = "0.11", features = ["lua54", "async", "serialize", "vendored", "send"] }
 tracing = "0.1"
