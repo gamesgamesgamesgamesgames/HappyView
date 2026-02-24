@@ -24,7 +24,11 @@ To see whether Tap is still working through the backlog, check the Tap stats on 
 
 ## Re-running backfills
 
-Backfill jobs are idempotent. Running a backfill for a collection that's already been backfilled will re-discover repos and send them to Tap again. Tap deduplicates repos it already knows about, so re-running a backfill is safe and useful for catching repos that were added to the network since the last run.
+Re-running a backfill for a collection that's already been backfilled is safe. HappyView removes the discovered repos from Tap before re-adding them, which clears Tap's cached state and forces a full re-fetch of all records from each repo's PDS. This means re-running a backfill will restore any records that were previously deleted from HappyView, as well as pick up repos that were added to the network since the last run.
+
+## Restoring deleted records
+
+Deleting records from HappyView (via the dashboard or API) only removes them from the local database — the records still exist on the AT Protocol network. To restore deleted records, create a backfill job for the affected collection. The backfill will clear Tap's cache for the discovered repos and re-fetch all records from the network, restoring any that were previously deleted.
 
 ## Next steps
 

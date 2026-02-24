@@ -204,6 +204,18 @@ pub async fn add_repos(
     tap_post(http, tap_url, "/repos/add", tap_admin_password, &body).await
 }
 
+/// Remove repos from Tap via POST /repos/remove, clearing their cached state
+/// so a subsequent add triggers a fresh resync.
+pub async fn remove_repos(
+    http: &reqwest::Client,
+    tap_url: &str,
+    tap_admin_password: Option<&str>,
+    dids: &[String],
+) -> Result<(), String> {
+    let body = serde_json::json!({ "dids": dids });
+    tap_post(http, tap_url, "/repos/remove", tap_admin_password, &body).await
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------

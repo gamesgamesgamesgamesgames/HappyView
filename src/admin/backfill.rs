@@ -167,6 +167,21 @@ pub(super) async fn create_backfill(
         .execute(&state.db)
         .await;
 
+    // Remove repos from Tap first so their record cache is cleared,
+    // ensuring the subsequent add triggers a fresh resync.
+    for chunk in all_dids.chunks(1000) {
+        if let Err(e) = tap::remove_repos(
+            &state.http,
+            &state.config.tap_url,
+            state.config.tap_admin_password.as_deref(),
+            chunk,
+        )
+        .await
+        {
+            tracing::warn!(error = %e, "failed to remove repos from tap, continuing");
+        }
+    }
+
     // Add repos to Tap in batches.
     if !all_dids.is_empty() {
         for chunk in all_dids.chunks(1000) {

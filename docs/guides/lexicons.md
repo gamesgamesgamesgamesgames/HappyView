@@ -35,6 +35,8 @@ When uploading a record-type lexicon, HappyView automatically creates a backfill
 
 When record-type lexicons change (uploaded or deleted), HappyView automatically syncs the updated collection filter to Tap. HappyView always includes `com.atproto.lexicon.schema` in the filter to track network lexicon updates.
 
+Deleting a lexicon updates Tap's collection filters (stopping live indexing for that collection) but does **not** remove previously indexed repos or their cached state from Tap. To fully reset a collection's state, delete the lexicon, re-add it, and run a [backfill](backfill).
+
 ## Network lexicons
 
 If a lexicon has already been published, you don't need to upload the JSON manually. Point HappyView at the NSID and it fetches the lexicon directly from the network. Network lexicons are kept updated automatically via Tap. If the publisher updates their schema, your instance will pick up the change.
