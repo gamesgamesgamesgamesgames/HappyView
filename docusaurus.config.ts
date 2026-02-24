@@ -36,6 +36,7 @@ const config: Config = {
   ],
 
   themeConfig: {
+    image: "img/og.png",
     navbar: {
       title: "",
       logo: {
