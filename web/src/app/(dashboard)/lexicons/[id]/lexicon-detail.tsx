@@ -159,10 +159,12 @@ export default function LexiconDetailPage() {
               <Label className="text-muted-foreground">Revision</Label>
               <p className="mt-1 tabular-nums">{lexicon.revision}</p>
             </div>
-            <div>
-              <Label className="text-muted-foreground">Backfill</Label>
-              <p className="mt-1">{lexicon.backfill ? "Yes" : "No"}</p>
-            </div>
+            {lexicon.lexicon_type === "record" && (
+              <div>
+                <Label className="text-muted-foreground">Backfill</Label>
+                <p className="mt-1">{lexicon.backfill ? "Yes" : "No"}</p>
+              </div>
+            )}
             {lexicon.authority_did && (
               <div className="col-span-2">
                 <Label className="text-muted-foreground">Authority DID</Label>

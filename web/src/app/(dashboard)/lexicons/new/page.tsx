@@ -125,7 +125,7 @@ export default function AddLexiconPage() {
       const lexiconJson = JSON.parse(json);
       await uploadLexicon(getToken, {
         lexicon_json: lexiconJson,
-        backfill,
+        backfill: localMainType === "record" && backfill,
         script: showScript && script ? script : undefined,
       });
       router.push("/lexicons");
@@ -206,14 +206,16 @@ export default function AddLexiconPage() {
             </div>
 
             <footer className="bg-sidebar-accent flex justify-end gap-6 ps-4 pt-2 pb-1 md:px-6 md:py-4 rounded-b-md">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="backfill">Enable backfill for lexicon</Label>
-                <Switch
-                  id="backfill"
-                  checked={backfill}
-                  onCheckedChange={setBackfill}
-                />
-              </div>
+              {localMainType === "record" && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="backfill">Enable backfill for lexicon</Label>
+                  <Switch
+                    id="backfill"
+                    checked={backfill}
+                    onCheckedChange={setBackfill}
+                  />
+                </div>
+              )}
 
               <Button onClick={handleUploadLocal} disabled={submitting}>
                 {submitting ? "Uploading..." : "Upload"}
