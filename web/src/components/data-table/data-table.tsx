@@ -37,7 +37,7 @@ export function DataTable<TData>({
       {...props}
     >
       {children}
-      <div className="overflow-hidden rounded-md border">
+      <div className="overflow-clip rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -46,6 +46,7 @@ export function DataTable<TData>({
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
+                    className={cn(header.column.getIsPinned() && "bg-inherit")}
                     style={{
                       ...getColumnPinningStyle({ column: header.column }),
                     }}
@@ -67,16 +68,18 @@ export function DataTable<TData>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={onRowClick ? "cursor-pointer" : undefined}
+                  className={cn(
+                    "bg-background",
+                    onRowClick ? "cursor-pointer" : undefined,
+                  )}
                   onClick={
-                    onRowClick
-                      ? () => onRowClick(row.original)
-                      : undefined
+                    onRowClick ? () => onRowClick(row.original) : undefined
                   }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
+                      className={cn(cell.column.getIsPinned() && "bg-inherit")}
                       style={{
                         ...getColumnPinningStyle({ column: cell.column }),
                       }}

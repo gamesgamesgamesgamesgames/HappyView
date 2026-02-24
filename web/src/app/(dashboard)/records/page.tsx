@@ -12,9 +12,20 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getStats,
   getAdminRecords,
+  deleteRecord,
   type CollectionStat,
   type AdminRecord,
 } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CodeBlock } from "@/components/code-block";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableViewOptions } from "@/components/data-table/data-table-view-options";
@@ -33,7 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 function parseAtUri(uri: string): { did: string; rkey: string } {
   const parts = uri.replace("at://", "").split("/");
@@ -58,6 +69,8 @@ export default function RecordsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewRecord, setViewRecord] = useState<AdminRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteUri, setDeleteUri] = useState<string | null>(null);
 
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
@@ -84,6 +97,29 @@ export default function RecordsPage() {
       }
     },
     [getToken],
+  );
+
+  const handleDeleteRecord = useCallback(
+    async (uri: string) => {
+      setDeleting(true);
+      try {
+        await deleteRecord(getToken, uri);
+        setDeleteUri(null);
+        setViewRecord(null);
+        if (selectedCollection) {
+          const currentCursor =
+            cursorStack.length > 0
+              ? cursorStack[cursorStack.length - 1]
+              : undefined;
+          fetchRecords(selectedCollection, currentCursor);
+        }
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setDeleting(false);
+      }
+    },
+    [getToken, selectedCollection, cursorStack, fetchRecords],
   );
 
   // Build columns dynamically from the union of all record keys
@@ -146,14 +182,36 @@ export default function RecordsPage() {
       });
     }
 
+    cols.push({
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <Button
+          variant="destructive"
+          size="icon"
+          className="size-8 text-muted-foreground hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteUri(row.original.uri);
+          }}
+          disabled={deleting}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      ),
+    });
+
     return cols;
-  }, [records]);
+  }, [records, deleting]);
 
   const table = useReactTable({
     data: records,
     columns,
     state: {
       columnVisibility,
+      columnPinning: { right: ["actions"] },
     },
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
@@ -253,9 +311,52 @@ export default function RecordsPage() {
                 </DialogTitle>
               </DialogHeader>
               <CodeBlock code={JSON.stringify(viewRecord, null, 2)} />
+              <div className="flex justify-end">
+                <Button
+                  variant="destructive"
+                  onClick={() => setDeleteUri(viewRecord.uri)}
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting..." : "Delete Record"}
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         )}
+
+        <AlertDialog
+          open={!!deleteUri}
+          onOpenChange={(open) => {
+            if (!open) setDeleteUri(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete record?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete the record. This action cannot be
+                undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {deleteUri && (
+              <code className="text-muted-foreground block truncate text-xs">
+                {deleteUri}
+              </code>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => {
+                  if (deleteUri) handleDeleteRecord(deleteUri);
+                }}
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </>
   );

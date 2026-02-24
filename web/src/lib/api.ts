@@ -279,3 +279,14 @@ export function getAdminRecords(
     getToken
   )
 }
+
+export function deleteRecord(
+  getToken: () => Promise<string | null>,
+  uri: string
+) {
+  return apiFetch(
+    `/admin/records?${new URLSearchParams({ uri })}`,
+    getToken,
+    { method: "DELETE" }
+  )
+}
