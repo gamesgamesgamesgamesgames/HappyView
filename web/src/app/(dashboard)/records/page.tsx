@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -9,6 +9,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
   getStats,
@@ -79,6 +80,9 @@ function formatCellValue(value: unknown): string {
 
 export default function RecordsPage() {
   const { getToken } = useAuth();
+  const searchParams = useSearchParams();
+  const initialCollection = searchParams.get("collection") ?? "";
+  const appliedInitial = useRef(false);
   const [collections, setCollections] = useState<CollectionStat[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string>("");
   const [records, setRecords] = useState<AdminRecord[]>([]);
@@ -104,6 +108,17 @@ export default function RecordsPage() {
       .then((stats) => setCollections(stats.collections))
       .catch((e) => setError(e.message));
   }, [getToken]);
+
+  // Auto-select collection from URL search param on initial load.
+  useEffect(() => {
+    if (appliedInitial.current || !initialCollection || collections.length === 0)
+      return;
+    if (collections.some((c) => c.collection === initialCollection)) {
+      appliedInitial.current = true;
+      handleSelectCollection(initialCollection);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collections, initialCollection]);
 
   const fetchRecords = useCallback(
     async (collection: string, cursor?: string) => {
@@ -382,6 +397,7 @@ export default function RecordsPage() {
             <div className="flex items-center space-x-2">
               <Button
                 aria-label="Go to previous page"
+                title="Previous page"
                 variant="outline"
                 size="icon"
                 className="size-8"
@@ -392,6 +408,7 @@ export default function RecordsPage() {
               </Button>
               <Button
                 aria-label="Go to next page"
+                title="Next page"
                 variant="outline"
                 size="icon"
                 className="size-8"

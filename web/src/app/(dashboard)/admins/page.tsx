@@ -102,6 +102,8 @@ export default function AdminsPage() {
                       variant="destructive"
                       size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
+                      title="Delete admin"
+                      aria-label="Delete admin"
                       onClick={() => handleDelete(admin.id)}
                     >
                       <Trash2 className="size-4" />

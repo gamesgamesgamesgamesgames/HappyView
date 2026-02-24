@@ -31,7 +31,7 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Trash2 } from "lucide-react";
+import { Eye, Rows3, Trash2 } from "lucide-react";
 
 export default function LexiconsPage() {
   const { getToken } = useAuth();
@@ -188,13 +188,36 @@ export default function LexiconsPage() {
         header: "",
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
+            {row.original.lexicon_type === "record" && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8 text-muted-foreground"
+                title="View records"
+                aria-label="View records"
+                asChild
+              >
+                <Link
+                  href={`/records?collection=${encodeURIComponent(row.original.id)}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Rows3 className="size-4" />
+                </Link>
+              </Button>
+            )}
+
             <Button
               variant="outline"
               size="icon"
               className="size-8 text-muted-foreground"
+              title="View lexicon"
+              aria-label="View lexicon"
               asChild
             >
-              <Link href={`/lexicons/${encodeURIComponent(row.original.id)}`}>
+              <Link
+                href={`/lexicons/${encodeURIComponent(row.original.id)}`}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <Eye className="size-4" />
               </Link>
             </Button>
@@ -203,6 +226,8 @@ export default function LexiconsPage() {
               variant="destructive"
               size="icon"
               className="size-8 text-muted-foreground hover:text-destructive"
+              title="Delete lexicon"
+              aria-label="Delete lexicon"
               onClick={(e) => {
                 e.stopPropagation();
                 handleDelete(row.original);
