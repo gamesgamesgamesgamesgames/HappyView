@@ -1,5 +1,6 @@
 use axum::Json;
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -13,6 +14,11 @@ pub(super) struct ListRecordsParams {
     pub collection: String,
     pub limit: Option<i64>,
     pub cursor: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct DeleteRecordParams {
+    pub uri: String,
 }
 
 #[derive(Serialize)]
@@ -66,4 +72,23 @@ pub(super) async fn list_records(
     };
 
     Ok(Json(ListRecordsResponse { records, cursor }))
+}
+
+/// DELETE /admin/records?uri=at://... — delete a single record by URI.
+pub(super) async fn delete_record(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+    Query(params): Query<DeleteRecordParams>,
+) -> Result<StatusCode, AppError> {
+    let result = sqlx::query("DELETE FROM records WHERE uri = $1")
+        .bind(&params.uri)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to delete record: {e}")))?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("record not found".into()));
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }
