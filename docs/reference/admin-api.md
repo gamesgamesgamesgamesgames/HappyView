@@ -1,21 +1,34 @@
 # Admin API
 
-All admin endpoints live under `/admin` and require an AIP-issued Bearer token from a DID that exists in the `admins` table.
+The admin API lets you manage lexicons, monitor records, run backfill jobs, and control admin access. All endpoints live under `/admin` and require an [AIP](https://github.com/graze-social/aip)-issued Bearer token from a DID that exists in the `admins` table. You can also manage all of this through the [web dashboard](../getting-started/dashboard).
 
 ## Auth
 
-Admin auth works the same as user auth — the Bearer token is validated against AIP's `/oauth/userinfo` endpoint to retrieve the caller's DID. That DID is then checked against the `admins` table.
+Admin auth works the same as user auth: the Bearer token is validated against AIP's `/oauth/userinfo` endpoint to retrieve the caller's DID. That DID is then checked against the `admins` table.
 
 **Auto-bootstrap**: If the `admins` table is empty, the first authenticated request automatically inserts the caller as the initial admin.
 
 Non-admin DIDs receive a `403 Forbidden` response.
 
+All error responses return JSON with an `error` field:
+
+```json
+{
+  "error": "description of what went wrong"
+}
+```
+
+| Status | Meaning |
+|--------|---------|
+| `400 Bad Request` | Invalid input (missing required fields, malformed lexicon JSON) |
+| `401 Unauthorized` | Missing or invalid Bearer token. See [AIP documentation](https://github.com/graze-social/aip) for token issues |
+| `403 Forbidden` | Authenticated DID is not in the admins table |
+| `404 Not Found` | Lexicon, admin, or backfill job not found |
+
 ```sh
 # All examples assume $TOKEN is an AIP-issued access token for an admin DID
 AUTH="Authorization: Bearer $TOKEN"
 ```
-
----
 
 ## Lexicons
 
@@ -30,7 +43,7 @@ curl -X POST http://localhost:3000/admin/lexicons \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
-    "lexicon_json": { "lexicon": 1, "id": "example.record", "defs": { "main": { "type": "record", "key": "tid", "record": { "type": "object", "properties": { "title": { "type": "string" } } } } } },
+    "lexicon_json": { "lexicon": 1, "id": "xyz.statusphere.status", "defs": { "main": { "type": "record", "key": "tid", "record": { "type": "object", "required": ["status", "createdAt"], "properties": { "status": { "type": "string", "maxGraphemes": 1 }, "createdAt": { "type": "string", "format": "datetime" } } } } } },
     "backfill": true,
     "target_collection": null
   }'
@@ -46,7 +59,7 @@ curl -X POST http://localhost:3000/admin/lexicons \
 
 ```json
 {
-  "id": "example.record",
+  "id": "xyz.statusphere.status",
   "revision": 1
 }
 ```
@@ -66,7 +79,7 @@ curl http://localhost:3000/admin/lexicons -H "$AUTH"
 ```json
 [
   {
-    "id": "example.record",
+    "id": "xyz.statusphere.status",
     "revision": 1,
     "lexicon_type": "record",
     "backfill": true,
@@ -83,7 +96,7 @@ GET /admin/lexicons/{id}
 ```
 
 ```sh
-curl http://localhost:3000/admin/lexicons/example.record -H "$AUTH"
+curl http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$AUTH"
 ```
 
 **Response**: `200 OK` with full lexicon details including raw JSON.
@@ -95,16 +108,14 @@ DELETE /admin/lexicons/{id}
 ```
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/lexicons/example.record -H "$AUTH"
+curl -X DELETE http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$AUTH"
 ```
 
 **Response**: `204 No Content`
 
----
-
 ## Network Lexicons
 
-Network lexicons are fetched from the ATProto network via DNS TXT resolution and kept updated via Jetstream. See [Network Lexicons](network-lexicons.md) for background.
+Network lexicons are fetched from the AT Protocol network via DNS TXT resolution and kept updated via Tap. See [Lexicons - Network lexicons](../guides/lexicons#network-lexicons) for background.
 
 ### Add a network lexicon
 
@@ -117,7 +128,7 @@ curl -X POST http://localhost:3000/admin/network-lexicons \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
-    "nsid": "games.gamesgamesgamesgames.game",
+    "nsid": "xyz.statusphere.status",
     "target_collection": null
   }'
 ```
@@ -133,7 +144,7 @@ HappyView resolves the NSID authority via DNS TXT, fetches the lexicon from the 
 
 ```json
 {
-  "nsid": "games.gamesgamesgamesgames.game",
+  "nsid": "xyz.statusphere.status",
   "authority_did": "did:plc:authority",
   "revision": 1
 }
@@ -154,7 +165,7 @@ curl http://localhost:3000/admin/network-lexicons -H "$AUTH"
 ```json
 [
   {
-    "nsid": "games.gamesgamesgamesgames.game",
+    "nsid": "xyz.statusphere.status",
     "authority_did": "did:plc:authority",
     "target_collection": null,
     "last_fetched_at": "2025-01-01T00:00:00Z",
@@ -170,15 +181,13 @@ DELETE /admin/network-lexicons/{nsid}
 ```
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/network-lexicons/games.gamesgamesgamesgames.game \
+curl -X DELETE http://localhost:3000/admin/network-lexicons/xyz.statusphere.status \
   -H "$AUTH"
 ```
 
 Removes the network lexicon tracking and also deletes the lexicon from the `lexicons` table and in-memory registry.
 
 **Response**: `204 No Content`
-
----
 
 ## Stats
 
@@ -197,11 +206,41 @@ curl http://localhost:3000/admin/stats -H "$AUTH"
 ```json
 {
   "total_records": 12345,
-  "collections": [{ "collection": "example.record", "count": 500 }]
+  "collections": [{ "collection": "xyz.statusphere.status", "count": 500 }]
 }
 ```
 
----
+## Tap Stats
+
+Aggregate stats from the [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance. Useful for monitoring backfill progress. See [Backfill - Job lifecycle](../guides/backfill#job-lifecycle) for context.
+
+### Get Tap stats
+
+```
+GET /admin/tap/stats
+```
+
+```sh
+curl http://localhost:3000/admin/tap/stats -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+{
+  "repo_count": 5234,
+  "record_count": 1048576,
+  "outbox_buffer": 42
+}
+```
+
+| Field          | Type   | Description                                              |
+| -------------- | ------ | -------------------------------------------------------- |
+| `repo_count`   | number | Total repos Tap is tracking                              |
+| `record_count` | number | Total records Tap has indexed                            |
+| `outbox_buffer`| number | Pending events awaiting delivery (high = Tap is busy)    |
+
+Returns `502 Bad Gateway` if Tap is unreachable.
 
 ## Backfill
 
@@ -215,7 +254,7 @@ POST /admin/backfill
 curl -X POST http://localhost:3000/admin/backfill \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
-  -d '{ "collection": "example.record" }'
+  -d '{ "collection": "xyz.statusphere.status" }'
 ```
 
 | Field        | Type   | Required | Description                                                |
@@ -248,7 +287,7 @@ curl http://localhost:3000/admin/backfill/status -H "$AUTH"
 [
   {
     "id": "550e8400-e29b-41d4-a716-446655440000",
-    "collection": "example.record",
+    "collection": "xyz.statusphere.status",
     "did": null,
     "status": "completed",
     "total_repos": 42,
@@ -261,8 +300,6 @@ curl http://localhost:3000/admin/backfill/status -H "$AUTH"
   }
 ]
 ```
-
----
 
 ## Admin management
 

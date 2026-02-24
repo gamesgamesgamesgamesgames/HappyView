@@ -6,7 +6,12 @@ const config: Config = {
   tagline: "Lexicon-driven ATProto AppView",
   url: "https://happyview.dev",
   baseUrl: "/",
+  favicon: "img/favicon.png",
   onBrokenLinks: "throw",
+  markdown: {
+    mermaid: true,
+  },
+  themes: ["@docusaurus/theme-mermaid"],
 
   i18n: {
     defaultLocale: "en",
@@ -33,6 +38,10 @@ const config: Config = {
   themeConfig: {
     navbar: {
       title: "HappyView",
+      logo: {
+        alt: "HappyView Logo",
+        src: "img/logo.png",
+      },
       items: [
         {
           type: "docSidebar",
@@ -47,9 +56,11 @@ const config: Config = {
         },
       ],
     },
+    prism: {
+      additionalLanguages: ["lua"],
+    },
     footer: {
-      style: "dark",
-      copyright: `Copyright \u00a9 ${new Date().getFullYear()} HappyView.`,
+      copyright: `Copyright \u00a9 ${new Date().getFullYear()} [Birbhouse Games](https://birb.house).`,
     },
   } satisfies Preset.ThemeConfig,
 };

@@ -1,31 +1,32 @@
 # HappyView
 
-HappyView is a lexicon-driven ATProto AppView. Upload lexicon definitions at runtime and HappyView dynamically generates XRPC query and procedure endpoints, indexes records from the network via Jetstream, and proxies writes to users' PDSes --- no restart required.
+HappyView is the best way to build an [AppView](https://atproto.com/guides/glossary#app-view) for the [AT Protocol](https://atproto.com). Upload your [lexicon](reference/glossary#at-protocol-terms) schemas and get a fully functional AppView, complete with [XRPC](reference/glossary#at-protocol-terms) endpoints, OAuth, real-time network sync, and historical [backfill](guides/backfill), without writing a single line of server code.
 
-## How it fits together
+Building an AppView from scratch means wiring up firehose connections, record storage, XRPC routing, OAuth flows, and PDS write proxying before you can even think about your application. HappyView handles all of that. Define your data model with lexicons, add custom logic with Lua scripts when you need it, and ship your app.
 
-```
-Jetstream ──> HappyView ──> PostgreSQL
-                 │
-     ┌───────────┼───────────┐
-     │           │           │
-   Clients     AIP        PDSes
-              (OAuth)   (user repos)
-```
+## Features
 
-- **Jetstream** pushes real-time record events. HappyView subscribes to the collections defined by uploaded lexicons and indexes records into Postgres.
-- **AIP** (ATProto Identity Provider) handles OAuth 2.1 with PKCE. HappyView validates tokens by calling AIP's `/oauth/userinfo` endpoint.
-- **PDSes** store user data. HappyView proxies writes and blob uploads to each user's PDS using DPoP-authenticated requests.
-- **Clients** talk to HappyView's XRPC and admin APIs. Any ATProto-compatible client can connect.
+- 📜 **Lexicon-Driven**: Upload your lexicon schemas and HappyView generates fully functional XRPC query and procedure endpoints automatically, no code required
+- 🔄 **Real-Time Sync**: Records stream in from the AT Protocol network in real-time via [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), with cryptographic verification and backfill via the admin API
+- 🔐 **OAuth Built In**: [AIP](https://github.com/graze-social/aip) handles authentication, and writes are proxied back to the user's PDS, so there's no session management needed
+- 🌙 **Lua Scripting**: Add custom query and procedure logic with Lua scripts that have full access to the record database
+- 🗄️ **Automatic Indexing**: HappyView indexes relevant records into PostgreSQL as they arrive, ready to query
+- 🌐 **Network Lexicons**: Fetch lexicon schemas directly from the AT Protocol network via DNS authority resolution
+- ⚡ **Hot Reloading**: Upload or update lexicons at runtime, and new endpoints are available immediately with no restart
+- 🛠️ **Admin Dashboard**: Manage lexicons, monitor record stats, and run backfill jobs through a built-in admin API
 
-## Docs
+## Design Principles
 
-- [Quickstart](quickstart.md) - get a local instance running
-- [Configuration](configuration.md) - environment variables reference
-- [Deployment](deployment.md) - Docker, production, TLS
-- [Lexicons](lexicons.md) - uploading and managing lexicon definitions
-- [Network Lexicons](network-lexicons.md) - loading lexicons from the ATProto network
-- [Backfill](backfill.md) - bulk-indexing historical records
-- [XRPC API](xrpc-api.md) - query and procedure endpoints
-- [Admin API](admin-api.md) - manage lexicons, backfills, and admins
-- [Architecture](architecture.md) - internals for contributors
+- **Schema-first**: Your Lexicons are the source of truth. Upload a schema and HappyView derives endpoints, indexing rules, and network sync from it. You describe _what_ your data looks like; HappyView figures out the rest.
+
+- **Zero boilerplate**: HappyView handles AppView infrastructure (firehose, backfill, OAuth, PDS proxying) for you. You should be writing application logic from minute one, not plumbing.
+
+- **Runtime-configurable**: Lexicons can be added, updated, and removed without restarting the server. New endpoints and sync rules take effect immediately, so you can iterate on your data model in real time.
+
+- **Protocol-native**: HappyView works with _any_ PDS, resolves DIDs through the directory, and follows AT Protocol conventions. It's a first-class citizen of the network, not a wrapper around it.
+
+## Next Steps
+
+- [Quickstart](getting-started/deployment/railway): Deploy HappyView on Railway or run it locally
+- [Lexicons](guides/lexicons): Upload lexicon schemas and start indexing records
+- [Lua Scripting](guides/scripting): Write custom query and procedure logic
