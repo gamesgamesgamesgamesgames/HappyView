@@ -397,6 +397,20 @@ async fn stats_with_seeded_records() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
 
+    // Seed a lexicon so the stats query can join against it
+    sqlx::query(
+        "INSERT INTO lexicons (id, lexicon_json) VALUES ($1, $2)",
+    )
+    .bind("test.collection")
+    .bind(serde_json::json!({
+        "lexicon": 1,
+        "id": "test.collection",
+        "defs": { "main": { "type": "record", "key": "tid", "record": { "type": "object", "properties": {} } } }
+    }))
+    .execute(&app.state.db)
+    .await
+    .unwrap();
+
     // Seed records directly
     sqlx::query(
         "INSERT INTO records (uri, did, collection, rkey, record, cid) VALUES ($1, $2, $3, $4, $5, $6)",
