@@ -18,7 +18,17 @@ pub(super) async fn stats(
         .map_err(|e| AppError::Internal(format!("failed to count records: {e}")))?;
 
     let collections: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT collection, COUNT(*) FROM records GROUP BY collection ORDER BY collection",
+        r#"
+        SELECT c.collection, COALESCE(r.cnt, 0) AS count
+        FROM (
+            SELECT id AS collection FROM lexicons
+            WHERE lexicon_json->'defs'->'main'->>'type' = 'record'
+        ) c
+        LEFT JOIN (
+            SELECT collection, COUNT(*) AS cnt FROM records GROUP BY collection
+        ) r ON r.collection = c.collection
+        ORDER BY c.collection
+        "#,
     )
     .fetch_all(&state.db)
     .await
