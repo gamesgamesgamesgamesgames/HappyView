@@ -290,3 +290,14 @@ export function deleteRecord(
     { method: "DELETE" }
   )
 }
+
+export function deleteCollectionRecords(
+  getToken: () => Promise<string | null>,
+  collection: string,
+) {
+  return apiFetch<{ deleted: number }>(
+    `/admin/records/collection?${new URLSearchParams({ collection })}`,
+    getToken,
+    { method: "DELETE" },
+  )
+}
