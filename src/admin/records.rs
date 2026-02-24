@@ -74,6 +74,28 @@ pub(super) async fn list_records(
     Ok(Json(ListRecordsResponse { records, cursor }))
 }
 
+#[derive(Deserialize)]
+pub(super) struct DeleteCollectionParams {
+    pub collection: String,
+}
+
+/// DELETE /admin/records/collection?collection=X — delete all records in a collection.
+pub(super) async fn delete_collection_records(
+    State(state): State<AppState>,
+    _admin: AdminAuth,
+    Query(params): Query<DeleteCollectionParams>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let result = sqlx::query("DELETE FROM records WHERE collection = $1")
+        .bind(&params.collection)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to delete records: {e}")))?;
+
+    Ok(Json(
+        serde_json::json!({ "deleted": result.rows_affected() }),
+    ))
+}
+
 /// DELETE /admin/records?uri=at://... — delete a single record by URI.
 pub(super) async fn delete_record(
     State(state): State<AppState>,

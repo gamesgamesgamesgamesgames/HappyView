@@ -35,6 +35,10 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/records",
             get(records::list_records).delete(records::delete_record),
         )
+        .route(
+            "/records/collection",
+            delete(records::delete_collection_records),
+        )
         .route("/tap/stats", get(tap_stats::tap_stats))
         .route(
             "/network-lexicons",
