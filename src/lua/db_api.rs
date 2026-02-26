@@ -87,6 +87,53 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     })?;
     db_table.set("get", get_fn)?;
 
+    // db.search({ collection, field, query, limit? }) -> { records }
+    let state_search = state.clone();
+    let search_fn = lua.create_async_function(move |lua, opts: mlua::Table| {
+        let state = state_search.clone();
+        async move {
+            let collection: String = opts.get("collection")?;
+            let field: String = opts.get("field")?;
+            let query: String = opts.get("query")?;
+            let limit: i64 = opts.get::<i64>("limit").unwrap_or(10).min(100);
+
+            let rows: Vec<(String, String, Value)> = sqlx::query_as(
+                "SELECT uri, did, record FROM records \
+                 WHERE collection = $1 \
+                   AND record->>$2 ILIKE '%' || $3 || '%' \
+                 ORDER BY \
+                   CASE \
+                     WHEN LOWER(record->>$2) = LOWER($3) THEN 0 \
+                     WHEN LOWER(record->>$2) LIKE LOWER($3) || '%' THEN 1 \
+                     ELSE 2 \
+                   END, \
+                   record->>$2 \
+                 LIMIT $4",
+            )
+            .bind(&collection)
+            .bind(&field)
+            .bind(&query)
+            .bind(limit)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| mlua::Error::runtime(format!("DB search failed: {e}")))?;
+
+            let records: Vec<Value> = rows
+                .into_iter()
+                .map(|(uri, _did, mut record)| {
+                    if let Some(obj) = record.as_object_mut() {
+                        obj.insert("uri".to_string(), json!(uri));
+                    }
+                    record
+                })
+                .collect();
+
+            let result = json!({ "records": records });
+            lua.to_value(&result)
+        }
+    })?;
+    db_table.set("search", search_fn)?;
+
     // db.count(collection, did?) -> integer
     let state_count = state;
     let count_fn =
