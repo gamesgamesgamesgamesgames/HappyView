@@ -60,10 +60,13 @@ impl FromRequestParts<AppState> for Claims {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| AppError::Auth("missing Authorization header".into()))?;
 
-        let token = header
-            .strip_prefix("DPoP ")
-            .or_else(|| header.strip_prefix("Bearer "))
-            .ok_or_else(|| AppError::Auth("invalid Authorization scheme".into()))?;
+        let (scheme, token) = if let Some(t) = header.strip_prefix("DPoP ") {
+            ("DPoP", t)
+        } else if let Some(t) = header.strip_prefix("Bearer ") {
+            ("Bearer", t)
+        } else {
+            return Err(AppError::Auth("invalid Authorization scheme".into()));
+        };
 
         let dpop_proof = parts
             .headers
@@ -78,6 +81,7 @@ impl FromRequestParts<AppState> for Claims {
 
         tracing::debug!(
             url = %userinfo_url,
+            scheme = %scheme,
             has_dpop_proof = dpop_proof.is_some(),
             "forwarding token to AIP userinfo"
         );
@@ -85,7 +89,7 @@ impl FromRequestParts<AppState> for Claims {
         let mut req = state
             .http
             .get(&userinfo_url)
-            .header("authorization", format!("DPoP {token}"));
+            .header("authorization", format!("{scheme} {token}"));
 
         if let Some(ref proof) = dpop_proof {
             req = req.header("dpop", proof);
