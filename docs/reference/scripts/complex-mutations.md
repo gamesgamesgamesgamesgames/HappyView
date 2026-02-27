@@ -56,12 +56,12 @@ end
 
 ## How it works
 
-1. Load the existing record with [`Record.load`](../../guides/scripting#static-methods). This gives you a mutable `Record` instance with all the current field values.
+1. Load the existing record with [`Record.load`](../../guides/scripting.md#static-methods). This gives you a mutable `Record` instance with all the current field values.
 2. Apply transformations directly on the record's fields:
    - **Increment a counter**: use `or 0` to handle the field being `nil` on first access.
    - **Merge tags**: iterate over `input.tags`, skip duplicates already in `r.tags`, append new ones, then trim the list to 10.
    - **Normalize a string**: use `string.gsub` to trim whitespace.
-   - **Set a timestamp**: use [`now()`](../../guides/scripting#utility-globals) for UTC ISO 8601.
+   - **Set a timestamp**: use [`now()`](../../guides/scripting.md#utility-globals) for UTC ISO 8601.
 3. Call `r:save()`. Since `_uri` is set (from the load), this calls `putRecord` to update the record on the user's PDS.
 
 ## Usage

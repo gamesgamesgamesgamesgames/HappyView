@@ -5,7 +5,7 @@
 In this tutorial, you'll set up HappyView to act as the AppView for Statusphere. By the end, you'll have automatically indexed records and automatically generated XPRC endpoints.
 
 :::tip
-This tutorial assumes you have a running HappyView instance. If you don't, start with the [Quickstart](../getting-started/deployment/railway) or one of the local development guides ([Docker](../getting-started/deployment/docker), [from source](../getting-started/deployment/other)).
+This tutorial assumes you have a running HappyView instance. If you don't, start with the [Quickstart](../getting-started/deployment/railway.md) or one of the local development guides ([Docker](../getting-started/deployment/docker.md), [from source](../getting-started/deployment/other.md)).
 :::
 
 ## The Statusphere lexicon
@@ -23,7 +23,7 @@ For more background on how the app works, see the [ATProto Statusphere guide](ht
 
 First, upload the `xyz.statusphere.status` lexicon to HappyView. This tells HappyView to start indexing Statusphere records from across the network as they're created, updated, or deleted.
 
-The examples below use `$TOKEN` as a placeholder for an AIP-issued access token. See [Authentication](../getting-started/authentication) for how to get one.
+The examples below use `$TOKEN` as a placeholder for an AIP-issued access token. See [Authentication](../getting-started/authentication.md) for how to get one.
 
 ```sh
 curl -X POST http://localhost:3000/admin/lexicons \
@@ -52,10 +52,10 @@ curl -X POST http://localhost:3000/admin/lexicons \
   }'
 ```
 
-HappyView now subscribes to `xyz.statusphere.status` via Tap. The `backfill` flag tells HappyView to also index existing status records from the network. You can monitor progress with `GET /admin/backfill/status` or the [dashboard](../getting-started/dashboard).
+HappyView now subscribes to `xyz.statusphere.status` via Tap. The `backfill` flag tells HappyView to also index existing status records from the network. You can monitor progress with `GET /admin/backfill/status` or the [dashboard](../getting-started/dashboard.md).
 
 :::tip
-Since the `xyz.statusphere.status` lexicon is [published on the AT Protocol network](../guides/lexicons#network-lexicons), you can also add it as a network lexicon instead of uploading the JSON manually:
+Since the `xyz.statusphere.status` lexicon is [published on the AT Protocol network](../guides/lexicons.md#network-lexicons), you can also add it as a network lexicon instead of uploading the JSON manually:
 
 ```sh
 curl -X POST http://localhost:3000/admin/network-lexicons \
@@ -129,11 +129,11 @@ curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=5"
 }
 ```
 
-See [XRPC API](../reference/xrpc-api) for the full default query behavior.
+See [XRPC API](../reference/xrpc-api.md) for the full default query behavior.
 
 ## Step 4: Enhance the query with a Lua script
 
-The default query behavior works, but let's customize it with a [Lua script](../guides/scripting). Here's a script that handles single-record lookups by URI and paginated listing with an optional DID filter:
+The default query behavior works, but let's customize it with a [Lua script](../guides/scripting.md). Here's a script that handles single-record lookups by URI and paginated listing with an optional DID filter:
 
 ```lua
 function handle()
@@ -298,8 +298,8 @@ With three lexicon uploads and a few lines of Lua, you have a complete Statusphe
 
 ## Next steps
 
-- [Lua Scripting](../guides/scripting): Explore the full Record and database APIs to build more complex queries
-- [Lexicons](../guides/lexicons): Learn about network lexicons, the backfill flag, and target collections
-- [XRPC API](../reference/xrpc-api): Understand how the generated endpoints behave
+- [Lua Scripting](../guides/scripting.md): Explore the full Record and database APIs to build more complex queries
+- [Lexicons](../guides/lexicons.md): Learn about network lexicons, the backfill flag, and target collections
+- [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
 - [Statusphere example app](https://github.com/bluesky-social/statusphere-example-app): See the full Statusphere frontend
 - [ATProto Statusphere guide](https://atproto.com/guides/applications): Deep dive into how the app works at the protocol level

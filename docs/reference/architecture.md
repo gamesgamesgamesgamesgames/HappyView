@@ -1,6 +1,6 @@
 # Architecture
 
-Guide for contributors working on HappyView itself. For a user-facing overview, see the [Introduction](/).
+Guide for contributors working on HappyView itself. For a user-facing overview, see the [Introduction](/README.md).
 
 ## System overview
 

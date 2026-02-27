@@ -1,6 +1,6 @@
 # Admin API
 
-The admin API lets you manage lexicons, monitor records, run backfill jobs, and control admin access. All endpoints live under `/admin` and require an [AIP](https://github.com/graze-social/aip)-issued Bearer token from a DID that exists in the `admins` table. You can also manage all of this through the [web dashboard](../getting-started/dashboard).
+The admin API lets you manage lexicons, monitor records, run backfill jobs, and control admin access. All endpoints live under `/admin` and require an [AIP](https://github.com/graze-social/aip)-issued Bearer token from a DID that exists in the `admins` table. You can also manage all of this through the [web dashboard](../getting-started/dashboard.md).
 
 ## Auth
 
@@ -115,7 +115,7 @@ curl -X DELETE http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$
 
 ## Network Lexicons
 
-Network lexicons are fetched from the AT Protocol network via DNS TXT resolution and kept updated via Tap. See [Lexicons - Network lexicons](../guides/lexicons#network-lexicons) for background.
+Network lexicons are fetched from the AT Protocol network via DNS TXT resolution and kept updated via Tap. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for background.
 
 ### Add a network lexicon
 
@@ -212,7 +212,7 @@ curl http://localhost:3000/admin/stats -H "$AUTH"
 
 ## Tap Stats
 
-Aggregate stats from the [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance. Useful for monitoring backfill progress. See [Backfill - Job lifecycle](../guides/backfill#job-lifecycle) for context.
+Aggregate stats from the [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance. Useful for monitoring backfill progress. See [Backfill - Job lifecycle](../guides/backfill.md#job-lifecycle) for context.
 
 ### Get Tap stats
 

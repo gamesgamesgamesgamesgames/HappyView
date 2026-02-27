@@ -19,7 +19,7 @@ Authorization: Bearer <token>
 
 ## Getting a token from the dashboard
 
-The easiest way to get a token for CLI or curl usage is through the [web dashboard](dashboard):
+The easiest way to get a token for CLI or curl usage is through the [web dashboard](dashboard.md):
 
 1. Open the dashboard and log in with your AT Protocol identity
 2. Open your browser's developer tools (F12 or Cmd+Shift+I)
@@ -62,4 +62,4 @@ Token validation happens on every request; there is no local token caching.
 
 Admin endpoints require the authenticated user's DID to exist in the `admins` table. If the table is empty (fresh deployment), the first authenticated request to any admin endpoint auto-bootstraps that user as the initial admin.
 
-To add more admins, use `POST /admin/admins` or the [dashboard](dashboard). See [Admin API](../reference/admin-api#admin-management) for details.
+To add more admins, use `POST /admin/admins` or the [dashboard](dashboard.md). See [Admin API](../reference/admin-api.md#admin-management) for details.

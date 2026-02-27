@@ -46,4 +46,4 @@ HappyView runs migrations automatically on startup. The first build will take a 
 
 ## Next steps
 
-Your HappyView stack is running. Follow the [Statusphere tutorial](../../tutorials/statusphere) to upload lexicons, add custom query logic, and start indexing records from the network.
+Your HappyView stack is running. Follow the [Statusphere tutorial](../../tutorials/statusphere.md) to upload lexicons, add custom query logic, and start indexing records from the network.

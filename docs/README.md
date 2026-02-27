@@ -1,6 +1,6 @@
 # HappyView
 
-HappyView is the best way to build an [AppView](https://atproto.com/guides/glossary#app-view) for the [AT Protocol](https://atproto.com). Upload your [lexicon](reference/glossary#at-protocol-terms) schemas and get a fully functional AppView, complete with [XRPC](reference/glossary#at-protocol-terms) endpoints, OAuth, real-time network sync, and historical [backfill](guides/backfill), without writing a single line of server code.
+HappyView is the best way to build an [AppView](https://atproto.com/guides/glossary#app-view) for the [AT Protocol](https://atproto.com). Upload your [lexicon](reference/glossary.md#at-protocol-terms) schemas and get a fully functional AppView, complete with [XRPC](reference/glossary.md#at-protocol-terms) endpoints, OAuth, real-time network sync, and historical [backfill](guides/backfill.md), without writing a single line of server code.
 
 Building an AppView from scratch means wiring up firehose connections, record storage, XRPC routing, OAuth flows, and PDS write proxying before you can even think about your application. HappyView handles all of that. Define your data model with lexicons, add custom logic with Lua scripts when you need it, and ship your app.
 
@@ -27,6 +27,6 @@ Building an AppView from scratch means wiring up firehose connections, record st
 
 ## Next Steps
 
-- [Quickstart](getting-started/deployment/railway): Deploy HappyView on Railway or run it locally
-- [Lexicons](guides/lexicons): Upload lexicon schemas and start indexing records
-- [Lua Scripting](guides/scripting): Write custom query and procedure logic
+- [Quickstart](getting-started/deployment/railway.md): Deploy HappyView on Railway or run it locally
+- [Lexicons](guides/lexicons.md): Upload lexicon schemas and start indexing records
+- [Lua Scripting](guides/scripting.md): Write custom query and procedure logic

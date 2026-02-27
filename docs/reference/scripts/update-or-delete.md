@@ -30,8 +30,8 @@ end
 
 ## How it works
 
-1. If `input.delete` is truthy and `input.uri` is provided, load the record with [`Record.load`](../../guides/scripting#static-methods) and delete it.
-2. If only `input.uri` is provided, load the existing record with [`Record.load`](../../guides/scripting#static-methods), update its fields, and save it back. Since `_uri` is already set, `r:save()` calls `putRecord` instead of `createRecord`.
+1. If `input.delete` is truthy and `input.uri` is provided, load the record with [`Record.load`](../../guides/scripting.md#static-methods) and delete it.
+2. If only `input.uri` is provided, load the existing record with [`Record.load`](../../guides/scripting.md#static-methods), update its fields, and save it back. Since `_uri` is already set, `r:save()` calls `putRecord` instead of `createRecord`.
 3. If neither condition matches, create a new record from the input.
 
 ## Usage

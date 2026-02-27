@@ -23,8 +23,8 @@ end
 
 ## How it works
 
-1. Iterate over `input.items` and create a [`Record`](../../guides/scripting#record-api) instance for each item.
-2. Call [`Record.save_all()`](../../guides/scripting#static-methods) to save all records in parallel, rather than one at a time.
+1. Iterate over `input.items` and create a [`Record`](../../guides/scripting.md#record-api) instance for each item.
+2. Call [`Record.save_all()`](../../guides/scripting.md#static-methods) to save all records in parallel, rather than one at a time.
 3. Collect the resulting AT URIs and return them.
 
 ## Usage

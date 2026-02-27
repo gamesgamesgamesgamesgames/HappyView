@@ -8,7 +8,7 @@ Common issues and how to resolve them.
 
 **Causes**:
 
-- The lexicon hasn't been uploaded yet. Check with `GET /admin/lexicons` or the [dashboard](../getting-started/dashboard).
+- The lexicon hasn't been uploaded yet. Check with `GET /admin/lexicons` or the [dashboard](../getting-started/dashboard.md).
 - The lexicon's `defs.main.type` doesn't match the HTTP method. Queries are `GET`, procedures are `POST`.
 - The NSID in the URL doesn't match the `id` field in the uploaded lexicon JSON.
 
@@ -18,9 +18,9 @@ Common issues and how to resolve them.
 
 **Causes**:
 
-- The query lexicon is missing a `target_collection`. Without it, the query doesn't know which records to read. See [Lexicons - target_collection](../guides/lexicons#target-collection).
+- The query lexicon is missing a `target_collection`. Without it, the query doesn't know which records to read. See [Lexicons - target_collection](../guides/lexicons.md#target-collection).
 - The record-type lexicon hasn't finished backfilling. Check backfill status with `GET /admin/backfill/status` or the dashboard.
-- Records exist on the network but HappyView hasn't indexed them yet. Tap only picks up new events from when the collection filter was added. Use [backfill](../guides/backfill) for historical records.
+- Records exist on the network but HappyView hasn't indexed them yet. Tap only picks up new events from when the collection filter was added. Use [backfill](../guides/backfill.md) for historical records.
 
 ## Procedure returns 401 Unauthorized
 
@@ -51,9 +51,9 @@ For AIP-specific issues, see the [AIP documentation](https://github.com/graze-so
 
 1. Check the server logs: the full error message is logged at error level but not exposed to the client.
 2. Use `log("message")` in your script to trace execution. Output appears in server logs at debug level (requires `RUST_LOG` to include debug).
-3. If you hit the execution limit, your script likely has an infinite loop or is processing too much data. See [Lua Scripting - Sandbox](../guides/scripting#sandbox).
+3. If you hit the execution limit, your script likely has an infinite loop or is processing too much data. See [Lua Scripting - Sandbox](../guides/scripting.md#sandbox).
 
-See [Lua Scripting - Debugging](../guides/scripting#debugging) for more.
+See [Lua Scripting - Debugging](../guides/scripting.md#debugging) for more.
 
 ## Backfill job stuck in "pending" or "running"
 
@@ -65,7 +65,7 @@ See [Lua Scripting - Debugging](../guides/scripting#debugging) for more.
 - The relay (`RELAY_URL`) may be unreachable or slow to respond. Check connectivity.
 - Individual PDS fetches can fail silently. The worker logs warnings and continues. Check server logs for details.
 
-See [Backfill](../guides/backfill) for how the process works.
+See [Backfill](../guides/backfill.md) for how the process works.
 
 ## Records not appearing in real time
 
@@ -97,4 +97,4 @@ See the [AIP documentation](https://github.com/graze-social/aip) for setup and d
 - The database user doesn't have sufficient permissions. HappyView needs to create tables (migrations run automatically on startup).
 - Postgres version is too old. HappyView requires Postgres 17+.
 
-See [Configuration](../getting-started/configuration) for environment variable details.
+See [Configuration](../getting-started/configuration.md) for environment variable details.

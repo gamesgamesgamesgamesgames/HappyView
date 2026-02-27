@@ -14,7 +14,7 @@ end
 
 ## How it works
 
-1. Create a new [`Record`](../../guides/scripting#record-api) instance from the target collection, populated with the fields from the request body.
+1. Create a new [`Record`](../../guides/scripting.md#record-api) instance from the target collection, populated with the fields from the request body.
 2. Call `r:save()`, which creates the record on the caller's PDS and indexes it locally.
 3. Return the AT URI and CID of the newly created record.
 

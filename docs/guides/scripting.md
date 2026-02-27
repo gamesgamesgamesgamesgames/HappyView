@@ -270,7 +270,7 @@ function handle()
 end
 ```
 
-To see log output, make sure your `RUST_LOG` environment variable includes debug level for HappyView (the default `happyview=debug` works). See [Configuration](../getting-started/configuration).
+To see log output, make sure your `RUST_LOG` environment variable includes debug level for HappyView (the default `happyview=debug` works). See [Configuration](../getting-started/configuration.md).
 
 ### Error messages
 
@@ -293,22 +293,22 @@ The **full error message** is logged server-side at error level. Check the serve
 See the example script references for complete, ready-to-use scripts:
 
 **Queries:**
-- [Get a record](../reference/scripts/get-record) — fetch a single record by AT URI
-- [Paginated list](../reference/scripts/paginated-list) — list records with cursor-based pagination and DID filtering
-- [List or fetch](../reference/scripts/list-or-fetch) — combined single-record lookup and paginated listing
-- [Expanded query](../reference/scripts/expanded-query) — list statuses with user profiles in a single response
+- [Get a record](../reference/scripts/get-record.md) — fetch a single record by AT URI
+- [Paginated list](../reference/scripts/paginated-list.md) — list records with cursor-based pagination and DID filtering
+- [List or fetch](../reference/scripts/list-or-fetch.md) — combined single-record lookup and paginated listing
+- [Expanded query](../reference/scripts/expanded-query.md) — list statuses with user profiles in a single response
 
 **Procedures:**
-- [Create a record](../reference/scripts/create-record) — simple write that saves input as a record
-- [Upsert a record](../reference/scripts/upsert-record) — create or update using a deterministic rkey
-- [Update or delete](../reference/scripts/update-or-delete) — single endpoint handling create, update, and delete
-- [Batch save](../reference/scripts/batch-save) — create multiple records in parallel with `Record.save_all()`
-- [Sidecar records](../reference/scripts/sidecar-records) — create linked records across collections with a shared rkey
-- [Cascading delete](../reference/scripts/cascading-delete) — delete a record and all related records
-- [Complex mutations](../reference/scripts/complex-mutations) — load, transform, and save a record with multiple field changes
+- [Create a record](../reference/scripts/create-record.md) — simple write that saves input as a record
+- [Upsert a record](../reference/scripts/upsert-record.md) — create or update using a deterministic rkey
+- [Update or delete](../reference/scripts/update-or-delete.md) — single endpoint handling create, update, and delete
+- [Batch save](../reference/scripts/batch-save.md) — create multiple records in parallel with `Record.save_all()`
+- [Sidecar records](../reference/scripts/sidecar-records.md) — create linked records across collections with a shared rkey
+- [Cascading delete](../reference/scripts/cascading-delete.md) — delete a record and all related records
+- [Complex mutations](../reference/scripts/complex-mutations.md) — load, transform, and save a record with multiple field changes
 
 ## Next steps
 
-- [Lexicons](lexicons): Understand how record, query, and procedure lexicons work together
-- [XRPC API](../reference/xrpc-api): See how endpoints behave with and without Lua scripts
-- [Dashboard](../getting-started/dashboard#lua-editor): Use the web editor with context-aware completions
+- [Lexicons](lexicons.md): Understand how record, query, and procedure lexicons work together
+- [XRPC API](../reference/xrpc-api.md): See how endpoints behave with and without Lua scripts
+- [Dashboard](../getting-started/dashboard.md#lua-editor): Use the web editor with context-aware completions

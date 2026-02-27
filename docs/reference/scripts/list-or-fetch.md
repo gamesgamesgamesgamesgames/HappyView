@@ -25,8 +25,8 @@ end
 
 ## How it works
 
-1. If a `uri` query parameter is provided, fetch that single record with [`db.get`](../../guides/scripting#dbget) and return it. If it doesn't exist, return a structured error (using `error()` would trigger a 500 response).
-2. Otherwise, list records from the target collection using [`db.query`](../../guides/scripting#dbquery), with optional filtering by `did` and pagination via `limit`/`offset`. Since query parameters arrive as strings, `tonumber()` converts them to numbers.
+1. If a `uri` query parameter is provided, fetch that single record with [`db.get`](../../guides/scripting.md#dbget) and return it. If it doesn't exist, return a structured error (using `error()` would trigger a 500 response).
+2. Otherwise, list records from the target collection using [`db.query`](../../guides/scripting.md#dbquery), with optional filtering by `did` and pagination via `limit`/`offset`. Since query parameters arrive as strings, `tonumber()` converts them to numbers.
 
 ## Usage
 

@@ -22,7 +22,7 @@ end
 ## How it works
 
 1. Check that the `uri` query parameter is present. Return a structured error if missing.
-2. Look up the record with [`db.get`](../../guides/scripting#dbget), which returns the record table or `nil`.
+2. Look up the record with [`db.get`](../../guides/scripting.md#dbget), which returns the record table or `nil`.
 3. Return the record wrapped in an object.
 
 ## Usage

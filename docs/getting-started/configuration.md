@@ -1,6 +1,6 @@
 # Configuration
 
-HappyView is configured via environment variables. A `.env` file in the project root is loaded automatically on startup. See [Deployment](deployment/docker) for local setup or [Production Deployment](../reference/production-deployment) for production setup.
+HappyView is configured via environment variables. A `.env` file in the project root is loaded automatically on startup. See [Deployment](deployment/docker.md) for local setup or [Production Deployment](../reference/production-deployment.md) for production setup.
 
 ## Environment variables
 
@@ -12,7 +12,7 @@ HappyView is configured via environment variables. A `.env` file in the project 
 | `PORT` | no | `3000` | Bind port |
 | `TAP_URL` | no | `http://localhost:2480` | [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance URL for real-time record streaming and backfill |
 | `TAP_ADMIN_PASSWORD` | no | --- | Shared secret for authenticating with Tap's admin endpoints |
-| `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/backfill) repo discovery |
+| `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/backfill.md) repo discovery |
 | `PLC_URL` | no | `https://plc.directory` | [PLC directory](https://github.com/did-method-plc/did-method-plc) URL for DID resolution |
 | `RUST_LOG` | no | `happyview=debug,tower_http=debug` | Log filter (uses `tracing_subscriber::EnvFilter`) |
 

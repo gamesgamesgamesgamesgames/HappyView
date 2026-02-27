@@ -23,7 +23,7 @@ end
 ## How it works
 
 1. Parse `limit` from the query string, defaulting to 20 and capping at 100.
-2. Call [`db.query`](../../guides/scripting#dbquery) with the target collection, optional DID filter, and offset-based pagination.
+2. Call [`db.query`](../../guides/scripting.md#dbquery) with the target collection, optional DID filter, and offset-based pagination.
 3. Return the result directly. `db.query` returns `{ records = [...], cursor = "..." }` where `cursor` is present when more records exist.
 
 ## Usage

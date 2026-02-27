@@ -1,6 +1,6 @@
 # Local Development from Source
 
-This guide runs HappyView directly with `cargo run`, with you managing Postgres, AIP, and Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker).
+This guide runs HappyView directly with `cargo run`, with you managing Postgres, AIP, and Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker.md).
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ TAP_URL=http://localhost:2480
 TAP_ADMIN_PASSWORD=your-secret-here
 ```
 
-See [Configuration](../configuration) for all available variables.
+See [Configuration](../configuration.md) for all available variables.
 
 ## 2. Create the database
 
@@ -52,4 +52,4 @@ HappyView starts on port 3000 (configurable via the `PORT` environment variable)
 
 ## Next steps
 
-Your HappyView instance is running. Follow the [Statusphere tutorial](../../tutorials/statusphere) to upload lexicons, add custom query logic, and start indexing records from the network.
+Your HappyView instance is running. Follow the [Statusphere tutorial](../../tutorials/statusphere.md) to upload lexicons, add custom query logic, and start indexing records from the network.

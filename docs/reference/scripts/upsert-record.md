@@ -32,8 +32,8 @@ end
 
 ## How it works
 
-1. Use the client-provided `input.rkey` if present, otherwise generate a new [`TID()`](../../guides/scripting#utility-globals). This means omitting `rkey` always creates, while providing one enables updates.
-2. Build the AT URI from the caller's DID, the target collection, and the rkey, then try to load it with [`Record.load`](../../guides/scripting#static-methods).
+1. Use the client-provided `input.rkey` if present, otherwise generate a new [`TID()`](../../guides/scripting.md#utility-globals). This means omitting `rkey` always creates, while providing one enables updates.
+2. Build the AT URI from the caller's DID, the target collection, and the rkey, then try to load it with [`Record.load`](../../guides/scripting.md#static-methods).
 3. If the record exists, update its fields and save. Since `_uri` is already set, `r:save()` calls `putRecord`.
 4. If it doesn't exist, create a new record, set the rkey explicitly with `r:set_rkey()`, and save. This calls `createRecord` with the specified rkey.
 

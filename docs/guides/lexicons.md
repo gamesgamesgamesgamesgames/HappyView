@@ -2,7 +2,7 @@
 
 Lexicons are the core building block of HappyView. They're [AT Protocol schema definitions](https://atproto.com/specs/lexicon) that describe your data model, and HappyView uses them to decide which records to index from the network and what XRPC endpoints to serve.
 
-You don't write route handlers or database queries; you upload a lexicon and HappyView generates the infrastructure from it. There are two ways to add lexicons: uploading them via the [admin API](../reference/admin-api#lexicons) or [dashboard](../getting-started/dashboard), or fetching them directly from the AT Protocol network via [DNS authority resolution](#network-lexicons).
+You don't write route handlers or database queries; you upload a lexicon and HappyView generates the infrastructure from it. There are two ways to add lexicons: uploading them via the [admin API](../reference/admin-api.md#lexicons) or [dashboard](../getting-started/dashboard.md), or fetching them directly from the AT Protocol network via [DNS authority resolution](#network-lexicons).
 
 ## Supported lexicon types
 
@@ -13,7 +13,7 @@ You don't write route handlers or database queries; you upload a lexicon and Hap
 | `procedure`   | Registers a `POST /xrpc/{nsid}` endpoint that proxies writes to the user's PDS |
 | `definitions` | Stored but does not generate routes or subscriptions                           |
 
-A typical setup has three lexicons working together: a **record** lexicon that defines the data and triggers indexing, a **query** lexicon that exposes a read endpoint, and a **procedure** lexicon that exposes a write endpoint. The [Statusphere tutorial](../tutorials/statusphere) walks through this pattern end-to-end.
+A typical setup has three lexicons working together: a **record** lexicon that defines the data and triggers indexing, a **query** lexicon that exposes a read endpoint, and a **procedure** lexicon that exposes a write endpoint. The [Statusphere tutorial](../tutorials/statusphere.md) walks through this pattern end-to-end.
 
 ## Target collection
 
@@ -21,7 +21,7 @@ Query and procedure lexicons don't store data themselves. They operate on record
 
 For example, a query lexicon `xyz.statusphere.listStatuses` would set `target_collection` to `xyz.statusphere.status` to read from that record collection.
 
-See the [admin API](../reference/admin-api#upload--upsert-a-lexicon) for how to set `target_collection` when uploading.
+See the [admin API](../reference/admin-api.md#upload--upsert-a-lexicon) for how to set `target_collection` when uploading.
 
 :::note
 The `target_collection` is available in Lua scripts as the `collection` global, but it is not required if your endpoint uses a Lua script.
@@ -35,7 +35,7 @@ When uploading a record-type lexicon, HappyView automatically creates a backfill
 
 When record-type lexicons change (uploaded or deleted), HappyView automatically syncs the updated collection filter to Tap. HappyView always includes `com.atproto.lexicon.schema` in the filter to track network lexicon updates.
 
-Deleting a lexicon updates Tap's collection filters (stopping live indexing for that collection) but does **not** remove previously indexed repos or their cached state from Tap. To fully reset a collection's state, delete the lexicon, re-add it, and run a [backfill](backfill).
+Deleting a lexicon updates Tap's collection filters (stopping live indexing for that collection) but does **not** remove previously indexed repos or their cached state from Tap. To fully reset a collection's state, delete the lexicon, re-add it, and run a [backfill](backfill.md).
 
 ## Network lexicons
 
@@ -78,7 +78,7 @@ On every startup, HappyView re-fetches all network lexicons from their respectiv
 
 ## Next steps
 
-- [Lua Scripting](scripting): Add custom query and procedure logic to your endpoints
-- [XRPC API](../reference/xrpc-api): Understand how the generated endpoints behave
-- [Backfill](backfill): Learn how historical records are indexed
-- [Admin API](../reference/admin-api): Full reference for lexicon management endpoints
+- [Lua Scripting](scripting.md): Add custom query and procedure logic to your endpoints
+- [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
+- [Backfill](backfill.md): Learn how historical records are indexed
+- [Admin API](../reference/admin-api.md): Full reference for lexicon management endpoints

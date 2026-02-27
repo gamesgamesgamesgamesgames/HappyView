@@ -51,7 +51,7 @@ end
 1. Query statuses from the target collection with pagination, same as a normal list query.
 2. Extract the unique DIDs from the returned status URIs using `string.match`.
 3. Build an AT URI for each DID's `app.bsky.actor.profile/self` record (this is where Bluesky profiles live).
-4. Load all profiles in parallel with [`Record.load_all`](../../guides/scripting#static-methods). Profiles that aren't indexed locally return `nil` and are skipped.
+4. Load all profiles in parallel with [`Record.load_all`](../../guides/scripting.md#static-methods). Profiles that aren't indexed locally return `nil` and are skipped.
 5. Return statuses and profiles as separate keys, with the cursor from the status query.
 
 ## Usage

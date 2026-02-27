@@ -1,6 +1,6 @@
 # Dashboard
 
-HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api) offers: managing lexicons, viewing indexed records, and monitoring backfill jobs. It runs as a separate Next.js application alongside the Rust backend.
+HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api.md) offers: managing lexicons, viewing indexed records, and monitoring backfill jobs. It runs as a separate Next.js application alongside the Rust backend.
 
 ## Logging in for the first time
 
@@ -21,7 +21,7 @@ A default Lua script is auto-generated when you first set the type to query or p
 
 Toggle **Enable backfill** to index historical records when uploading a record-type lexicon.
 
-**Network** lexicons are fetched from the AT Protocol network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via Tap. See [Lexicons - Network lexicons](../guides/lexicons#network-lexicons) for how resolution works.
+**Network** lexicons are fetched from the AT Protocol network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via Tap. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for how resolution works.
 
 ### JSON editor
 
@@ -35,4 +35,4 @@ The JSON editor provides real-time validation against the AT Protocol Lexicon v1
 
 The Lua editor provides context-aware code completions, including suggestions for the `Record`, `db`, `input`, and `params` APIs as well as Lua keywords, builtins, and standard library functions. It also offers snippet templates for common constructs like `if`, `for`, and `function`.
 
-See [Lua Scripting](../guides/scripting) for the full runtime reference and examples.
+See [Lua Scripting](../guides/scripting.md) for the full runtime reference and examples.
