@@ -58,11 +58,24 @@ Queries are unauthenticated: there is no `caller_did` or `input`.
 
 Available in both queries and procedures:
 
-| Function       | Returns | Description                                                         |
-| -------------- | ------- | ------------------------------------------------------------------- |
-| `now()`        | string  | Current UTC timestamp in ISO 8601 format                            |
-| `log(message)` | —       | Log a message (appears in server logs at debug level)               |
-| `TID()`        | string  | Generate a fresh AT Protocol TID (13-character sortable identifier) |
+| Function         | Returns | Description                                                         |
+| ---------------- | ------- | ------------------------------------------------------------------- |
+| `now()`          | string  | Current UTC timestamp in ISO 8601 format                            |
+| `log(message)`   | —       | Log a message (appears in server logs at debug level)               |
+| `TID()`          | string  | Generate a fresh AT Protocol TID (13-character sortable identifier) |
+| `toarray(table)` | table   | Mark a table as a JSON array for serialization (see [below](#toarray)) |
+
+### toarray
+
+Lua tables don't distinguish between arrays and objects. When a table is serialized to JSON, an empty table `{}` becomes a JSON object `{}` instead of an array `[]`. The `toarray()` function marks a table so it always serializes as a JSON array — even when empty.
+
+```lua
+return { items = toarray(results) }
+-- With results: [{"name": "a"}, {"name": "b"}]
+-- Without results: {"items": []}   (not {"items": {}})
+```
+
+You don't need `toarray()` on results from `db.query`, `db.search`, `db.backlinks`, or `db.raw` — those already return properly marked arrays. Use it when you build a table yourself with `table.insert()`.
 
 ## Record API
 
@@ -175,12 +188,74 @@ local record = db.get("at://did:plc:abc/xyz.statusphere.status/abc123")
 -- The returned table includes a "uri" field
 ```
 
+### db.search
+
+```lua
+local result = db.search({
+  collection = "xyz.statusphere.status",  -- required
+  field = "displayName",                  -- required: record field to search
+  query = "alice",                        -- required: search term
+  limit = 10,                             -- optional: max 100, default 10
+})
+
+-- result.records — array of matching records, ranked by relevance:
+--   exact match > prefix match > contains match, then alphabetical
+```
+
+### db.backlinks
+
+Find records that reference a given AT URI anywhere in their data. Useful for finding likes on a post, replies to a thread, or any record that links to another.
+
+```lua
+local result = db.backlinks({
+  collection = "xyz.statusphere.status",                -- required
+  uri = "at://did:plc:abc/xyz.statusphere.status/foo",  -- required: the URI to find references to
+  did = "did:plc:abc",                                  -- optional: filter by DID
+  limit = 20,                                           -- optional: max 100, default 20
+  offset = 0,                                           -- optional: for pagination
+})
+
+-- result.records — array of records whose data contains the given URI
+-- result.cursor — present when more records exist
+```
+
+The search checks the full record data, so it works regardless of which field holds the reference (`subject`, `parent`, `reply.root`, etc.).
+
 ### db.count
 
 ```lua
 local n = db.count("xyz.statusphere.status")
 local n = db.count("xyz.statusphere.status", "did:plc:abc")  -- filter by DID
 ```
+
+### db.raw
+
+Run a raw SQL query against the database. Only `SELECT` statements are allowed.
+
+```lua
+local rows = db.raw(
+  "SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 LIMIT $3",
+  { "xyz.statusphere.status", "did:plc:abc", 10 }
+)
+
+for _, row in ipairs(rows) do
+  -- row.uri, row.did, row.record (JSONB is returned as a Lua table)
+end
+```
+
+Parameters are passed as an array and bound to `$1`, `$2`, etc. Supported parameter types: strings, integers, numbers, booleans, and nil.
+
+Column types are mapped automatically:
+
+| Postgres type          | Lua type |
+| ---------------------- | -------- |
+| `TEXT`, `VARCHAR`      | string   |
+| `INT4`, `INT8`         | integer  |
+| `FLOAT4`, `FLOAT8`     | number   |
+| `BOOL`                 | boolean  |
+| `JSON`, `JSONB`        | table    |
+| `TIMESTAMPTZ`          | string (ISO 8601) |
+| Other                  | string (fallback)  |
 
 ## Standard libraries
 
