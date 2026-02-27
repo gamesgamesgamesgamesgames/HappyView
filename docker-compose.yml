@@ -21,7 +21,7 @@ services:
     ports:
       - "2480:2480"
     environment:
-      TAP_DATABASE_URL: ${TAP_DATABASE_URL}
+      TAP_DATABASE_URL: ${DATABASE_URL}/tap
       TAP_RELAY_URL: ${TAP_RELAY_URL}
       TAP_PLC_URL: ${TAP_PLC_URL}
       TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
@@ -43,7 +43,7 @@ services:
       - cargo-git:/usr/local/cargo/git
       - cargo-target:/app/target
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL}/happyview
       AIP_URL: ${AIP_URL}
       TAP_URL: ${TAP_URL}
       TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
