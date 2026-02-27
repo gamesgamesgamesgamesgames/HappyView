@@ -52,13 +52,21 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 })
                 .collect();
 
-            let mut result = json!({ "records": records });
+            let record_values: Vec<mlua::Value> = records
+                .iter()
+                .map(|r| lua.to_value(r))
+                .collect::<LuaResult<_>>()?;
+            let records_table = lua.create_sequence_from(record_values)?;
+            records_table.set_metatable(Some(lua.array_metatable()))?;
+
+            let result_table = lua.create_table()?;
+            result_table.set("records", records_table)?;
             if has_next {
                 let next_cursor = (offset + limit).to_string();
-                result.as_object_mut().unwrap().insert("cursor".to_string(), json!(next_cursor));
+                result_table.set("cursor", next_cursor)?;
             }
 
-            lua.to_value(&result)
+            Ok(mlua::Value::Table(result_table))
         }
     })?;
     db_table.set("query", query_fn)?;
@@ -128,8 +136,17 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 })
                 .collect();
 
-            let result = json!({ "records": records });
-            lua.to_value(&result)
+            let record_values: Vec<mlua::Value> = records
+                .iter()
+                .map(|r| lua.to_value(r))
+                .collect::<LuaResult<_>>()?;
+            let records_table = lua.create_sequence_from(record_values)?;
+            records_table.set_metatable(Some(lua.array_metatable()))?;
+
+            let result_table = lua.create_table()?;
+            result_table.set("records", records_table)?;
+
+            Ok(mlua::Value::Table(result_table))
         }
     })?;
     db_table.set("search", search_fn)?;
