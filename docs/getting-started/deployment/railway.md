@@ -2,7 +2,7 @@
 
 The fastest way to get HappyView running is with Railway. This template deploys HappyView, [AIP](https://github.com/graze-social/aip) (OAuth provider), [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) (real-time data and backfill), and Postgres with a single click:
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/I1jvZl?referralCode=0QOgj_)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview?referralCode=0QOgj_)
 
 ## Required configuration
 
