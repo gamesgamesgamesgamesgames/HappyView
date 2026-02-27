@@ -1,4 +1,4 @@
-use mlua::{Lua, Result as LuaResult};
+use mlua::{Lua, LuaSerdeExt, Result as LuaResult};
 
 use super::tid::generate_tid;
 
@@ -48,6 +48,16 @@ pub fn create_sandbox() -> LuaResult<Lua> {
     // Utility: TID() returns a fresh AT Protocol TID string
     let tid_fn = lua.create_function(|_, ()| Ok(generate_tid()))?;
     globals.set("TID", tid_fn)?;
+
+    // Utility: toarray(table) marks a table as a JSON array for serialization.
+    // Ensures empty tables serialize as [] instead of {}.
+    let toarray_fn = lua.create_function(|lua, table: mlua::Table| {
+        let values: Vec<mlua::Value> = table.sequence_values().collect::<LuaResult<_>>()?;
+        let seq = lua.create_sequence_from(values)?;
+        seq.set_metatable(Some(lua.array_metatable()))?;
+        Ok(seq)
+    })?;
+    globals.set("toarray", toarray_fn)?;
 
     Ok(lua)
 }
@@ -142,5 +152,33 @@ mod tests {
     fn validate_script_rejects_syntax_error() {
         let result = validate_script("function handle(");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_provides_toarray() {
+        let lua = create_sandbox().unwrap();
+        lua.load(r#"result = toarray({})"#).exec().unwrap();
+    }
+
+    #[test]
+    fn sandbox_toarray_preserves_values() {
+        let lua = create_sandbox().unwrap();
+        let result: Vec<i64> = lua
+            .load(r#"return toarray({10, 20, 30})"#)
+            .eval::<mlua::Table>()
+            .unwrap()
+            .sequence_values()
+            .collect::<LuaResult<_>>()
+            .unwrap();
+        assert_eq!(result, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn sandbox_toarray_empty_serializes_as_array() {
+        use mlua::LuaSerdeExt;
+        let lua = create_sandbox().unwrap();
+        let table: mlua::Table = lua.load(r#"return toarray({})"#).eval().unwrap();
+        let json: serde_json::Value = lua.from_value(mlua::Value::Table(table)).unwrap();
+        assert!(json.is_array(), "expected JSON array, got: {json}");
     }
 }
