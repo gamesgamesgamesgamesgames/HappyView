@@ -8,6 +8,7 @@ import {
   IconUsers,
   IconLogout,
 } from "@tabler/icons-react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -48,7 +49,20 @@ export function AppSidebar({
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
               <Link href="/">
-                <span className="text-base font-semibold">HappyView</span>
+                <Image
+                  src="/logo.light.png"
+                  alt="HappyView"
+                  width={140}
+                  height={48}
+                  className="block dark:hidden"
+                />
+                <Image
+                  src="/logo.dark.png"
+                  alt="HappyView"
+                  width={140}
+                  height={48}
+                  className="hidden dark:block"
+                />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
