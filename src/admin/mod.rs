@@ -1,6 +1,7 @@
 mod admins;
 pub(crate) mod auth;
 mod backfill;
+mod events;
 mod lexicons;
 mod network_lexicons;
 mod records;
@@ -26,6 +27,7 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route("/stats", get(stats::stats))
         .route("/backfill", post(backfill::create_backfill))
         .route("/backfill/status", get(backfill::backfill_status))
+        .route("/events", get(events::list_events))
         .route(
             "/admins",
             post(admins::create_admin).get(admins::list_admins),

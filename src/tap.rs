@@ -6,6 +6,7 @@ use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
+use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::{LexiconRegistry, LexiconType, ParsedLexicon, ProcedureAction};
 
 // ---------------------------------------------------------------------------
@@ -314,6 +315,18 @@ async fn run(
     ) = tokio_tungstenite::connect_async(request).await?;
     tracing::info!("connected to tap");
 
+    log_event(
+        db,
+        EventLog {
+            event_type: "tap.connected".to_string(),
+            severity: Severity::Info,
+            actor_did: None,
+            subject: None,
+            detail: serde_json::json!({ "url": ws_url }),
+        },
+    )
+    .await;
+
     let (mut write, mut read) = ws.split();
 
     loop {
@@ -386,6 +399,18 @@ async fn run(
         }
     }
 
+    log_event(
+        db,
+        EventLog {
+            event_type: "tap.disconnected".to_string(),
+            severity: Severity::Warn,
+            actor_did: None,
+            subject: None,
+            detail: serde_json::json!({ "reason": "connection closed" }),
+        },
+    )
+    .await;
+
     Ok(())
 }
 
@@ -429,7 +454,7 @@ async fn handle_record_event(
             };
             let cid = record.cid.as_deref().unwrap_or_default();
 
-            if let Err(e) = sqlx::query(
+            match sqlx::query(
                 r#"
                 INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at)
                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -448,16 +473,86 @@ async fn handle_record_event(
             .execute(db)
             .await
             {
-                tracing::warn!(uri = %uri, "failed to upsert record: {e}");
+                Ok(_) => {
+                    log_event(
+                        db,
+                        EventLog {
+                            event_type: "record.created".to_string(),
+                            severity: Severity::Info,
+                            actor_did: None,
+                            subject: Some(uri.clone()),
+                            detail: serde_json::json!({
+                                "collection": record.collection,
+                                "did": record.did,
+                                "rkey": record.rkey,
+                            }),
+                        },
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    tracing::warn!(uri = %uri, "failed to upsert record: {e}");
+                    log_event(
+                        db,
+                        EventLog {
+                            event_type: "record.created".to_string(),
+                            severity: Severity::Error,
+                            actor_did: None,
+                            subject: Some(uri.clone()),
+                            detail: serde_json::json!({
+                                "collection": record.collection,
+                                "did": record.did,
+                                "rkey": record.rkey,
+                                "error": e.to_string(),
+                            }),
+                        },
+                    )
+                    .await;
+                }
             }
         }
         "delete" => {
-            if let Err(e) = sqlx::query("DELETE FROM records WHERE uri = $1")
+            match sqlx::query("DELETE FROM records WHERE uri = $1")
                 .bind(&uri)
                 .execute(db)
                 .await
             {
-                tracing::warn!(uri = %uri, "failed to delete record: {e}");
+                Ok(_) => {
+                    log_event(
+                        db,
+                        EventLog {
+                            event_type: "record.deleted".to_string(),
+                            severity: Severity::Info,
+                            actor_did: None,
+                            subject: Some(uri.clone()),
+                            detail: serde_json::json!({
+                                "collection": record.collection,
+                                "did": record.did,
+                                "rkey": record.rkey,
+                            }),
+                        },
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    tracing::warn!(uri = %uri, "failed to delete record: {e}");
+                    log_event(
+                        db,
+                        EventLog {
+                            event_type: "record.deleted".to_string(),
+                            severity: Severity::Error,
+                            actor_did: None,
+                            subject: Some(uri.clone()),
+                            detail: serde_json::json!({
+                                "collection": record.collection,
+                                "did": record.did,
+                                "rkey": record.rkey,
+                                "error": e.to_string(),
+                            }),
+                        },
+                    )
+                    .await;
+                }
             }
         }
         _ => {}

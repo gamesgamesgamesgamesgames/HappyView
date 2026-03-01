@@ -136,6 +136,11 @@ async fn main() {
         state.collections_tx.clone(),
     );
 
+    tokio::spawn(happyview::event_log::spawn_retention_cleanup(
+        state.db.clone(),
+        state.config.event_log_retention_days,
+    ));
+
     let app = server::router(state);
     let addr = config.listen_addr();
 

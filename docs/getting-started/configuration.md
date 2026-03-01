@@ -14,6 +14,7 @@ HappyView is configured via environment variables. A `.env` file in the project 
 | `TAP_ADMIN_PASSWORD` | no | --- | Shared secret for authenticating with Tap's admin endpoints |
 | `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/backfill.md) repo discovery |
 | `PLC_URL` | no | `https://plc.directory` | [PLC directory](https://github.com/did-method-plc/did-method-plc) URL for DID resolution |
+| `EVENT_LOG_RETENTION_DAYS` | no | `30` | Number of days to keep event logs before automatic cleanup. Set to `0` to disable cleanup |
 | `RUST_LOG` | no | `happyview=debug,tower_http=debug` | Log filter (uses `tracing_subscriber::EnvFilter`) |
 
 ## Example `.env`
@@ -29,5 +30,6 @@ AIP_URL=http://localhost:8080
 # TAP_ADMIN_PASSWORD=your-secret-here
 # RELAY_URL=https://bsky.network
 # PLC_URL=https://plc.directory
+# EVENT_LOG_RETENTION_DAYS=30
 # RUST_LOG=happyview=debug,tower_http=debug
 ```

@@ -108,6 +108,7 @@ mod tests {
             relay_url: String::new(),
             plc_url: String::new(),
             static_dir: String::new(),
+            event_log_retention_days: 30,
         };
         let (tx, _) = watch::channel(vec![]);
         AppState {

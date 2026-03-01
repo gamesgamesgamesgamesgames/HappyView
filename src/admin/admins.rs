@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::AppState;
 use crate::error::AppError;
+use crate::event_log::{EventLog, Severity, log_event};
 
 use super::auth::AdminAuth;
 use super::types::{AdminSummary, CreateAdminBody};
@@ -12,7 +13,7 @@ use super::types::{AdminSummary, CreateAdminBody};
 /// POST /admin/admins — add a new admin by DID.
 pub(super) async fn create_admin(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: AdminAuth,
     Json(body): Json<CreateAdminBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let row: (String,) = sqlx::query_as("INSERT INTO admins (did) VALUES ($1) RETURNING id::text")
@@ -20,6 +21,18 @@ pub(super) async fn create_admin(
         .fetch_one(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to create admin: {e}")))?;
+
+    log_event(
+        &state.db,
+        EventLog {
+            event_type: "admin.created".to_string(),
+            severity: Severity::Info,
+            actor_did: Some(auth.did.clone()),
+            subject: Some(body.did.clone()),
+            detail: serde_json::json!({}),
+        },
+    )
+    .await;
 
     Ok((
         StatusCode::CREATED,
@@ -64,7 +77,7 @@ pub(super) async fn list_admins(
 /// DELETE /admin/admins/:id — remove an admin.
 pub(super) async fn delete_admin(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: AdminAuth,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
     let result = sqlx::query("DELETE FROM admins WHERE id::text = $1")
@@ -76,6 +89,18 @@ pub(super) async fn delete_admin(
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("admin '{id}' not found")));
     }
+
+    log_event(
+        &state.db,
+        EventLog {
+            event_type: "admin.deleted".to_string(),
+            severity: Severity::Info,
+            actor_did: Some(auth.did.clone()),
+            subject: Some(id.to_string()),
+            detail: serde_json::json!({}),
+        },
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }

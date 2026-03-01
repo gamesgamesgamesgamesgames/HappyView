@@ -1,0 +1,96 @@
+# Event Logs
+
+HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, admin actions, backfill jobs, and Tap connectivity. Events are stored in a Postgres table and queryable via the [admin API](../reference/admin-api.md#event-logs).
+
+## Event types
+
+Events follow a `category.action` naming convention. Each event has a severity level (`info`, `warn`, or `error`), an optional `actor_did` (the user who triggered it), an optional `subject` (what was affected), and a `detail` JSON object with event-specific data.
+
+### Lexicon events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `lexicon.created` | info | Lexicon NSID | `revision`, `has_script`, `source` |
+| `lexicon.updated` | info | Lexicon NSID | `revision`, `has_script`, `source` |
+| `lexicon.deleted` | info | Lexicon NSID | — |
+
+Logged when lexicons are uploaded, updated, or deleted via the [admin API](../reference/admin-api.md#lexicons). The `actor_did` is the admin who performed the action.
+
+### Record events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `record.created` | info | Record AT URI | `collection`, `did`, `rkey` |
+| `record.deleted` | info | Record AT URI | `collection`, `did`, `rkey` |
+
+Logged when records are received from Tap and stored or removed from the local database. These are system-triggered events (`actor_did` is null). If a database error occurs during the operation, the same event type is logged with `error` severity and the error message is included in the detail.
+
+### Script events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `script.executed` | info | Method NSID | `method`, `caller_did`, `duration_ms` |
+| `script.error` | error | Method NSID | `error`, `script_source`, `input`, `caller_did`, `method` |
+
+Logged when Lua scripts run for XRPC query or procedure endpoints. Script errors capture the full context needed to reproduce and debug the issue: the error message, the complete Lua script source, the input that triggered it, and the caller's DID.
+
+:::note
+For query scripts (unauthenticated), `caller_did` and `input` are omitted from the detail since queries don't have an authenticated user or request body.
+:::
+
+### Admin events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `admin.created` | info | New admin DID | — |
+| `admin.deleted` | info | Removed admin ID | — |
+| `admin.bootstrapped` | info | Bootstrapped admin DID | — |
+
+The `admin.bootstrapped` event is logged when the first user is auto-promoted to admin (see [Auth - Auto-bootstrap](../reference/admin-api.md#auth)).
+
+### Backfill events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `backfill.started` | info | Collection NSID | `job_id` |
+| `backfill.completed` | info | Collection NSID | `job_id`, `total_repos` |
+| `backfill.failed` | error | Collection NSID | `job_id`, `error` |
+
+See [Backfill](backfill.md) for background on backfill jobs.
+
+### Tap events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `tap.connected` | info | — | `url` |
+| `tap.disconnected` | warn | — | `reason` |
+
+Logged when the WebSocket connection to [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) is established or lost.
+
+## Querying events
+
+Use the admin API to query event logs with filters:
+
+```sh
+# Get all errors
+curl "http://localhost:3000/admin/events?severity=error" -H "$AUTH"
+
+# Get script errors for a specific lexicon
+curl "http://localhost:3000/admin/events?event_type=script.error&subject=com.example.feed.like" -H "$AUTH"
+
+# Get all lexicon-related events
+curl "http://localhost:3000/admin/events?category=lexicon" -H "$AUTH"
+
+# Paginate through results
+curl "http://localhost:3000/admin/events?limit=20&cursor=2026-03-01T11:59:00Z" -H "$AUTH"
+```
+
+See the [Admin API reference](../reference/admin-api.md#list-event-logs) for full parameter documentation.
+
+## Retention
+
+Event logs are automatically cleaned up based on the `EVENT_LOG_RETENTION_DAYS` environment variable (default: 30 days). A background task runs hourly to delete events older than the configured retention period.
+
+Set `EVENT_LOG_RETENTION_DAYS=0` to disable automatic cleanup and keep logs indefinitely.
+
+See [Configuration](../getting-started/configuration.md) for all environment variables.
