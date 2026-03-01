@@ -41,32 +41,21 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
-            >
-              <Link href="/">
-                <Image
-                  src="/logo.light.png"
-                  alt="HappyView"
-                  width={140}
-                  height={48}
-                  className="block dark:hidden"
-                />
-                <Image
-                  src="/logo.dark.png"
-                  alt="HappyView"
-                  width={140}
-                  height={48}
-                  className="hidden dark:block"
-                />
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarHeader className="p-4">
+        <Image
+          src="/logo.light.png"
+          alt="HappyView"
+          width={140}
+          height={48}
+          className="block dark:hidden"
+        />
+        <Image
+          src="/logo.dark.png"
+          alt="HappyView"
+          width={140}
+          height={48}
+          className="hidden dark:block"
+        />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
