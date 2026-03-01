@@ -4,12 +4,15 @@ use axum::http::request::Parts;
 use crate::AppState;
 use crate::auth::middleware::Claims;
 use crate::error::AppError;
+use crate::event_log::{EventLog, Severity, log_event};
 
 /// Axum extractor for admin auth. Validates the Bearer token via AIP OAuth
 /// (same as `Claims`), then checks if the returned DID exists in the `admins`
 /// table. If no admins exist yet, the first authenticated user is
 /// auto-bootstrapped as the initial admin.
-pub struct AdminAuth;
+pub struct AdminAuth {
+    pub did: String,
+}
 
 impl FromRequestParts<AppState> for AdminAuth {
     type Rejection = AppError;
@@ -37,6 +40,18 @@ impl FromRequestParts<AppState> for AdminAuth {
                 .map_err(|e| AppError::Internal(format!("auto-bootstrap admin failed: {e}")))?;
 
             tracing::info!(did = %did, "auto-bootstrapped first admin");
+
+            log_event(
+                &state.db,
+                EventLog {
+                    event_type: "admin.bootstrapped".to_string(),
+                    severity: Severity::Info,
+                    actor_did: None,
+                    subject: Some(did.clone()),
+                    detail: serde_json::json!({}),
+                },
+            )
+            .await;
         }
 
         // Look up the DID in the admins table.
@@ -59,6 +74,6 @@ impl FromRequestParts<AppState> for AdminAuth {
                 .await;
         });
 
-        Ok(AdminAuth)
+        Ok(AdminAuth { did })
     }
 }

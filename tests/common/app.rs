@@ -41,6 +41,7 @@ impl TestApp {
             relay_url: mock_url.clone(),
             plc_url: mock_url.clone(),
             static_dir: "./web/out".into(),
+            event_log_retention_days: 30,
         };
 
         // Seed the admin DID directly so tests don't rely on auto-bootstrap.

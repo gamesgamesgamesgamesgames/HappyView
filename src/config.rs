@@ -13,6 +13,7 @@ pub struct Config {
     pub relay_url: String,
     pub plc_url: String,
     pub static_dir: String,
+    pub event_log_retention_days: u32,
 }
 
 impl Config {
@@ -32,6 +33,10 @@ impl Config {
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
             plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
             static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| "./web/out".into()),
+            event_log_retention_days: std::env::var("EVENT_LOG_RETENTION_DAYS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30),
         }
     }
 
@@ -57,6 +62,7 @@ mod tests {
             "TAP_ADMIN_PASSWORD",
             "RELAY_URL",
             "PLC_URL",
+            "EVENT_LOG_RETENTION_DAYS",
         ] {
             unsafe {
                 env::remove_var(key);
@@ -84,6 +90,7 @@ mod tests {
             relay_url: String::new(),
             plc_url: String::new(),
             static_dir: String::new(),
+            event_log_retention_days: 30,
         };
         assert_eq!(
             config.listen_addr(),
@@ -157,5 +164,40 @@ mod tests {
             env::set_var("DATABASE_URL", "postgres://localhost/test");
         }
         Config::from_env();
+    }
+
+    #[test]
+    #[serial]
+    fn default_event_log_retention_days() {
+        unsafe {
+            clear_env();
+            set_required_env();
+        }
+        let config = Config::from_env();
+        assert_eq!(config.event_log_retention_days, 30);
+    }
+
+    #[test]
+    #[serial]
+    fn custom_event_log_retention_days() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("EVENT_LOG_RETENTION_DAYS", "7");
+        }
+        let config = Config::from_env();
+        assert_eq!(config.event_log_retention_days, 7);
+    }
+
+    #[test]
+    #[serial]
+    fn zero_event_log_retention_days_disables_cleanup() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("EVENT_LOG_RETENTION_DAYS", "0");
+        }
+        let config = Config::from_env();
+        assert_eq!(config.event_log_retention_days, 0);
     }
 }

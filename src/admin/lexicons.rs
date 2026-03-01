@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::AppState;
 use crate::error::AppError;
+use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 
 use super::auth::AdminAuth;
@@ -20,7 +21,7 @@ async fn notify_collections(state: &AppState) {
 /// POST /admin/lexicons — upload (upsert) a lexicon.
 pub(super) async fn upload_lexicon(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: AdminAuth,
     Json(body): Json<UploadLexiconBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     // Validate basic structure
@@ -65,6 +66,7 @@ pub(super) async fn upload_lexicon(
     }
 
     let action_str = action.to_optional_str();
+    let has_script = body.script.is_some();
 
     // Upsert into database
     let row: (i32,) = sqlx::query_as(
@@ -116,6 +118,27 @@ pub(super) async fn upload_lexicon(
     } else {
         StatusCode::OK
     };
+
+    let event_type = if status == StatusCode::CREATED {
+        "lexicon.created"
+    } else {
+        "lexicon.updated"
+    };
+    log_event(
+        &state.db,
+        EventLog {
+            event_type: event_type.to_string(),
+            severity: Severity::Info,
+            actor_did: Some(auth.did.clone()),
+            subject: Some(id.clone()),
+            detail: serde_json::json!({
+                "revision": revision,
+                "has_script": has_script,
+                "source": "manual",
+            }),
+        },
+    )
+    .await;
 
     Ok((
         status,
@@ -254,7 +277,7 @@ pub(super) async fn get_lexicon(
 /// DELETE /admin/lexicons/:id — remove a lexicon.
 pub(super) async fn delete_lexicon(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: AdminAuth,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
     let result = sqlx::query("DELETE FROM lexicons WHERE id = $1")
@@ -269,6 +292,18 @@ pub(super) async fn delete_lexicon(
 
     state.lexicons.remove(&id).await;
     notify_collections(&state).await;
+
+    log_event(
+        &state.db,
+        EventLog {
+            event_type: "lexicon.deleted".to_string(),
+            severity: Severity::Info,
+            actor_did: Some(auth.did.clone()),
+            subject: Some(id.clone()),
+            detail: serde_json::json!({}),
+        },
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }

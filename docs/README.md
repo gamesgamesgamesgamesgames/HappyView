@@ -30,3 +30,4 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - [Quickstart](getting-started/deployment/railway.md): Deploy HappyView on Railway or run it locally
 - [Lexicons](guides/lexicons.md): Upload lexicon schemas and start indexing records
 - [Lua Scripting](guides/scripting.md): Write custom query and procedure logic
+- [Event Logs](guides/event-logs.md): Monitor system activity, debug script errors, and audit admin actions

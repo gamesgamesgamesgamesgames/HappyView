@@ -84,6 +84,11 @@ const sidebars: SidebarsConfig = {
           id: "guides/backfill",
           label: "Backfill",
         },
+        {
+          type: "doc",
+          id: "guides/event-logs",
+          label: "Event Logs",
+        },
       ],
     },
     {

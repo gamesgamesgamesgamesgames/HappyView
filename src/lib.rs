@@ -3,6 +3,7 @@ pub mod aip;
 pub mod auth;
 pub mod config;
 pub mod error;
+pub mod event_log;
 pub mod lexicon;
 pub mod lua;
 pub mod profile;

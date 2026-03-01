@@ -6,6 +6,7 @@ use serde_json::Value;
 
 use crate::AppState;
 use crate::error::AppError;
+use crate::event_log::{EventLog, Severity, log_event};
 use crate::tap;
 
 use super::auth::AdminAuth;
@@ -81,7 +82,7 @@ async fn list_repos_by_collection(
 /// POST /admin/backfill — create a backfill job, discover repos, and add them to Tap.
 pub(super) async fn create_backfill(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    admin: AdminAuth,
     Json(body): Json<CreateBackfillBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     // Create a backfill_jobs record for tracking/audit.
@@ -102,6 +103,20 @@ pub(super) async fn create_backfill(
     )
     .bind(&job_id)
     .execute(&state.db)
+    .await;
+
+    log_event(
+        &state.db,
+        EventLog {
+            event_type: "backfill.started".to_string(),
+            severity: Severity::Info,
+            actor_did: Some(admin.did.clone()),
+            subject: body.collection.clone(),
+            detail: serde_json::json!({
+                "job_id": job_id.clone(),
+            }),
+        },
+    )
     .await;
 
     // Determine target collections.
@@ -202,6 +217,21 @@ pub(super) async fn create_backfill(
                 .execute(&state.db)
                 .await;
 
+                log_event(
+                    &state.db,
+                    EventLog {
+                        event_type: "backfill.failed".to_string(),
+                        severity: Severity::Error,
+                        actor_did: None,
+                        subject: body.collection.clone(),
+                        detail: serde_json::json!({
+                            "job_id": job_id.clone(),
+                            "error": e,
+                        }),
+                    },
+                )
+                .await;
+
                 return Ok((
                     StatusCode::CREATED,
                     Json(serde_json::json!({
@@ -221,6 +251,21 @@ pub(super) async fn create_backfill(
     .bind(&job_id)
     .bind(total_repos)
     .execute(&state.db)
+    .await;
+
+    log_event(
+        &state.db,
+        EventLog {
+            event_type: "backfill.completed".to_string(),
+            severity: Severity::Info,
+            actor_did: None,
+            subject: body.collection.clone(),
+            detail: serde_json::json!({
+                "job_id": job_id.clone(),
+                "total_repos": total_repos,
+            }),
+        },
+    )
     .await;
 
     Ok((
