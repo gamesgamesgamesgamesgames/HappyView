@@ -121,6 +121,31 @@ pub(super) async fn create_backfill(
 
     // Determine target collections.
     let collections: Vec<String> = if let Some(ref col) = body.collection {
+        // Validate that a record-type lexicon exists for the explicit collection.
+        let lexicon_exists: bool = state
+            .lexicons
+            .get(col)
+            .await
+            .is_some_and(|lex| lex.lexicon_type == crate::lexicon::LexiconType::Record);
+        if !lexicon_exists {
+            let error = format!("no record-type lexicon registered for collection '{col}'");
+            let _ = sqlx::query(
+                "UPDATE backfill_jobs SET status = 'failed', completed_at = NOW(), error = $2 WHERE id::text = $1",
+            )
+            .bind(&job_id)
+            .bind(&error)
+            .execute(&state.db)
+            .await;
+
+            return Ok((
+                StatusCode::CREATED,
+                Json(serde_json::json!({
+                    "id": job_id,
+                    "status": "failed",
+                    "error": error,
+                })),
+            ));
+        }
         vec![col.clone()]
     } else {
         let rows: Vec<(String,)> = sqlx::query_as(
