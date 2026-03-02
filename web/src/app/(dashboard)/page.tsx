@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
-import { getStats, type StatsResponse } from "@/lib/api";
+import { getStats } from "@/lib/api";
+import type { StatsResponse } from "@/types/stats";
 import { SiteHeader } from "@/components/site-header";
 import {
   Card,

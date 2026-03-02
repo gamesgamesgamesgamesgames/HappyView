@@ -16,9 +16,9 @@ import {
   getAdminRecords,
   deleteRecord,
   deleteCollectionRecords,
-  type CollectionStat,
-  type AdminRecord,
 } from "@/lib/api";
+import type { CollectionStat } from "@/types/stats";
+import type { AdminRecord } from "@/types/records";
 import {
   AlertDialog,
   AlertDialogAction,

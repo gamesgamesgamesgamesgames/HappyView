@@ -23,8 +23,8 @@ import {
   deleteLexicon,
   deleteNetworkLexicon,
   getLexicons,
-  type LexiconSummary,
 } from "@/lib/api";
+import type { LexiconSummary } from "@/types/lexicons";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";

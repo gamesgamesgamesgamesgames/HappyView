@@ -10,8 +10,8 @@ import {
   deleteNetworkLexicon,
   getLexicon,
   uploadLexicon,
-  type LexiconDetail,
 } from "@/lib/api";
+import type { LexiconDetail } from "@/types/lexicons";
 import { procedureScript, queryScript } from "@/lib/lua-templates";
 import { useLuaCompletions } from "@/hooks/use-lua-completions";
 import { SiteHeader } from "@/components/site-header";
