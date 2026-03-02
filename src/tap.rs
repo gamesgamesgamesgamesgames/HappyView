@@ -315,6 +315,19 @@ async fn run(
     ) = tokio_tungstenite::connect_async(request).await?;
     tracing::info!("connected to tap");
 
+    // Re-sync collection filters on every (re)connect so Tap knows which
+    // collections to track, even if Tap was restarted since the initial sync.
+    {
+        let collections = collections_rx.borrow().clone();
+        let mut wanted = collections;
+        if !wanted.contains(&LEXICON_SCHEMA_COLLECTION.to_string()) {
+            wanted.push(LEXICON_SCHEMA_COLLECTION.to_string());
+        }
+        if let Err(e) = sync_collections(http, tap_url, tap_admin_password, &wanted).await {
+            tracing::warn!("failed to sync collections to tap on reconnect: {e}");
+        }
+    }
+
     log_event(
         db,
         EventLog {
