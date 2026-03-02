@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ColumnDef,
+  type ColumnFiltersState,
   type VisibilityState,
   getCoreRowModel,
+  getFilteredRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   useReactTable,
 } from "@tanstack/react-table";
 
@@ -12,42 +16,18 @@ import { useAuth } from "@/lib/auth-context";
 import { getEvents, type EventLogEntry } from "@/lib/api";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
+import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { CodeBlock } from "@/components/code-block";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-const CATEGORIES = [
-  { label: "All", value: "all" },
-  { label: "Lexicon", value: "lexicon" },
-  { label: "Record", value: "record" },
-  { label: "Script", value: "script" },
-  { label: "Admin", value: "admin" },
-  { label: "Backfill", value: "backfill" },
-  { label: "Tap", value: "tap" },
-];
-
-const SEVERITIES = [
-  { label: "All", value: "all" },
-  { label: "Info", value: "info" },
-  { label: "Warn", value: "warn" },
-  { label: "Error", value: "error" },
-];
 
 function severityBadge(severity: string) {
   switch (severity) {
@@ -84,25 +64,51 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(false);
   const [viewEvent, setViewEvent] = useState<EventLogEntry | null>(null);
 
-  // Filters
-  const [category, setCategory] = useState("all");
-  const [severity, setSeverity] = useState("all");
-  const [subject, setSubject] = useState("");
-  const subjectDebounce = useRef<ReturnType<typeof setTimeout>>(null);
-
   // Pagination
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+
+  // Filters — driven by TanStack column filter state
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  // Debounce subject filter to avoid firing on every keystroke
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [debouncedFilters, setDebouncedFilters] =
+    useState<ColumnFiltersState>(columnFilters);
+
+  useEffect(() => {
+    const subjectFilter = columnFilters.find((f) => f.id === "subject");
+    const prevSubjectFilter = debouncedFilters.find((f) => f.id === "subject");
+    const subjectChanged = subjectFilter?.value !== prevSubjectFilter?.value;
+
+    if (subjectChanged) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        setDebouncedFilters(columnFilters);
+      }, 300);
+    } else {
+      setDebouncedFilters(columnFilters);
+    }
+  }, [columnFilters]);
 
   const fetchEvents = useCallback(
     async (cursor?: string) => {
       setLoading(true);
       setError(null);
       try {
+        const categoryFilter = debouncedFilters.find(
+          (f) => f.id === "event_type",
+        )?.value as string[] | undefined;
+        const severityFilter = debouncedFilters.find((f) => f.id === "severity")
+          ?.value as string[] | undefined;
+        const subjectFilter = debouncedFilters.find((f) => f.id === "subject")
+          ?.value as string | undefined;
+
         const data = await getEvents(getToken, {
-          category: category !== "all" ? category : undefined,
-          severity: severity !== "all" ? severity : undefined,
-          subject: subject || undefined,
+          category: categoryFilter?.[0] || undefined,
+          severity: severityFilter?.[0] || undefined,
+          subject: subjectFilter || undefined,
           cursor,
           limit: 50,
         });
@@ -116,7 +122,7 @@ export default function EventsPage() {
         setLoading(false);
       }
     },
-    [getToken, category, severity, subject],
+    [getToken, debouncedFilters],
   );
 
   // Fetch on mount and when filters change (reset to first page)
@@ -131,13 +137,6 @@ export default function EventsPage() {
     const interval = setInterval(() => fetchEvents(), 5000);
     return () => clearInterval(interval);
   }, [fetchEvents, cursorStack.length]);
-
-  function handleSubjectChange(value: string) {
-    if (subjectDebounce.current) clearTimeout(subjectDebounce.current);
-    subjectDebounce.current = setTimeout(() => {
-      setSubject(value);
-    }, 300);
-  }
 
   function handleNext() {
     if (!nextCursor) return;
@@ -154,37 +153,8 @@ export default function EventsPage() {
     fetchEvents(prevCursor);
   }
 
-  function handleReset() {
-    setCategory("all");
-    setSeverity("all");
-    setSubject("");
-  }
-
-  const hasFilters = category !== "all" || severity !== "all" || subject !== "";
-
   const columns = useMemo<ColumnDef<EventLogEntry>[]>(
     () => [
-      {
-        id: "severity",
-        accessorKey: "severity",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} label="Severity" />
-        ),
-        cell: ({ row }) => severityBadge(row.original.severity),
-        enableSorting: false,
-        enableHiding: false,
-      },
-      {
-        id: "event_type",
-        accessorKey: "event_type",
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} label="Event Type" />
-        ),
-        cell: ({ row }) => (
-          <span className="font-mono text-sm">{row.original.event_type}</span>
-        ),
-        enableSorting: false,
-      },
       {
         id: "subject",
         accessorKey: "subject",
@@ -199,7 +169,72 @@ export default function EventsPage() {
             {row.original.subject ?? "--"}
           </span>
         ),
+        filterFn: "includesString",
+        enableColumnFilter: true,
         enableSorting: false,
+        meta: {
+          label: "Subject",
+          placeholder: "Filter by subject...",
+          variant: "text",
+        },
+      },
+      {
+        id: "severity",
+        accessorKey: "severity",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Severity" />
+        ),
+        cell: ({ row }) => severityBadge(row.original.severity),
+        filterFn: (row, columnId, filterValue) => {
+          if (!Array.isArray(filterValue) || filterValue.length === 0)
+            return true;
+          return filterValue.includes(row.getValue(columnId));
+        },
+        enableColumnFilter: true,
+        enableSorting: false,
+        enableHiding: false,
+        meta: {
+          label: "Severity",
+          variant: "select",
+          options: [
+            { label: "Info", value: "info" },
+            { label: "Warn", value: "warn" },
+            { label: "Error", value: "error" },
+          ],
+        },
+      },
+      {
+        id: "event_type",
+        accessorKey: "event_type",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Event Type" />
+        ),
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">{row.original.event_type}</span>
+        ),
+        filterFn: (row, columnId, filterValue) => {
+          if (!Array.isArray(filterValue) || filterValue.length === 0)
+            return true;
+          const eventType = row.getValue(columnId) as string;
+          return filterValue.some(
+            (cat: string) =>
+              eventType === cat || eventType.startsWith(cat + "."),
+          );
+        },
+        enableColumnFilter: true,
+        enableSorting: false,
+        meta: {
+          label: "Category",
+          variant: "select",
+          options: [
+            { label: "Lexicon", value: "lexicon" },
+            { label: "Record", value: "record" },
+            { label: "Script", value: "script" },
+            { label: "Admin", value: "admin" },
+            { label: "Backfill", value: "backfill" },
+            { label: "Tap", value: "tap" },
+          ],
+        },
       },
       {
         id: "actor_did",
@@ -237,14 +272,19 @@ export default function EventsPage() {
     [],
   );
 
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-
   const table = useReactTable({
     data: events,
     columns,
-    state: { columnVisibility },
+    state: { columnFilters, columnVisibility },
+    defaultColumn: {
+      enableColumnFilter: false,
+    },
+    onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     getRowId: (row) => row.id,
   });
 
@@ -259,51 +299,7 @@ export default function EventsPage() {
           showPagination={false}
           onRowClick={setViewEvent}
         >
-          <div className="flex w-full flex-wrap items-center gap-2 p-1">
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger className="h-8 w-40 text-sm">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={severity} onValueChange={setSeverity}>
-              <SelectTrigger className="h-8 w-32 text-sm">
-                <SelectValue placeholder="Severity" />
-              </SelectTrigger>
-              <SelectContent>
-                {SEVERITIES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Input
-              placeholder="Filter by subject..."
-              className="h-8 w-64 text-sm"
-              defaultValue={subject}
-              onChange={(e) => handleSubjectChange(e.target.value)}
-            />
-
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8"
-                onClick={handleReset}
-              >
-                Reset
-              </Button>
-            )}
-          </div>
+          <DataTableToolbar table={table} />
         </DataTable>
 
         <div className="flex w-full items-center justify-between gap-4 overflow-auto p-1">
