@@ -1,5 +1,23 @@
 import { createDpopProof, setDpopNonce } from "./dpop"
 
+import type { StatsResponse } from "@/types/stats"
+import type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
+import type { NetworkLexiconSummary } from "@/types/network-lexicons"
+import type { TapStatsResponse } from "@/types/tap"
+import type { BackfillJob } from "@/types/backfill"
+import type { AdminSummary } from "@/types/admins"
+import type { AdminListRecordsResponse } from "@/types/records"
+import type { EventsListResponse } from "@/types/events"
+
+export type { CollectionStat, StatsResponse } from "@/types/stats"
+export type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
+export type { NetworkLexiconSummary } from "@/types/network-lexicons"
+export type { TapStatsResponse } from "@/types/tap"
+export type { BackfillJob } from "@/types/backfill"
+export type { AdminSummary } from "@/types/admins"
+export type { AdminRecord, AdminListRecordsResponse } from "@/types/records"
+export type { EventLogEntry, EventsListResponse } from "@/types/events"
+
 // The DPoP proof for admin API calls must target AIP's userinfo URL,
 // because the backend forwards the proof to AIP for token validation.
 // Set at runtime via ConfigProvider.
@@ -68,41 +86,11 @@ async function apiFetch<T = unknown>(
 }
 
 // Stats
-export interface CollectionStat {
-  collection: string
-  count: number
-}
-
-export interface StatsResponse {
-  total_records: number
-  collections: CollectionStat[]
-}
-
 export function getStats(getToken: () => Promise<string | null>) {
   return apiFetch<StatsResponse>("/admin/stats", getToken)
 }
 
 // Lexicons
-export interface LexiconSummary {
-  id: string
-  revision: number
-  lexicon_type: string
-  backfill: boolean
-  action: string | null
-  target_collection: string | null
-  has_script: boolean
-  source: string
-  authority_did: string | null
-  last_fetched_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface LexiconDetail extends LexiconSummary {
-  lexicon_json: Record<string, unknown>
-  script: string | null
-}
-
 export function getLexicons(getToken: () => Promise<string | null>) {
   return apiFetch<LexiconSummary[]>("/admin/lexicons", getToken)
 }
@@ -137,14 +125,6 @@ export function deleteLexicon(getToken: () => Promise<string | null>, id: string
 }
 
 // Network Lexicons
-export interface NetworkLexiconSummary {
-  nsid: string
-  authority_did: string
-  target_collection: string | null
-  last_fetched_at: string | null
-  created_at: string
-}
-
 export function getNetworkLexicons(getToken: () => Promise<string | null>) {
   return apiFetch<NetworkLexiconSummary[]>("/admin/network-lexicons", getToken)
 }
@@ -172,31 +152,11 @@ export function deleteNetworkLexicon(
 }
 
 // Tap Stats
-export interface TapStatsResponse {
-  repo_count: number
-  record_count: number
-  outbox_buffer: number
-}
-
 export function getTapStats(getToken: () => Promise<string | null>) {
   return apiFetch<TapStatsResponse>("/admin/tap/stats", getToken)
 }
 
 // Backfill
-export interface BackfillJob {
-  id: string
-  collection: string | null
-  did: string | null
-  status: string
-  total_repos: number | null
-  processed_repos: number | null
-  total_records: number | null
-  error: string | null
-  started_at: string | null
-  completed_at: string | null
-  created_at: string
-}
-
 export function getBackfillJobs(getToken: () => Promise<string | null>) {
   return apiFetch<BackfillJob[]>("/admin/backfill/status", getToken)
 }
@@ -212,13 +172,6 @@ export function createBackfillJob(
 }
 
 // Admins
-export interface AdminSummary {
-  id: string
-  did: string
-  created_at: string
-  last_used_at: string | null
-}
-
 export function getAdmins(getToken: () => Promise<string | null>) {
   return apiFetch<AdminSummary[]>("/admin/admins", getToken)
 }
@@ -254,17 +207,6 @@ export async function xrpcQuery<T = unknown>(
 }
 
 // Admin records browsing
-export interface AdminRecord {
-  uri: string
-  did: string
-  record: Record<string, unknown>
-}
-
-export interface AdminListRecordsResponse {
-  records: AdminRecord[]
-  cursor?: string
-}
-
 export function getAdminRecords(
   getToken: () => Promise<string | null>,
   collection: string,
@@ -299,5 +241,29 @@ export function deleteCollectionRecords(
     `/admin/records/collection?${new URLSearchParams({ collection })}`,
     getToken,
     { method: "DELETE" },
+  )
+}
+
+// Event Logs
+export function getEvents(
+  getToken: () => Promise<string | null>,
+  params?: {
+    category?: string
+    severity?: string
+    subject?: string
+    cursor?: string
+    limit?: number
+  }
+) {
+  const searchParams = new URLSearchParams()
+  if (params?.category) searchParams.set("category", params.category)
+  if (params?.severity) searchParams.set("severity", params.severity)
+  if (params?.subject) searchParams.set("subject", params.subject)
+  if (params?.cursor) searchParams.set("cursor", params.cursor)
+  if (params?.limit) searchParams.set("limit", String(params.limit))
+  const qs = searchParams.toString()
+  return apiFetch<EventsListResponse>(
+    `/admin/events${qs ? `?${qs}` : ""}`,
+    getToken
   )
 }

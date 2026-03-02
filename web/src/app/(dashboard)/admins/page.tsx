@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
-import { addAdmin, deleteAdmin, getAdmins, type AdminSummary } from "@/lib/api";
+import { addAdmin, deleteAdmin, getAdmins } from "@/lib/api";
+import type { AdminSummary } from "@/types/admins";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";

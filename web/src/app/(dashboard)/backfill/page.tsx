@@ -8,9 +8,9 @@ import {
   getBackfillJobs,
   getLexicons,
   getTapStats,
-  type BackfillJob,
-  type TapStatsResponse,
 } from "@/lib/api";
+import type { BackfillJob } from "@/types/backfill";
+import type { TapStatsResponse } from "@/types/tap";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import {

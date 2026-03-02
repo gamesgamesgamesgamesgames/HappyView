@@ -5,6 +5,7 @@ import {
   IconFileDescription,
   IconDatabase,
   IconTable,
+  IconClipboardList,
   IconUsers,
   IconLogout,
 } from "@tabler/icons-react"
@@ -30,6 +31,7 @@ const navItems = [
   { title: "Lexicons", url: "/lexicons", icon: IconFileDescription },
   { title: "Backfill", url: "/backfill", icon: IconDatabase },
   { title: "Records", url: "/records", icon: IconTable },
+  { title: "Event Logs", url: "/events", icon: IconClipboardList },
   { title: "Admins", url: "/admins", icon: IconUsers },
 ]
 
