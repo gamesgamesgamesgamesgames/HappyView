@@ -9,8 +9,7 @@ import {
 } from "@tanstack/react-table";
 
 import { useAuth } from "@/lib/auth-context";
-import { getEvents } from "@/lib/api";
-import type { EventLogEntry } from "@/types/events";
+import { getEvents, type EventLogEntry } from "@/lib/api";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { CodeBlock } from "@/components/code-block";
@@ -34,7 +33,7 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const CATEGORIES = [
-  { label: "All", value: "" },
+  { label: "All", value: "all" },
   { label: "Lexicon", value: "lexicon" },
   { label: "Record", value: "record" },
   { label: "Script", value: "script" },
@@ -44,7 +43,7 @@ const CATEGORIES = [
 ];
 
 const SEVERITIES = [
-  { label: "All", value: "" },
+  { label: "All", value: "all" },
   { label: "Info", value: "info" },
   { label: "Warn", value: "warn" },
   { label: "Error", value: "error" },
@@ -86,8 +85,8 @@ export default function EventsPage() {
   const [viewEvent, setViewEvent] = useState<EventLogEntry | null>(null);
 
   // Filters
-  const [category, setCategory] = useState("");
-  const [severity, setSeverity] = useState("");
+  const [category, setCategory] = useState("all");
+  const [severity, setSeverity] = useState("all");
   const [subject, setSubject] = useState("");
   const subjectDebounce = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -101,8 +100,8 @@ export default function EventsPage() {
       setError(null);
       try {
         const data = await getEvents(getToken, {
-          category: category || undefined,
-          severity: severity || undefined,
+          category: category !== "all" ? category : undefined,
+          severity: severity !== "all" ? severity : undefined,
           subject: subject || undefined,
           cursor,
           limit: 50,
@@ -156,12 +155,12 @@ export default function EventsPage() {
   }
 
   function handleReset() {
-    setCategory("");
-    setSeverity("");
+    setCategory("all");
+    setSeverity("all");
     setSubject("");
   }
 
-  const hasFilters = category !== "" || severity !== "" || subject !== "";
+  const hasFilters = category !== "all" || severity !== "all" || subject !== "";
 
   const columns = useMemo<ColumnDef<EventLogEntry>[]>(
     () => [
