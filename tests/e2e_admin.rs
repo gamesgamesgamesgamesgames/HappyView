@@ -455,7 +455,11 @@ async fn backfill_create_job() {
     });
     app.router
         .clone()
-        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &lexicon_body))
+        .oneshot(admin_post(
+            "/admin/lexicons",
+            &app.admin_token,
+            &lexicon_body,
+        ))
         .await
         .unwrap();
 
