@@ -447,7 +447,19 @@ async fn stats_with_seeded_records() {
 async fn backfill_create_job() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
-    let body = json!({ "collection": "test.collection" });
+
+    // Register a record-type lexicon first (required by backfill validation).
+    let lexicon_body = json!({
+        "lexicon_json": fixtures::game_record_lexicon(),
+        "backfill": true
+    });
+    app.router
+        .clone()
+        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &lexicon_body))
+        .await
+        .unwrap();
+
+    let body = json!({ "collection": "games.gamesgamesgamesgames.game" });
 
     let resp = app
         .router
