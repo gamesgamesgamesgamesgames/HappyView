@@ -10,7 +10,51 @@ env:
   SQLX_OFFLINE: true
 
 jobs:
-  test:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-build-${{ runner.os }}-
+
+      - name: Build all targets
+        run: cargo build --all-targets
+
+  unit-tests:
+    needs: [build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore Rust build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-build-${{ runner.os }}-
+
+      - name: Run unit tests
+        run: cargo test --lib
+
+  e2e-tests:
+    needs: [build]
     runs-on: ubuntu-latest
 
     services:
@@ -32,6 +76,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Restore Rust build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-build-${{ runner.os }}-
+
+      - name: Run e2e tests
+        env:
+          TEST_DATABASE_URL: postgres://happyview:happyview@localhost:5432/happyview_test
+        run: cargo test --tests
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -41,45 +108,24 @@ jobs:
         working-directory: web
         run: npm ci && npm run build
 
-      - name: Cache Rust build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: rust-test-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            rust-test-${{ runner.os }}-
-
-      - name: Build
-        run: cargo build --all-targets
-
-      - name: Run unit tests
-        run: cargo test --lib
-
-      - name: Run e2e tests
-        env:
-          TEST_DATABASE_URL: postgres://happyview:happyview@localhost:5432/happyview_test
-        run: cargo test --tests
-
   lint:
+    needs: [build]
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache Rust build
-        uses: actions/cache@v4
+      - name: Restore Rust build cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-lint-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-lint-${{ runner.os }}-
+            rust-build-${{ runner.os }}-
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -89,7 +135,7 @@ jobs:
 
   release:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
-    needs: [test, lint]
+    needs: [unit-tests, e2e-tests, frontend, lint]
     runs-on: ubuntu-latest
     permissions:
       contents: write
