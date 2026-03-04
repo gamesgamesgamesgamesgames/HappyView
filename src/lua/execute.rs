@@ -662,3 +662,125 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<(), String> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::lexicon::LexiconRegistry;
+    use serde_json::json;
+    use tokio::sync::watch;
+
+    fn test_state() -> AppState {
+        let config = Config {
+            host: "127.0.0.1".into(),
+            port: 3000,
+            database_url: String::new(),
+            aip_url: String::new(),
+            aip_public_url: String::new(),
+            tap_url: String::new(),
+            tap_admin_password: None,
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            event_log_retention_days: 30,
+        };
+        let (tx, _) = watch::channel(vec![]);
+        AppState {
+            config,
+            http: reqwest::Client::new(),
+            db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
+            lexicons: LexiconRegistry::new(),
+            collections_tx: tx,
+        }
+    }
+
+    fn make_event<'a>(
+        state: &'a AppState,
+        script: &'a str,
+        action: &'a str,
+        record: Option<&'a Value>,
+    ) -> HookEvent<'a> {
+        HookEvent {
+            state,
+            lexicon_id: "test.lexicon",
+            script,
+            action,
+            uri: "at://did:plc:test/test.collection/rkey1",
+            did: "did:plc:test",
+            collection: "test.collection",
+            rkey: "rkey1",
+            record,
+        }
+    }
+
+    #[tokio::test]
+    async fn hook_runs_simple_script() {
+        let state = test_state();
+        let event = make_event(&state, "function handle() end", "create", None);
+        let result = run_hook_once(&event).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn hook_fails_on_missing_handle() {
+        let state = test_state();
+        let event = make_event(&state, "function other() end", "create", None);
+        let result = run_hook_once(&event).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("handle"), "expected handle error, got: {err}");
+    }
+
+    #[tokio::test]
+    async fn hook_fails_on_syntax_error() {
+        let state = test_state();
+        let event = make_event(&state, "function handle(", "create", None);
+        let result = run_hook_once(&event).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn hook_has_access_to_context_globals() {
+        let state = test_state();
+        let script = r#"
+            function handle()
+                if action ~= "create" then error("wrong action: " .. tostring(action)) end
+                if uri ~= "at://did:plc:test/test.collection/rkey1" then error("wrong uri") end
+                if did ~= "did:plc:test" then error("wrong did") end
+                if collection ~= "test.collection" then error("wrong collection") end
+                if rkey ~= "rkey1" then error("wrong rkey") end
+            end
+        "#;
+        let event = make_event(&state, script, "create", None);
+        let result = run_hook_once(&event).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn hook_has_access_to_record() {
+        let state = test_state();
+        let record = json!({"name": "Test"});
+        let script = r#"
+            function handle()
+                if record.name ~= "Test" then error("wrong name: " .. tostring(record.name)) end
+            end
+        "#;
+        let event = make_event(&state, script, "create", Some(&record));
+        let result = run_hook_once(&event).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn hook_record_nil_on_delete() {
+        let state = test_state();
+        let script = r#"
+            function handle()
+                if record ~= nil then error("expected nil record") end
+            end
+        "#;
+        let event = make_event(&state, script, "delete", None);
+        let result = run_hook_once(&event).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+    }
+}

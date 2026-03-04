@@ -402,3 +402,121 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     lua.globals().set("db", db_table)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::lexicon::LexiconRegistry;
+    use tokio::sync::watch;
+
+    fn test_state() -> AppState {
+        let config = Config {
+            host: "127.0.0.1".into(),
+            port: 3000,
+            database_url: String::new(),
+            aip_url: String::new(),
+            aip_public_url: String::new(),
+            tap_url: String::new(),
+            tap_admin_password: None,
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            event_log_retention_days: 30,
+        };
+        let (tx, _) = watch::channel(vec![]);
+        AppState {
+            config,
+            http: reqwest::Client::new(),
+            db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
+            lexicons: LexiconRegistry::new(),
+            collections_tx: tx,
+        }
+    }
+
+    fn setup(state: &AppState) -> Lua {
+        let lua = Lua::new();
+        register_db_api(&lua, Arc::new(state.clone())).unwrap();
+        lua
+    }
+
+    #[tokio::test]
+    async fn raw_rejects_non_select() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> = lua
+            .load(r#"return db.raw("DELETE FROM records")"#)
+            .eval_async()
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("only supports SELECT"),
+            "expected SELECT-only error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn raw_allows_select() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> =
+            lua.load(r#"return db.raw("SELECT 1")"#).eval_async().await;
+        // Should fail with a DB connection error, NOT a validation error
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            !err.contains("only supports SELECT"),
+            "should have passed validation but got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn query_rejects_invalid_sort_field() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> = lua
+            .load(r#"return db.query({ collection = "test", sort = "name; DROP TABLE" })"#)
+            .eval_async()
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid sort field"),
+            "expected sort field error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn query_rejects_invalid_sort_direction() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> = lua
+            .load(r#"return db.query({ collection = "test", sortDirection = "sideways" })"#)
+            .eval_async()
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid sortDirection"),
+            "expected sortDirection error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn query_accepts_valid_sort_direction() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> = lua
+            .load(r#"return db.query({ collection = "test", sortDirection = "asc" })"#)
+            .eval_async()
+            .await;
+        // Should fail with a DB connection error, NOT a validation error
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            !err.contains("invalid sortDirection"),
+            "should have passed validation but got: {err}"
+        );
+    }
+}

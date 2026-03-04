@@ -91,6 +91,57 @@ mod tests {
     }
 
     #[test]
+    fn procedure_context_sets_all_globals() {
+        let lua = create_sandbox().unwrap();
+        let input = json!({"key": "val"});
+        set_procedure_context(
+            &lua,
+            "com.example.doThing",
+            &input,
+            "did:plc:test",
+            "com.example.thing",
+        )
+        .unwrap();
+
+        let globals = lua.globals();
+        assert_eq!(
+            globals.get::<String>("method").unwrap(),
+            "com.example.doThing"
+        );
+        assert_eq!(globals.get::<String>("caller_did").unwrap(), "did:plc:test");
+        assert_eq!(
+            globals.get::<String>("collection").unwrap(),
+            "com.example.thing"
+        );
+
+        let input_table: mlua::Table = globals.get("input").unwrap();
+        assert_eq!(input_table.get::<String>("key").unwrap(), "val");
+    }
+
+    #[test]
+    fn query_context_sets_all_globals() {
+        let lua = create_sandbox().unwrap();
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), "10".to_string());
+        params.insert("cursor".to_string(), "abc".to_string());
+        set_query_context(&lua, "com.example.listThings", &params, "com.example.thing").unwrap();
+
+        let globals = lua.globals();
+        assert_eq!(
+            globals.get::<String>("method").unwrap(),
+            "com.example.listThings"
+        );
+        assert_eq!(
+            globals.get::<String>("collection").unwrap(),
+            "com.example.thing"
+        );
+
+        let params_table: mlua::Table = globals.get("params").unwrap();
+        assert_eq!(params_table.get::<String>("limit").unwrap(), "10");
+        assert_eq!(params_table.get::<String>("cursor").unwrap(), "abc");
+    }
+
+    #[test]
     fn hook_context_record_nil_on_delete() {
         let lua = create_sandbox().unwrap();
         set_hook_context(
