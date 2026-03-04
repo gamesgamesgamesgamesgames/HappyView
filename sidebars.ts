@@ -81,6 +81,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "guides/index-hooks",
+          label: "Index Hooks",
+        },
+        {
+          type: "doc",
           id: "guides/backfill",
           label: "Backfill",
         },
@@ -163,6 +168,11 @@ const sidebars: SidebarsConfig = {
               type: "doc",
               id: "reference/scripts/complex-mutations",
               label: "Complex Mutations",
+            },
+            {
+              type: "doc",
+              id: "reference/scripts/algolia-sync",
+              label: "Algolia Sync",
             },
           ],
         },

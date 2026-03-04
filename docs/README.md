@@ -11,6 +11,7 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - 🔐 **OAuth Built In**: [AIP](https://github.com/graze-social/aip) handles authentication, and writes are proxied back to the user's PDS, so there's no session management needed
 - 🌙 **Lua Scripting**: Add custom query and procedure logic with Lua scripts that have full access to the record database
 - 🗄️ **Automatic Indexing**: HappyView indexes relevant records into PostgreSQL as they arrive, ready to query
+- 🪝 **Index Hooks**: Attach Lua scripts to record collections that fire on every create, update, or delete — sync to search engines, trigger webhooks, or build materialized views in real time
 - 🌐 **Network Lexicons**: Fetch lexicon schemas directly from the AT Protocol network via DNS authority resolution
 - ⚡ **Hot Reloading**: Upload or update lexicons at runtime, and new endpoints are available immediately with no restart
 - 🛠️ **Admin Dashboard**: Manage lexicons, monitor record stats, and run backfill jobs through a built-in admin API
@@ -30,4 +31,5 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - [Quickstart](getting-started/deployment/railway.md): Deploy HappyView on Railway or run it locally
 - [Lexicons](guides/lexicons.md): Upload lexicon schemas and start indexing records
 - [Lua Scripting](guides/scripting.md): Write custom query and procedure logic
+- [Index Hooks](guides/index-hooks.md): React to record changes in real time
 - [Event Logs](guides/event-logs.md): Monitor system activity, debug script errors, and audit admin actions

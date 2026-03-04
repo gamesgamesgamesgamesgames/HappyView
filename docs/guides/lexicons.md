@@ -8,7 +8,7 @@ You don't write route handlers or database queries; you upload a lexicon and Hap
 
 | Type          | Effect                                                                         |
 | ------------- | ------------------------------------------------------------------------------ |
-| `record`      | Syncs the collection filter to Tap and indexes records into Postgres           |
+| `record`      | Syncs the collection filter to Tap and indexes records into Postgres. Supports [index hooks](index-hooks.md) |
 | `query`       | Registers a `GET /xrpc/{nsid}` endpoint that queries indexed records           |
 | `procedure`   | Registers a `POST /xrpc/{nsid}` endpoint that proxies writes to the user's PDS |
 | `definitions` | Stored but does not generate routes or subscriptions                           |
@@ -79,6 +79,7 @@ On every startup, HappyView re-fetches all network lexicons from their respectiv
 ## Next steps
 
 - [Lua Scripting](scripting.md): Add custom query and procedure logic to your endpoints
+- [Index Hooks](index-hooks.md): Run Lua scripts when records are indexed from the network
 - [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
 - [Backfill](backfill.md): Learn how historical records are indexed
 - [Admin API](../reference/admin-api.md): Full reference for lexicon management endpoints
