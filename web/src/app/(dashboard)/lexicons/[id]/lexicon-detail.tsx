@@ -12,16 +12,28 @@ import {
   uploadLexicon,
 } from "@/lib/api";
 import type { LexiconDetail } from "@/types/lexicons";
-import { procedureScript, queryScript } from "@/lib/lua-templates";
+import {
+  indexHookScript,
+  procedureScript,
+  queryScript,
+} from "@/lib/lua-templates";
 import { useLuaCompletions } from "@/hooks/use-lua-completions";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function LexiconDetailPage() {
   const pathname = usePathname();
-  const id = decodeURIComponent(pathname.split("/").filter(Boolean).pop() ?? "");
+  const id = decodeURIComponent(
+    pathname.split("/").filter(Boolean).pop() ?? "",
+  );
   const { getToken } = useAuth();
   const router = useRouter();
   const [lexicon, setLexicon] = useState<LexiconDetail | null>(null);
@@ -34,6 +46,9 @@ export default function LexiconDetailPage() {
   const [luaText, setLuaText] = useState("");
   const [originalJson, setOriginalJson] = useState("");
   const [originalLua, setOriginalLua] = useState("");
+  const [hookText, setHookText] = useState("");
+  const [originalHook, setOriginalHook] = useState("");
+  const [showHookEditor, setShowHookEditor] = useState(false);
   const { luaCompletions, collections } = useLuaCompletions(jsonText);
 
   const load = useCallback(() => {
@@ -60,6 +75,9 @@ export default function LexiconDetailPage() {
           setLuaText(lex.script ?? "");
           setOriginalLua(lex.script ?? "");
         }
+        setHookText(lex.on_index_script ?? "");
+        setOriginalHook(lex.on_index_script ?? "");
+        setShowHookEditor(!!lex.on_index_script);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [getToken, id]);
@@ -68,7 +86,10 @@ export default function LexiconDetailPage() {
     load();
   }, [load]);
 
-  const isDirty = jsonText !== originalJson || luaText !== originalLua;
+  const isDirty =
+    jsonText !== originalJson ||
+    luaText !== originalLua ||
+    hookText !== originalHook;
 
   async function handleSave() {
     if (!lexicon) return;
@@ -80,6 +101,7 @@ export default function LexiconDetailPage() {
         lexicon_json: lexiconJson,
         backfill: lexicon.backfill,
         script: luaText || undefined,
+        on_index_script: hookText || undefined,
       });
       load();
     } catch (e: unknown) {
@@ -132,6 +154,8 @@ export default function LexiconDetailPage() {
     lexicon.has_script ||
     lexicon.lexicon_type === "query" ||
     lexicon.lexicon_type === "procedure";
+  const isRecord = lexicon.lexicon_type === "record";
+  const showHook = isRecord && (showHookEditor || !!lexicon.on_index_script);
 
   return (
     <div className="flex flex-col h-full max-h-screen md:max-h-[calc(100vh-((var(--spacing)*2)*2))] overflow-hidden">
@@ -203,8 +227,10 @@ export default function LexiconDetailPage() {
           jsonValue={jsonText}
           onJsonChange={isNetwork ? undefined : setJsonText}
           jsonReadOnly={isNetwork}
-          luaValue={showLua ? luaText : undefined}
-          onLuaChange={showLua ? setLuaText : undefined}
+          luaValue={showHook ? hookText : showLua ? luaText : undefined}
+          onLuaChange={
+            showHook ? setHookText : showLua ? setLuaText : undefined
+          }
           luaCompletions={showLua ? luaCompletions : undefined}
           collections={showLua ? collections : undefined}
         />
@@ -219,9 +245,45 @@ export default function LexiconDetailPage() {
             {deleting ? "Deleting..." : "Delete Lexicon"}
           </Button>
 
-          <Button onClick={handleSave} disabled={!isDirty || saving}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
+          <div className="flex gap-2">
+            {isRecord && !showHook && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setHookText(indexHookScript());
+                        setShowHookEditor(true);
+                      }}
+                    >
+                      Add Index Hook
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    {
+                      "An Index Hook is a Lua script that runs automatically whenever a record in this collection is created, updated, or deleted on the network."
+                    }
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {isRecord && showHook && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setHookText("");
+                  setShowHookEditor(false);
+                }}
+              >
+                Remove Index Hook
+              </Button>
+            )}
+
+            <Button onClick={handleSave} disabled={!isDirty || saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </div>
         </footer>
       </div>
     </div>
