@@ -6,7 +6,7 @@ Unlike [query and procedure scripts](scripting.md) that run in response to XRPC 
 
 ## Attaching a hook
 
-Each record-type lexicon can have one index hook. You can add it through the [dashboard](../getting-started/dashboard.md) (click "Add Index Hook" on any record lexicon's detail page) or via the [admin API](../reference/admin-api.md#upload--upsert-a-lexicon) by including the `on_index_script` field when uploading a lexicon.
+Each record-type lexicon can have one index hook. You can add it through the [dashboard](../getting-started/dashboard.md) (click "Add Index Hook" on any record lexicon's detail page) or via the [admin API](../reference/admin-api.md#upload--upsert-a-lexicon) by including the `index_hook` field when uploading a lexicon.
 
 ## Script structure
 

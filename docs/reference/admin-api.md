@@ -55,7 +55,7 @@ curl -X POST http://localhost:3000/admin/lexicons \
 | `backfill`          | boolean | no       | Whether uploading triggers historical backfill (default `true`)     |
 | `target_collection` | string  | no       | For query/procedure lexicons, the record collection they operate on |
 | `script`            | string  | no       | Lua script for query/procedure endpoints                            |
-| `on_index_script`   | string  | no       | [Index hook](../guides/index-hooks.md) Lua script for record lexicons |
+| `index_hook`   | string  | no       | [Index hook](../guides/index-hooks.md) Lua script for record lexicons |
 
 **Response**: `201 Created` (new) or `200 OK` (upsert)
 
