@@ -6,5 +6,7 @@ mod record;
 pub(crate) mod sandbox;
 mod tid;
 
-pub(crate) use execute::{execute_procedure_script, execute_query_script};
+pub(crate) use execute::{
+    HookEvent, execute_hook_script, execute_procedure_script, execute_query_script,
+};
 pub(crate) use sandbox::validate_script;

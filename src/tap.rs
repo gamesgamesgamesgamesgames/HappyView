@@ -1,13 +1,13 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::PgPool;
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
+use crate::AppState;
 use crate::event_log::{EventLog, Severity, log_event};
-use crate::lexicon::{LexiconRegistry, LexiconType, ParsedLexicon, ProcedureAction};
+use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 
 // ---------------------------------------------------------------------------
 // Tap event types (matches Tap's outbox JSON format)
@@ -229,33 +229,13 @@ const LEXICON_SCHEMA_COLLECTION: &str = "com.atproto.lexicon.schema";
 ///
 /// When the collection list changes (via `collections_rx`), the task syncs
 /// the updated filters to Tap's HTTP API.
-pub fn spawn(
-    db: PgPool,
-    tap_url: String,
-    tap_admin_password: Option<String>,
-    mut collections_rx: watch::Receiver<Vec<String>>,
-    lexicons: LexiconRegistry,
-    collections_tx: watch::Sender<Vec<String>>,
-) {
-    let http = reqwest::Client::new();
-
+pub fn spawn(state: AppState, mut collections_rx: watch::Receiver<Vec<String>>) {
     tokio::spawn(async move {
         loop {
             // Build WebSocket URL from HTTP URL.
-            let ws_url = build_ws_url(&tap_url);
+            let ws_url = build_ws_url(&state.config.tap_url);
 
-            match run(
-                &db,
-                &http,
-                &tap_url,
-                tap_admin_password.as_deref(),
-                &ws_url,
-                &mut collections_rx,
-                &lexicons,
-                &collections_tx,
-            )
-            .await
-            {
+            match run(&state, &ws_url, &mut collections_rx).await {
                 Ok(()) => {
                     tracing::info!("tap reconnecting due to collection change");
                 }
@@ -285,17 +265,16 @@ fn build_ws_url(tap_url: &str) -> String {
 // Connection loop
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
 async fn run(
-    db: &PgPool,
-    http: &reqwest::Client,
-    tap_url: &str,
-    tap_admin_password: Option<&str>,
+    state: &AppState,
     ws_url: &str,
     collections_rx: &mut watch::Receiver<Vec<String>>,
-    lexicons: &LexiconRegistry,
-    collections_tx: &watch::Sender<Vec<String>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let db = &state.db;
+    let http = &state.http;
+    let tap_url = &state.config.tap_url;
+    let tap_admin_password = state.config.tap_admin_password.as_deref();
+
     tracing::info!(url = %ws_url, "connecting to tap");
 
     let mut request = ws_url.to_string().into_client_request()?;
@@ -370,7 +349,7 @@ async fn run(
                 match event.event_type.as_str() {
                     "record" => {
                         if let Some(record) = event.record {
-                            handle_record_event(db, lexicons, collections_tx, &record).await;
+                            handle_record_event(state, &record).await;
                         }
                     }
                     "identity" => {
@@ -431,17 +410,15 @@ async fn run(
 // Record event handler
 // ---------------------------------------------------------------------------
 
-async fn handle_record_event(
-    db: &PgPool,
-    lexicons: &LexiconRegistry,
-    collections_tx: &watch::Sender<Vec<String>>,
-    record: &TapRecordEvent,
-) {
+async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
+    let db = &state.db;
+    let lexicons = &state.lexicons;
+
     let uri = format!("at://{}/{}/{}", record.did, record.collection, record.rkey,);
 
     // Handle lexicon schema events for tracked network lexicons.
     if record.collection == LEXICON_SCHEMA_COLLECTION {
-        handle_lexicon_schema_event(db, lexicons, collections_tx, &record.did, record).await;
+        handle_lexicon_schema_event(state, &record.did, record).await;
         return;
     }
 
@@ -502,6 +479,34 @@ async fn handle_record_event(
                         },
                     )
                     .await;
+
+                    // Fire index hook if configured.
+                    if let Some(script) =
+                        state.lexicons.get_on_index_script(&record.collection).await
+                    {
+                        let hook_state = state.clone();
+                        let hook_lexicon_id = record.collection.clone();
+                        let hook_uri = uri.clone();
+                        let hook_did = record.did.clone();
+                        let hook_collection = record.collection.clone();
+                        let hook_rkey = record.rkey.clone();
+                        let hook_action = record.action.clone();
+                        let hook_rec = rec.clone();
+                        tokio::spawn(async move {
+                            crate::lua::execute_hook_script(&crate::lua::HookEvent {
+                                state: &hook_state,
+                                lexicon_id: &hook_lexicon_id,
+                                script: &script,
+                                action: &hook_action,
+                                uri: &hook_uri,
+                                did: &hook_did,
+                                collection: &hook_collection,
+                                rkey: &hook_rkey,
+                                record: Some(&hook_rec),
+                            })
+                            .await;
+                        });
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(uri = %uri, "failed to upsert record: {e}");
@@ -546,6 +551,32 @@ async fn handle_record_event(
                         },
                     )
                     .await;
+
+                    // Fire index hook if configured.
+                    if let Some(script) =
+                        state.lexicons.get_on_index_script(&record.collection).await
+                    {
+                        let hook_state = state.clone();
+                        let hook_lexicon_id = record.collection.clone();
+                        let hook_uri = uri.clone();
+                        let hook_did = record.did.clone();
+                        let hook_collection = record.collection.clone();
+                        let hook_rkey = record.rkey.clone();
+                        tokio::spawn(async move {
+                            crate::lua::execute_hook_script(&crate::lua::HookEvent {
+                                state: &hook_state,
+                                lexicon_id: &hook_lexicon_id,
+                                script: &script,
+                                action: "delete",
+                                uri: &hook_uri,
+                                did: &hook_did,
+                                collection: &hook_collection,
+                                rkey: &hook_rkey,
+                                record: None,
+                            })
+                            .await;
+                        });
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(uri = %uri, "failed to delete record: {e}");
@@ -577,13 +608,10 @@ async fn handle_record_event(
 // ---------------------------------------------------------------------------
 
 /// Handle a `com.atproto.lexicon.schema` record event for tracked network lexicons.
-async fn handle_lexicon_schema_event(
-    db: &PgPool,
-    lexicons: &LexiconRegistry,
-    collections_tx: &watch::Sender<Vec<String>>,
-    did: &str,
-    record: &TapRecordEvent,
-) {
+async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRecordEvent) {
+    let db = &state.db;
+    let lexicons = &state.lexicons;
+    let collections_tx = &state.collections_tx;
     let nsid = &record.rkey;
 
     // Check if this NSID is one we're tracking and the DID matches the authority.
@@ -613,6 +641,7 @@ async fn handle_lexicon_schema_event(
                 1,
                 target_collection.clone(),
                 ProcedureAction::Upsert,
+                None,
                 None,
             ) {
                 Ok(p) => p,

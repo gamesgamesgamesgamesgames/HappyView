@@ -59,6 +59,28 @@ pub fn create_sandbox() -> LuaResult<Lua> {
     })?;
     globals.set("toarray", toarray_fn)?;
 
+    // JSON utilities: json.encode(table) -> string, json.decode(string) -> table
+    let json_table = lua.create_table()?;
+
+    let encode_fn = lua.create_function(|lua, value: mlua::Value| {
+        let json_value: serde_json::Value = lua
+            .from_value(value)
+            .map_err(|e| mlua::Error::runtime(format!("json.encode: {e}")))?;
+        serde_json::to_string(&json_value)
+            .map_err(|e| mlua::Error::runtime(format!("json.encode: {e}")))
+    })?;
+    json_table.set("encode", encode_fn)?;
+
+    let decode_fn = lua.create_function(|lua, s: String| {
+        let json_value: serde_json::Value = serde_json::from_str(&s)
+            .map_err(|e| mlua::Error::runtime(format!("json.decode: {e}")))?;
+        lua.to_value(&json_value)
+            .map_err(|e| mlua::Error::runtime(format!("json.decode: {e}")))
+    })?;
+    json_table.set("decode", decode_fn)?;
+
+    globals.set("json", json_table)?;
+
     Ok(lua)
 }
 
@@ -180,5 +202,46 @@ mod tests {
         let table: mlua::Table = lua.load(r#"return toarray({})"#).eval().unwrap();
         let json: serde_json::Value = lua.from_value(mlua::Value::Table(table)).unwrap();
         assert!(json.is_array(), "expected JSON array, got: {json}");
+    }
+
+    #[test]
+    fn sandbox_provides_json_encode() {
+        let lua = create_sandbox().unwrap();
+        let result: String = lua
+            .load(r#"return json.encode({name = "test", count = 42})"#)
+            .eval()
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["name"], "test");
+        assert_eq!(parsed["count"], 42);
+    }
+
+    #[test]
+    fn sandbox_provides_json_decode() {
+        let lua = create_sandbox().unwrap();
+        let result: mlua::Table = lua
+            .load(r#"return json.decode('{"name":"test","count":42}')"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result.get::<String>("name").unwrap(), "test");
+        assert_eq!(result.get::<i64>("count").unwrap(), 42);
+    }
+
+    #[test]
+    fn sandbox_json_encode_array() {
+        let lua = create_sandbox().unwrap();
+        let result: String = lua
+            .load(r#"return json.encode(toarray({1, 2, 3}))"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "[1,2,3]");
+    }
+
+    #[test]
+    fn sandbox_json_decode_invalid_returns_error() {
+        let lua = create_sandbox().unwrap();
+        let result: Result<mlua::Value, _> =
+            lua.load(r#"return json.decode("not valid json")"#).eval();
+        assert!(result.is_err());
     }
 }

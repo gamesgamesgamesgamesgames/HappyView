@@ -56,6 +56,7 @@ async fn main() {
                             target_collection.clone(),
                             ProcedureAction::Upsert,
                             None,
+                            None,
                         ) {
                             Ok(parsed) => {
                                 if let Err(e) = sqlx::query(
@@ -127,14 +128,7 @@ async fn main() {
         }
     }
 
-    tap::spawn(
-        state.db.clone(),
-        config.tap_url.clone(),
-        config.tap_admin_password.clone(),
-        collections_rx,
-        state.lexicons.clone(),
-        state.collections_tx.clone(),
-    );
+    tap::spawn(state.clone(), collections_rx);
 
     tokio::spawn(happyview::event_log::spawn_retention_cleanup(
         state.db.clone(),
