@@ -174,11 +174,15 @@ local result = db.query({
   did = "did:plc:abc",                    -- optional: filter by DID
   limit = 20,                             -- optional: max 100, default 20
   offset = 0,                             -- optional: for pagination
+  sort = "name",                          -- optional: field to sort by, default "indexed_at"
+  sortDirection = "asc",                  -- optional: "asc" or "desc", default "desc"
 })
 
 -- result.records — array of record tables (each includes a "uri" field)
 -- result.cursor — present when more records exist
 ```
+
+The `sort` field can be a top-level column (`indexed_at`, `did`, `uri`) or any field inside the record's `value` object (e.g. `name`, `createdAt`). Field names must contain only alphanumeric characters and underscores.
 
 ### db.get
 
