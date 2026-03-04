@@ -8,7 +8,7 @@ Without Lua scripts, HappyView's query endpoints return raw records and procedur
 - Compose multi-record operations
 - Build entirely custom behavior
 
-Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [read-only database API](#database-api), and a set of [context globals](#context-globals).
+Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [read-only database API](#database-api), an [HTTP client API](#http-api), and a set of [context globals](#context-globals).
 
 ## Script structure
 
@@ -256,6 +256,67 @@ Column types are mapped automatically:
 | `JSON`, `JSONB`        | table    |
 | `TIMESTAMPTZ`          | string (ISO 8601) |
 | Other                  | string (fallback)  |
+
+## HTTP API
+
+The `http` table provides async HTTP client functions. Available in both queries and procedures.
+
+### Methods
+
+All methods take a URL and an optional options table, and return a [response table](#response).
+
+```lua
+http.get(url, opts?)
+http.post(url, opts?)
+http.put(url, opts?)
+http.patch(url, opts?)
+http.delete(url, opts?)
+http.head(url, opts?)
+```
+
+### Options
+
+The optional second argument is a table with:
+
+| Field     | Type   | Description                                    |
+| --------- | ------ | ---------------------------------------------- |
+| `headers` | table  | Request headers as key-value string pairs       |
+| `body`    | string | Request body (ignored for GET and HEAD)         |
+
+### Response
+
+Every method returns a table with:
+
+| Field     | Type    | Description                                          |
+| --------- | ------- | ---------------------------------------------------- |
+| `status`  | integer | HTTP status code                                     |
+| `body`    | string  | Response body text (empty string for HEAD)           |
+| `headers` | table   | Response headers as key-value pairs (lowercase keys) |
+
+### Examples
+
+```lua
+-- Simple GET
+local resp = http.get("https://api.example.com/data")
+-- resp.status = 200, resp.body = "...", resp.headers["content-type"] = "application/json"
+
+-- GET with custom headers
+local resp = http.get("https://api.example.com/data", {
+  headers = { ["authorization"] = "Bearer token123" }
+})
+
+-- POST with JSON body
+local resp = http.post("https://api.example.com/hook", {
+  body = '{"key": "value"}',
+  headers = { ["content-type"] = "application/json" }
+})
+
+-- PUT, PATCH, DELETE, HEAD follow the same pattern
+local resp = http.put(url, { body = data, headers = { ... } })
+local resp = http.patch(url, { body = data, headers = { ... } })
+local resp = http.delete(url, { headers = { ... } })
+local resp = http.head(url)
+```
 
 ## Standard libraries
 
