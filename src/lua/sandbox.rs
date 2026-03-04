@@ -87,6 +87,10 @@ pub fn create_sandbox() -> LuaResult<Lua> {
 /// Validate that a script compiles and defines a `handle` function.
 pub fn validate_script(source: &str) -> Result<(), String> {
     let lua = create_sandbox().map_err(|e| format!("failed to create Lua VM: {e}"))?;
+    // Set an empty env table so scripts that reference env.* at the top level don't fail.
+    lua.globals()
+        .set("env", lua.create_table().unwrap())
+        .map_err(|e| format!("failed to set env stub: {e}"))?;
     lua.load(source)
         .exec()
         .map_err(|e| format!("script compilation failed: {e}"))?;
