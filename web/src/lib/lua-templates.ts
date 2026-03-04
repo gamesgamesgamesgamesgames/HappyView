@@ -29,6 +29,19 @@ end
 `
 }
 
+export function indexHookScript(): string {
+  return `function handle()
+\tif action == "delete" then
+\t\t-- record was deleted
+\t\tlog("deleted " .. uri)
+\telse
+\t\t-- record was created or updated
+\t\tlog(action .. " " .. uri)
+\tend
+end
+`
+}
+
 export function queryScript(collection: string): string {
   const target = collection || "COLLECTION"
   return `collection = "${target}"
