@@ -8,7 +8,9 @@ Without Lua scripts, HappyView's query endpoints return raw records and procedur
 - Compose multi-record operations
 - Build entirely custom behavior
 
-Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [read-only database API](#database-api), an [HTTP client API](#http-api), and a set of [context globals](#context-globals).
+Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [read-only database API](#database-api), an [HTTP client API](#http-api), a [JSON API](#json-api), and a set of [context globals](#context-globals).
+
+For scripts that react to record changes from the network (rather than XRPC requests), see [Index Hooks](index-hooks.md).
 
 ## Script structure
 
@@ -322,6 +324,28 @@ local resp = http.delete(url, { headers = { ... } })
 local resp = http.head(url)
 ```
 
+## JSON API
+
+The `json` global provides JSON serialization and deserialization. Available in queries, procedures, and [index hooks](index-hooks.md).
+
+### json.encode
+
+```lua
+local str = json.encode({ key = "value", items = { 1, 2, 3 } })
+-- '{"key":"value","items":[1,2,3]}'
+```
+
+Converts a Lua table to a JSON string.
+
+### json.decode
+
+```lua
+local tbl = json.decode('{"key": "value"}')
+-- tbl.key == "value"
+```
+
+Parses a JSON string into a Lua table. Returns an error if the input is not valid JSON.
+
 ## Standard libraries
 
 The following Lua 5.4 standard library modules are available:
@@ -447,8 +471,12 @@ See the example script references for complete, ready-to-use scripts:
 - [Cascading delete](../reference/scripts/cascading-delete.md) — delete a record and all related records
 - [Complex mutations](../reference/scripts/complex-mutations.md) — load, transform, and save a record with multiple field changes
 
+**Index Hooks:**
+- [Algolia sync](../reference/scripts/algolia-sync.md) — push records to an Algolia search index on create/update/delete
+
 ## Next steps
 
+- [Index Hooks](index-hooks.md): React to record changes from the network in real time
 - [Lexicons](lexicons.md): Understand how record, query, and procedure lexicons work together
 - [XRPC API](../reference/xrpc-api.md): See how endpoints behave with and without Lua scripts
 - [Dashboard](../getting-started/dashboard.md#lua-editor): Use the web editor with context-aware completions
