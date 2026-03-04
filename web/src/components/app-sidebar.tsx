@@ -7,6 +7,7 @@ import {
   IconTable,
   IconClipboardList,
   IconUsers,
+  IconSettings,
   IconLogout,
 } from "@tabler/icons-react"
 import Image from "next/image"
@@ -33,6 +34,7 @@ const navItems = [
   { title: "Records", url: "/records", icon: IconTable },
   { title: "Event Logs", url: "/events", icon: IconClipboardList },
   { title: "Admins", url: "/admins", icon: IconUsers },
+  { title: "Settings", url: "/settings", icon: IconSettings },
 ]
 
 export function AppSidebar({

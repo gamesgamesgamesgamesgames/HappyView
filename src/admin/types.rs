@@ -116,3 +116,21 @@ pub(super) struct AdminSummary {
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
 }
+
+// ---------------------------------------------------------------------------
+// Script variable types
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub(super) struct ScriptVariableSummary {
+    pub(super) key: String,
+    pub(super) preview: String,
+    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertScriptVariableBody {
+    pub(super) key: String,
+    pub(super) value: String,
+}

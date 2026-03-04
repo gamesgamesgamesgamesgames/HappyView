@@ -5,6 +5,7 @@ mod events;
 mod lexicons;
 mod network_lexicons;
 mod records;
+mod script_variables;
 mod stats;
 mod tap_stats;
 mod types;
@@ -47,4 +48,9 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             post(network_lexicons::add).get(network_lexicons::list),
         )
         .route("/network-lexicons/{nsid}", delete(network_lexicons::remove))
+        .route(
+            "/script-variables",
+            post(script_variables::upsert).get(script_variables::list),
+        )
+        .route("/script-variables/{key}", delete(script_variables::delete))
 }

@@ -19,6 +19,16 @@ use super::http_api;
 use super::record;
 use super::sandbox;
 
+/// Load all script variables from the database as a key-value map.
+async fn load_env_vars(db: &sqlx::PgPool) -> HashMap<String, String> {
+    sqlx::query_as::<_, (String, String)>("SELECT key, value FROM script_variables")
+        .fetch_all(db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
 /// Execute a Lua script for a procedure endpoint.
 pub async fn execute_procedure_script(
     state: &AppState,
@@ -157,6 +167,28 @@ pub async fn execute_procedure_script(
 
     if let Err(e) = context::set_procedure_context(&lua, method, input, claims.did(), collection) {
         let error_message = format!("failed to set context: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: Some(claims.did().to_string()),
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "input": input_json,
+                    "caller_did": claims.did(),
+                    "method": method,
+                }),
+            },
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = context::set_env_context(&lua, &load_env_vars(&state.db).await) {
+        let error_message = format!("failed to set env context: {e}");
         log_event(
             &state.db,
             EventLog {
@@ -383,6 +415,26 @@ pub async fn execute_query_script(
 
     if let Err(e) = context::set_query_context(&lua, method, params, collection) {
         let error_message = format!("failed to set context: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: None,
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "method": method,
+                }),
+            },
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = context::set_env_context(&lua, &load_env_vars(&state.db).await) {
+        let error_message = format!("failed to set env context: {e}");
         log_event(
             &state.db,
             EventLog {
@@ -645,6 +697,9 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<(), String> {
         event.record,
     )
     .map_err(|e| format!("failed to set hook context: {e}"))?;
+
+    context::set_env_context(&lua, &load_env_vars(&event.state.db).await)
+        .map_err(|e| format!("failed to set env context: {e}"))?;
 
     lua.load(event.script)
         .exec()

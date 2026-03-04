@@ -8,6 +8,7 @@ import type { BackfillJob } from "@/types/backfill"
 import type { AdminSummary } from "@/types/admins"
 import type { AdminListRecordsResponse } from "@/types/records"
 import type { EventsListResponse } from "@/types/events"
+import type { ScriptVariableSummary } from "@/types/script-variables"
 
 export type { CollectionStat, StatsResponse } from "@/types/stats"
 export type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
@@ -17,6 +18,7 @@ export type { BackfillJob } from "@/types/backfill"
 export type { AdminSummary } from "@/types/admins"
 export type { AdminRecord, AdminListRecordsResponse } from "@/types/records"
 export type { EventLogEntry, EventsListResponse } from "@/types/events"
+export type { ScriptVariableSummary } from "@/types/script-variables"
 
 // The DPoP proof for admin API calls must target AIP's userinfo URL,
 // because the backend forwards the proof to AIP for token validation.
@@ -242,6 +244,32 @@ export function deleteCollectionRecords(
     `/admin/records/collection?${new URLSearchParams({ collection })}`,
     getToken,
     { method: "DELETE" },
+  )
+}
+
+// Script Variables
+export function getScriptVariables(getToken: () => Promise<string | null>) {
+  return apiFetch<ScriptVariableSummary[]>("/admin/script-variables", getToken)
+}
+
+export function upsertScriptVariable(
+  getToken: () => Promise<string | null>,
+  body: { key: string; value: string }
+) {
+  return apiFetch("/admin/script-variables", getToken, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteScriptVariable(
+  getToken: () => Promise<string | null>,
+  key: string
+) {
+  return apiFetch(
+    `/admin/script-variables/${encodeURIComponent(key)}`,
+    getToken,
+    { method: "DELETE" }
   )
 }
 
