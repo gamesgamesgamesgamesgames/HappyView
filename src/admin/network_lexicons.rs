@@ -41,6 +41,7 @@ pub(super) async fn add(
         body.target_collection.clone(),
         ProcedureAction::Upsert,
         None,
+        None,
     )
     .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
 
@@ -77,6 +78,7 @@ pub(super) async fn add(
         revision,
         body.target_collection,
         ProcedureAction::Upsert,
+        None,
         None,
     )
     .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;

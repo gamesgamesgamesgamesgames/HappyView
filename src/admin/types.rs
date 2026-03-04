@@ -14,6 +14,7 @@ pub(super) struct LexiconSummary {
     pub(super) action: Option<String>,
     pub(super) target_collection: Option<String>,
     pub(super) has_script: bool,
+    pub(super) has_on_index_script: bool,
     pub(super) source: String,
     pub(super) authority_did: Option<String>,
     pub(super) last_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -32,6 +33,7 @@ pub(super) struct UploadLexiconBody {
     pub(super) target_collection: Option<String>,
     pub(super) action: Option<String>,
     pub(super) script: Option<String>,
+    pub(super) on_index_script: Option<String>,
 }
 
 fn default_backfill() -> bool {

@@ -516,3 +516,149 @@ pub async fn execute_query_script(
 
     Ok(Json(json_value).into_response())
 }
+
+/// Context for a hook execution triggered by a record index event.
+pub struct HookEvent<'a> {
+    pub state: &'a AppState,
+    pub lexicon_id: &'a str,
+    pub script: &'a str,
+    pub action: &'a str,
+    pub uri: &'a str,
+    pub did: &'a str,
+    pub collection: &'a str,
+    pub rkey: &'a str,
+    pub record: Option<&'a Value>,
+}
+
+/// Execute a Lua hook script triggered by a record index event.
+///
+/// Retries up to 3 times with exponential backoff (1s, 2s, 4s).
+/// On final failure, inserts into `dead_letter_hooks` table.
+pub async fn execute_hook_script(event: &HookEvent<'_>) {
+    let max_attempts: i32 = 4; // 1 initial + 3 retries
+    let mut last_error = String::new();
+
+    for attempt in 0..max_attempts {
+        if attempt > 0 {
+            let delay = std::time::Duration::from_secs(1 << (attempt - 1)); // 1s, 2s, 4s
+            tokio::time::sleep(delay).await;
+        }
+
+        match run_hook_once(event).await {
+            Ok(()) => {
+                log_event(
+                    &event.state.db,
+                    EventLog {
+                        event_type: "hook.executed".to_string(),
+                        severity: Severity::Info,
+                        actor_did: None,
+                        subject: Some(event.uri.to_string()),
+                        detail: serde_json::json!({
+                            "lexicon_id": event.lexicon_id,
+                            "action": event.action,
+                            "collection": event.collection,
+                            "attempts": attempt + 1,
+                        }),
+                    },
+                )
+                .await;
+                return;
+            }
+            Err(e) => {
+                last_error = e;
+                tracing::warn!(
+                    uri = event.uri,
+                    lexicon_id = event.lexicon_id,
+                    attempt = attempt + 1,
+                    "hook execution failed: {last_error}"
+                );
+            }
+        }
+    }
+
+    // All retries exhausted — dead-letter the event.
+    tracing::error!(
+        uri = event.uri,
+        lexicon_id = event.lexicon_id,
+        "hook dead-lettered after {max_attempts} attempts"
+    );
+
+    if let Err(e) = sqlx::query(
+        r#"
+        INSERT INTO dead_letter_hooks (lexicon_id, uri, did, collection, rkey, action, record, error, attempts)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        "#,
+    )
+    .bind(event.lexicon_id)
+    .bind(event.uri)
+    .bind(event.did)
+    .bind(event.collection)
+    .bind(event.rkey)
+    .bind(event.action)
+    .bind(event.record)
+    .bind(&last_error)
+    .bind(max_attempts)
+    .execute(&event.state.db)
+    .await
+    {
+        tracing::error!(uri = event.uri, "failed to insert dead letter hook: {e}");
+    }
+
+    log_event(
+        &event.state.db,
+        EventLog {
+            event_type: "hook.dead_lettered".to_string(),
+            severity: Severity::Error,
+            actor_did: None,
+            subject: Some(event.uri.to_string()),
+            detail: serde_json::json!({
+                "lexicon_id": event.lexicon_id,
+                "action": event.action,
+                "collection": event.collection,
+                "error": last_error,
+                "attempts": max_attempts,
+            }),
+        },
+    )
+    .await;
+}
+
+/// Execute a hook script once. Returns Ok(()) on success or Err(message) on failure.
+async fn run_hook_once(event: &HookEvent<'_>) -> Result<(), String> {
+    let lua = sandbox::create_sandbox().map_err(|e| format!("failed to create Lua VM: {e}"))?;
+
+    let state_arc = Arc::new(event.state.clone());
+
+    db_api::register_db_api(&lua, state_arc.clone())
+        .map_err(|e| format!("failed to register db API: {e}"))?;
+
+    http_api::register_http_api(&lua, state_arc)
+        .map_err(|e| format!("failed to register http API: {e}"))?;
+
+    context::set_hook_context(
+        &lua,
+        event.action,
+        event.uri,
+        event.did,
+        event.collection,
+        event.rkey,
+        event.record,
+    )
+    .map_err(|e| format!("failed to set hook context: {e}"))?;
+
+    lua.load(event.script)
+        .exec()
+        .map_err(|e| format!("script load failed: {e}"))?;
+
+    let handle: mlua::Function = lua
+        .globals()
+        .get("handle")
+        .map_err(|e| format!("script missing handle function: {e}"))?;
+
+    handle
+        .call_async::<mlua::Value>(())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
