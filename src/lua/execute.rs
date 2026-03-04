@@ -15,6 +15,7 @@ use crate::repo;
 
 use super::context;
 use super::db_api;
+use super::http_api;
 use super::record;
 use super::sandbox;
 
@@ -90,6 +91,28 @@ pub async fn execute_procedure_script(
 
     if let Err(e) = db_api::register_db_api(&lua, state_arc.clone()) {
         let error_message = format!("failed to register db API: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: Some(claims.did().to_string()),
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "input": input_json,
+                    "caller_did": claims.did(),
+                    "method": method,
+                }),
+            },
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = http_api::register_http_api(&lua, state_arc.clone()) {
+        let error_message = format!("failed to register http API: {e}");
         log_event(
             &state.db,
             EventLog {
@@ -318,8 +341,28 @@ pub async fn execute_query_script(
 
     let state_arc = Arc::new(state.clone());
 
-    if let Err(e) = db_api::register_db_api(&lua, state_arc) {
+    if let Err(e) = db_api::register_db_api(&lua, state_arc.clone()) {
         let error_message = format!("failed to register db API: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: None,
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "method": method,
+                }),
+            },
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = http_api::register_http_api(&lua, state_arc) {
+        let error_message = format!("failed to register http API: {e}");
         log_event(
             &state.db,
             EventLog {

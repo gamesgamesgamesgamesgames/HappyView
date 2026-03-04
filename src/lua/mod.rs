@@ -1,6 +1,7 @@
 mod context;
 mod db_api;
 mod execute;
+mod http_api;
 mod record;
 pub(crate) mod sandbox;
 mod tid;
