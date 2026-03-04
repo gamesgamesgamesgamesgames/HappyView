@@ -110,7 +110,7 @@ export function uploadLexicon(
     target_collection?: string
     action?: string
     script?: string
-    on_index_script?: string
+    index_hook?: string
   }
 ) {
   return apiFetch<{ id: string; revision: number }>("/admin/lexicons", getToken, {

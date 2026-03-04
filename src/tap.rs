@@ -481,9 +481,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                     .await;
 
                     // Fire index hook if configured.
-                    if let Some(script) =
-                        state.lexicons.get_on_index_script(&record.collection).await
-                    {
+                    if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
                         let hook_state = state.clone();
                         let hook_lexicon_id = record.collection.clone();
                         let hook_uri = uri.clone();
@@ -553,9 +551,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                     .await;
 
                     // Fire index hook if configured.
-                    if let Some(script) =
-                        state.lexicons.get_on_index_script(&record.collection).await
-                    {
+                    if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
                         let hook_state = state.clone();
                         let hook_lexicon_id = record.collection.clone();
                         let hook_uri = uri.clone();

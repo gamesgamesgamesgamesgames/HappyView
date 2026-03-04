@@ -75,9 +75,9 @@ export default function LexiconDetailPage() {
           setLuaText(lex.script ?? "");
           setOriginalLua(lex.script ?? "");
         }
-        setHookText(lex.on_index_script ?? "");
-        setOriginalHook(lex.on_index_script ?? "");
-        setShowHookEditor(!!lex.on_index_script);
+        setHookText(lex.index_hook ?? "");
+        setOriginalHook(lex.index_hook ?? "");
+        setShowHookEditor(!!lex.index_hook);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [getToken, id]);
@@ -101,7 +101,7 @@ export default function LexiconDetailPage() {
         lexicon_json: lexiconJson,
         backfill: lexicon.backfill,
         script: luaText || undefined,
-        on_index_script: hookText || undefined,
+        index_hook: hookText || undefined,
       });
       load();
     } catch (e: unknown) {
@@ -155,7 +155,7 @@ export default function LexiconDetailPage() {
     lexicon.lexicon_type === "query" ||
     lexicon.lexicon_type === "procedure";
   const isRecord = lexicon.lexicon_type === "record";
-  const showHook = isRecord && (showHookEditor || !!lexicon.on_index_script);
+  const showHook = isRecord && (showHookEditor || !!lexicon.index_hook);
 
   return (
     <div className="flex flex-col h-full max-h-screen md:max-h-[calc(100vh-((var(--spacing)*2)*2))] overflow-hidden">
