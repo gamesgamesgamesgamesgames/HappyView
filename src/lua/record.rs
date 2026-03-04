@@ -801,7 +801,7 @@ fn populate_defaults(lua: &Lua, table: &mlua::Table, schema: &mlua::Table) -> Lu
 }
 
 /// Serialize a Record table to serde_json::Value, stripping _-prefixed keys,
-/// filtering to only schema-defined properties, and injecting $type.
+/// filtering to only schema-defined properties, and injecting `$type`.
 fn extract_record_data(lua: &Lua, table: &mlua::Table, collection: &str) -> LuaResult<Value> {
     // Build the set of allowed property names from the schema (if available).
     // When a schema is present, only fields listed in `properties` are included.
@@ -837,4 +837,125 @@ fn extract_record_data(lua: &Lua, table: &mlua::Table, collection: &str) -> LuaR
         obj.insert("$type".to_string(), json!(collection));
     }
     Ok(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mlua::Lua;
+
+    #[test]
+    fn validate_required_fields_passes_when_present() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set("name", "test").unwrap();
+        table.raw_set("count", 1).unwrap();
+
+        let schema = lua.create_table().unwrap();
+        let required = lua.create_sequence_from(["name", "count"]).unwrap();
+        schema.raw_set("required", required).unwrap();
+
+        assert!(validate_required_fields(&table, &schema).is_ok());
+    }
+
+    #[test]
+    fn validate_required_fields_fails_when_missing() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set("name", "test").unwrap();
+
+        let schema = lua.create_table().unwrap();
+        let required = lua.create_sequence_from(["name", "count"]).unwrap();
+        schema.raw_set("required", required).unwrap();
+
+        let result = validate_required_fields(&table, &schema);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("count"),
+            "expected error about 'count', got: {err}"
+        );
+    }
+
+    #[test]
+    fn populate_defaults_fills_missing_fields() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+
+        let schema = lua.create_table().unwrap();
+        let properties = lua.create_table().unwrap();
+        let status_prop = lua.create_table().unwrap();
+        status_prop.raw_set("default", "draft").unwrap();
+        properties.raw_set("status", status_prop).unwrap();
+        schema.raw_set("properties", properties).unwrap();
+
+        populate_defaults(&lua, &table, &schema).unwrap();
+        assert_eq!(table.raw_get::<String>("status").unwrap(), "draft");
+    }
+
+    #[test]
+    fn populate_defaults_does_not_overwrite_existing() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set("status", "published").unwrap();
+
+        let schema = lua.create_table().unwrap();
+        let properties = lua.create_table().unwrap();
+        let status_prop = lua.create_table().unwrap();
+        status_prop.raw_set("default", "draft").unwrap();
+        properties.raw_set("status", status_prop).unwrap();
+        schema.raw_set("properties", properties).unwrap();
+
+        populate_defaults(&lua, &table, &schema).unwrap();
+        assert_eq!(table.raw_get::<String>("status").unwrap(), "published");
+    }
+
+    #[test]
+    fn extract_record_data_strips_internal_fields() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set("_collection", "col").unwrap();
+        table.raw_set("_uri", "at://did:plc:test/col/rkey").unwrap();
+        table.raw_set("_schema", mlua::Value::Nil).unwrap();
+        table.raw_set("name", "test").unwrap();
+
+        let data = extract_record_data(&lua, &table, "com.example.thing").unwrap();
+        let obj = data.as_object().unwrap();
+        assert!(obj.contains_key("name"));
+        assert!(obj.contains_key("$type"));
+        assert!(!obj.contains_key("_collection"));
+        assert!(!obj.contains_key("_uri"));
+    }
+
+    #[test]
+    fn extract_record_data_filters_to_schema_properties() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set("name", "test").unwrap();
+        table.raw_set("extra", "junk").unwrap();
+
+        // Build a schema with only "name" in properties
+        let schema = lua.create_table().unwrap();
+        let properties = lua.create_table().unwrap();
+        let name_prop = lua.create_table().unwrap();
+        properties.raw_set("name", name_prop).unwrap();
+        schema.raw_set("properties", properties).unwrap();
+        table.raw_set("_schema", schema).unwrap();
+
+        let data = extract_record_data(&lua, &table, "com.example.thing").unwrap();
+        let obj = data.as_object().unwrap();
+        assert!(obj.contains_key("name"));
+        assert!(!obj.contains_key("extra"));
+    }
+
+    #[test]
+    fn extract_record_data_injects_dollar_type() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set("_schema", mlua::Value::Nil).unwrap();
+        table.raw_set("name", "test").unwrap();
+
+        let data = extract_record_data(&lua, &table, "com.example.thing").unwrap();
+        assert_eq!(data["$type"], "com.example.thing");
+    }
 }

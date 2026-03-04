@@ -1,5 +1,5 @@
 mod context;
-mod db_api;
+pub mod db_api;
 mod execute;
 mod http_api;
 mod record;
