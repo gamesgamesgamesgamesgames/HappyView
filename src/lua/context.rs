@@ -32,6 +32,13 @@ pub fn set_query_context(
     Ok(())
 }
 
+/// Set the `env` global table from script variables.
+pub fn set_env_context(lua: &Lua, vars: &HashMap<String, String>) -> LuaResult<()> {
+    let globals = lua.globals();
+    globals.set("env", lua.to_value(vars)?)?;
+    Ok(())
+}
+
 /// Set global context variables for an index hook script.
 pub fn set_hook_context(
     lua: &Lua,
@@ -139,6 +146,31 @@ mod tests {
         let params_table: mlua::Table = globals.get("params").unwrap();
         assert_eq!(params_table.get::<String>("limit").unwrap(), "10");
         assert_eq!(params_table.get::<String>("cursor").unwrap(), "abc");
+    }
+
+    #[test]
+    fn env_context_sets_table() {
+        let lua = create_sandbox().unwrap();
+        let mut vars = HashMap::new();
+        vars.insert("API_KEY".to_string(), "secret123".to_string());
+        vars.insert("OTHER".to_string(), "value".to_string());
+        set_env_context(&lua, &vars).unwrap();
+
+        let globals = lua.globals();
+        let env: mlua::Table = globals.get("env").unwrap();
+        assert_eq!(env.get::<String>("API_KEY").unwrap(), "secret123");
+        assert_eq!(env.get::<String>("OTHER").unwrap(), "value");
+    }
+
+    #[test]
+    fn env_context_empty_map() {
+        let lua = create_sandbox().unwrap();
+        let vars = HashMap::new();
+        set_env_context(&lua, &vars).unwrap();
+
+        let globals = lua.globals();
+        let env: mlua::Table = globals.get("env").unwrap();
+        assert!(env.get::<mlua::Value>("anything").unwrap().is_nil());
     }
 
     #[test]
