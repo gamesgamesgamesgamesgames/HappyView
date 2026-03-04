@@ -9,7 +9,7 @@ use crate::AppState;
 pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     let db_table = lua.create_table()?;
 
-    // db.query({ collection, did?, limit?, offset? }) -> { records, cursor? }
+    // db.query({ collection, did?, limit?, offset?, sort?, sortDirection? }) -> { records, cursor? }
     let state_query = state.clone();
     let query_fn = lua.create_async_function(move |lua, opts: mlua::Table| {
         let state = state_query.clone();
@@ -18,10 +18,44 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let did: Option<String> = opts.get("did").ok();
             let limit: i64 = opts.get::<i64>("limit").unwrap_or(20).min(100);
             let offset: i64 = opts.get::<i64>("offset").unwrap_or(0);
+            let sort: Option<String> = opts.get("sort").ok();
+            let sort_direction: Option<String> = opts.get("sortDirection").ok();
+
+            // Validate sort field name to prevent SQL injection
+            if let Some(ref field) = sort {
+                let valid = field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                if !valid || field.is_empty() {
+                    return Err(mlua::Error::runtime(
+                        "invalid sort field: only alphanumeric characters and underscores are allowed",
+                    ));
+                }
+            }
+
+            let direction = match sort_direction.as_deref() {
+                Some("asc") => "ASC",
+                Some("desc") => "DESC",
+                None => "DESC",
+                Some(other) => {
+                    return Err(mlua::Error::runtime(format!(
+                        "invalid sortDirection '{other}': must be 'asc' or 'desc'"
+                    )));
+                }
+            };
+
+            let top_level_columns = ["indexed_at", "did", "uri"];
+            let order_expr = match &sort {
+                Some(field) if top_level_columns.contains(&field.as_str()) => {
+                    format!("{field} {direction}")
+                }
+                Some(field) => {
+                    format!("record->'value'->>'{field}' {direction}")
+                }
+                None => format!("indexed_at {direction}"),
+            };
 
             let rows: Vec<(String, String, Value)> = if let Some(ref did) = did {
                 sqlx::query_as(
-                    "SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY indexed_at DESC LIMIT $3 OFFSET $4",
+                    &format!("SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY {order_expr} LIMIT $3 OFFSET $4"),
                 )
                 .bind(&collection)
                 .bind(did)
@@ -32,7 +66,7 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
             } else {
                 sqlx::query_as(
-                    "SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY indexed_at DESC LIMIT $2 OFFSET $3",
+                    &format!("SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY {order_expr} LIMIT $2 OFFSET $3"),
                 )
                 .bind(&collection)
                 .bind(limit)
