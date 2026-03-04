@@ -87,9 +87,19 @@ pub fn create_sandbox() -> LuaResult<Lua> {
 /// Validate that a script compiles and defines a `handle` function.
 pub fn validate_script(source: &str) -> Result<(), String> {
     let lua = create_sandbox().map_err(|e| format!("failed to create Lua VM: {e}"))?;
-    // Set an empty env table so scripts that reference env.* at the top level don't fail.
+    // Set a stub env table that returns "" for any missing key so scripts
+    // that do top-level concatenation (e.g. `env.URL .. "/path"`) don't fail.
+    let env_stub = lua.create_table().unwrap();
+    let meta = lua.create_table().unwrap();
+    meta.set(
+        "__index",
+        lua.create_function(|_, (_t, _k): (mlua::Value, mlua::Value)| Ok("".to_string()))
+            .unwrap(),
+    )
+    .unwrap();
+    let _ = env_stub.set_metatable(Some(meta));
     lua.globals()
-        .set("env", lua.create_table().unwrap())
+        .set("env", env_stub)
         .map_err(|e| format!("failed to set env stub: {e}"))?;
     lua.load(source)
         .exec()
