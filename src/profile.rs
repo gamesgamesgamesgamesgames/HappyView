@@ -85,14 +85,17 @@ pub async fn resolve_pds_endpoint(
         .ok_or_else(|| AppError::NotFound("no PDS endpoint in DID document".into()))
 }
 
-/// Fetch a DID document from the PLC directory.
-// TODO: handle did:web:* resolution (fetch https://{domain}/.well-known/did.json)
+/// Fetch a DID document from the PLC directory or via `did:web` resolution.
 async fn resolve_did_document(
     http: &reqwest::Client,
     plc_url: &str,
     did: &str,
 ) -> Result<DidDocument, AppError> {
-    let url = format!("{}/{did}", plc_url.trim_end_matches('/'));
+    let url = if let Some(domain) = did.strip_prefix("did:web:") {
+        format!("https://{}/.well-known/did.json", domain)
+    } else {
+        format!("{}/{did}", plc_url.trim_end_matches('/'))
+    };
 
     let resp = http
         .get(&url)
