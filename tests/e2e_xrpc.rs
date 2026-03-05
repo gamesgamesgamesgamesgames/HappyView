@@ -172,7 +172,7 @@ async fn profile_with_mocked_services_returns_200() {
 
 #[tokio::test]
 #[serial]
-async fn xrpc_get_unknown_method_returns_400() {
+async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
     let app = TestApp::new().await;
 
     let resp = app
@@ -186,7 +186,9 @@ async fn xrpc_get_unknown_method_returns_400() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    // Unknown methods are proxied to the resolved authority; DNS lookup
+    // failure for a nonsense NSID results in a 502 Bad Gateway.
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
 }
 
 #[tokio::test]
