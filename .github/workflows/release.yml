@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -33,7 +33,7 @@ jobs:
 
   unit-tests:
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -55,7 +55,7 @@ jobs:
 
   e2e-tests:
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
 
     services:
       postgres:
@@ -93,7 +93,7 @@ jobs:
         run: cargo test --tests
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -110,7 +110,7 @@ jobs:
 
   lint:
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -136,7 +136,7 @@ jobs:
   release:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     needs: [unit-tests, e2e-tests, frontend, lint]
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
 
