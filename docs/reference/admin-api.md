@@ -4,7 +4,12 @@ The admin API lets you manage lexicons, monitor records, run backfill jobs, and 
 
 ## Auth
 
-Admin auth works the same as user auth: the Bearer token is validated against AIP's `/oauth/userinfo` endpoint to retrieve the caller's DID. That DID is then checked against the `admins` table.
+The admin API supports two authentication methods:
+
+1. **OAuth (AIP)** — the Bearer token is validated against AIP's `/oauth/userinfo` endpoint to retrieve the caller's DID.
+2. **API keys** — read/write tokens starting with `hv_`. See the [API Keys guide](../guides/api-keys.md) for details.
+
+In both cases the resolved DID is checked against the `admins` table.
 
 **Auto-bootstrap**: If the `admins` table is empty, the first authenticated request automatically inserts the caller as the initial admin.
 
@@ -18,15 +23,15 @@ All error responses return JSON with an `error` field:
 }
 ```
 
-| Status | Meaning |
-|--------|---------|
-| `400 Bad Request` | Invalid input (missing required fields, malformed lexicon JSON) |
+| Status             | Meaning                                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `400 Bad Request`  | Invalid input (missing required fields, malformed lexicon JSON)                                                |
 | `401 Unauthorized` | Missing or invalid Bearer token. See [AIP documentation](https://github.com/graze-social/aip) for token issues |
-| `403 Forbidden` | Authenticated DID is not in the admins table |
-| `404 Not Found` | Lexicon, admin, or backfill job not found |
+| `403 Forbidden`    | Authenticated DID is not in the admins table                                                                   |
+| `404 Not Found`    | Lexicon, admin, or backfill job not found                                                                      |
 
 ```sh
-# All examples assume $TOKEN is an AIP-issued access token for an admin DID
+# All examples assume $TOKEN is an AIP-issued access token or API key
 AUTH="Authorization: Bearer $TOKEN"
 ```
 
@@ -49,13 +54,13 @@ curl -X POST http://localhost:3000/admin/lexicons \
   }'
 ```
 
-| Field               | Type    | Required | Description                                                         |
-| ------------------- | ------- | -------- | ------------------------------------------------------------------- |
-| `lexicon_json`      | object  | yes      | Raw lexicon JSON (must have `lexicon: 1` and `id`)                  |
-| `backfill`          | boolean | no       | Whether uploading triggers historical backfill (default `true`)     |
-| `target_collection` | string  | no       | For query/procedure lexicons, the record collection they operate on |
-| `script`            | string  | no       | Lua script for query/procedure endpoints                            |
-| `index_hook`   | string  | no       | [Index hook](../guides/index-hooks.md) Lua script for record lexicons |
+| Field               | Type    | Required | Description                                                           |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------- |
+| `lexicon_json`      | object  | yes      | Raw lexicon JSON (must have `lexicon: 1` and `id`)                    |
+| `backfill`          | boolean | no       | Whether uploading triggers historical backfill (default `true`)       |
+| `target_collection` | string  | no       | For query/procedure lexicons, the record collection they operate on   |
+| `script`            | string  | no       | Lua script for query/procedure endpoints                              |
+| `index_hook`        | string  | no       | [Index hook](../guides/index-hooks.md) Lua script for record lexicons |
 
 **Response**: `201 Created` (new) or `200 OK` (upsert)
 
@@ -236,11 +241,11 @@ curl http://localhost:3000/admin/tap/stats -H "$AUTH"
 }
 ```
 
-| Field          | Type   | Description                                              |
-| -------------- | ------ | -------------------------------------------------------- |
-| `repo_count`   | number | Total repos Tap is tracking                              |
-| `record_count` | number | Total records Tap has indexed                            |
-| `outbox_buffer`| number | Pending events awaiting delivery (high = Tap is busy)    |
+| Field           | Type   | Description                                           |
+| --------------- | ------ | ----------------------------------------------------- |
+| `repo_count`    | number | Total repos Tap is tracking                           |
+| `record_count`  | number | Total records Tap has indexed                         |
+| `outbox_buffer` | number | Pending events awaiting delivery (high = Tap is busy) |
 
 Returns `502 Bad Gateway` if Tap is unreachable.
 
@@ -317,14 +322,14 @@ GET /admin/events
 curl "http://localhost:3000/admin/events?severity=error&limit=10" -H "$AUTH"
 ```
 
-| Param        | Type   | Required | Description                                                       |
-| ------------ | ------ | -------- | ----------------------------------------------------------------- |
-| `event_type` | string | no       | Filter by exact event type (e.g. `script.error`)                  |
+| Param        | Type   | Required | Description                                                           |
+| ------------ | ------ | -------- | --------------------------------------------------------------------- |
+| `event_type` | string | no       | Filter by exact event type (e.g. `script.error`)                      |
 | `category`   | string | no       | Filter by category prefix (e.g. `lexicon` matches all lexicon events) |
-| `severity`   | string | no       | Filter by severity: `info`, `warn`, or `error`                    |
-| `subject`    | string | no       | Filter by subject (lexicon ID, record URI, admin DID, etc.)       |
-| `cursor`     | string | no       | Pagination cursor (ISO 8601 timestamp from previous response)     |
-| `limit`      | number | no       | Results per page (default `50`, max `100`)                        |
+| `severity`   | string | no       | Filter by severity: `info`, `warn`, or `error`                        |
+| `subject`    | string | no       | Filter by subject (lexicon ID, record URI, admin DID, etc.)           |
+| `cursor`     | string | no       | Pagination cursor (ISO 8601 timestamp from previous response)         |
+| `limit`      | number | no       | Results per page (default `50`, max `100`)                            |
 
 **Response**: `200 OK`
 
@@ -352,6 +357,82 @@ curl "http://localhost:3000/admin/events?severity=error&limit=10" -H "$AUTH"
 ```
 
 Events are returned in reverse chronological order (newest first). Pass the `cursor` value from the response to fetch the next page.
+
+## API Keys
+
+Manage API keys for programmatic access. See the [API Keys guide](../guides/api-keys.md) for usage details.
+
+### Create an API key
+
+```
+POST /admin/api-keys
+```
+
+```sh
+curl -X POST http://localhost:3000/admin/api-keys \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "CI Deploy" }'
+```
+
+| Field  | Type   | Required | Description                          |
+| ------ | ------ | -------- | ------------------------------------ |
+| `name` | string | yes      | A label to identify this key's usage |
+
+**Response**: `201 Created`
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "CI Deploy",
+  "key": "hv_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+  "key_prefix": "hv_a1b2c3d4"
+}
+```
+
+The `key` field contains the full API key. It is only returned in this response — store it securely.
+
+### List API keys
+
+```
+GET /admin/api-keys
+```
+
+```sh
+curl http://localhost:3000/admin/api-keys -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "CI Deploy",
+    "key_prefix": "hv_a1b2c3d4",
+    "created_at": "2026-03-01T00:00:00Z",
+    "last_used_at": "2026-03-06T12:00:00Z",
+    "revoked_at": null
+  }
+]
+```
+
+Only returns keys belonging to the authenticated admin. The full key is never included — only the prefix.
+
+### Revoke an API key
+
+```
+DELETE /admin/api-keys/{id}
+```
+
+```sh
+curl -X DELETE http://localhost:3000/admin/api-keys/550e8400-e29b-41d4-a716-446655440000 \
+  -H "$AUTH"
+```
+
+Sets `revoked_at` on the key. The key remains in the database for audit purposes but can no longer authenticate.
+
+**Response**: `204 No Content`
 
 ## Admin management
 
