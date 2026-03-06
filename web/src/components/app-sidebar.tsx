@@ -7,7 +7,6 @@ import {
   IconTable,
   IconClipboardList,
   IconUsers,
-  IconKey,
   IconSettings,
   IconLogout,
 } from "@tabler/icons-react"
@@ -35,7 +34,6 @@ const navItems = [
   { title: "Records", url: "/records", icon: IconTable },
   { title: "Event Logs", url: "/events", icon: IconClipboardList },
   { title: "Admins", url: "/admins", icon: IconUsers },
-  { title: "API Keys", url: "/api-keys", icon: IconKey },
   { title: "Settings", url: "/settings", icon: IconSettings },
 ]
 
