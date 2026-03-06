@@ -126,6 +126,39 @@ end
 
 See the full [Algolia sync reference](../reference/scripts/algolia-sync.md) for more detail.
 
+### Sync to Meilisearch
+
+Push records to a self-hosted Meilisearch index on create/update, and remove them on delete:
+
+```lua
+function handle()
+  local headers = {
+    ["Authorization"] = "Bearer " .. env.MEILISEARCH_API_KEY,
+    ["Content-Type"] = "application/json"
+  }
+
+  if action == "delete" then
+    http.delete(env.MEILISEARCH_URL .. "/indexes/records/documents/" .. uri, {
+      headers = headers
+    })
+  else
+    http.post(env.MEILISEARCH_URL .. "/indexes/records/documents", {
+      headers = headers,
+      body = json.encode(toarray({
+        {
+          id = uri,
+          collection = collection,
+          did = did,
+          record = record
+        }
+      }))
+    })
+  end
+end
+```
+
+See the full [Meilisearch sync reference](../reference/scripts/meilisearch-sync.md) for more detail.
+
 ## Next steps
 
 - [Lua Scripting](scripting.md): Full reference for the sandbox, APIs, and debugging
