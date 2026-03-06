@@ -3,8 +3,18 @@ name: Release
 on:
   push:
     branches: [main, dev]
+    paths-ignore:
+      - "docs/**"
+      - "docusaurus.config.ts"
+      - "sidebars.ts"
+      - "static/**"
   pull_request:
     branches: [main, dev]
+    paths-ignore:
+      - "docs/**"
+      - "docusaurus.config.ts"
+      - "sidebars.ts"
+      - "static/**"
 
 env:
   SQLX_OFFLINE: true
