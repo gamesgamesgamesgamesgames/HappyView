@@ -1,0 +1,59 @@
+# API Keys
+
+API keys let you authenticate with the admin API without going through the OAuth flow. They're useful for CI/CD pipelines, scripts, and any automation that needs to manage your HappyView instance programmatically.
+
+## How API keys work
+
+Each API key is a 35-character token with the format `hv_` followed by 32 random hex characters:
+
+```
+hv_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+```
+
+When you create a key, HappyView shows the full token **once**. After that, only the prefix (`hv_a1b2c3d4`) is stored for display — the key itself is SHA-256 hashed before being saved to the database. This means nobody (including you) can retrieve the full key after creation.
+
+API keys inherit the permissions of the admin who created them. A revoked key immediately stops working.
+
+## Creating a key
+
+1. Go to **Settings** in the dashboard
+2. Select the **API Keys** tab
+3. Click **Create API Key**
+4. Enter a descriptive name (e.g., "CI Deploy", "Monitoring Script")
+5. Copy the full key from the confirmation dialog — you won't see it again
+
+## Using a key
+
+Pass the key as a Bearer token in the `Authorization` header:
+
+```sh
+curl http://localhost:3000/admin/lexicons \
+  -H "Authorization: Bearer hv_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+```
+
+This works for all [admin API](../reference/admin-api.md) endpoints — anything you can do with an OAuth token, you can do with an API key.
+
+## Revoking a key
+
+1. Go to **Settings > API Keys**
+2. Click **Revoke** next to the key
+3. Confirm in the dialog
+
+Revoked keys are soft-deleted: they remain visible in the table (with a strikethrough) for audit purposes but can no longer authenticate. Any service using the key will immediately receive `401 Unauthorized` responses.
+
+## Tracking usage
+
+The **Last Used** column in the API Keys table shows when each key was last used to authenticate a request. Keys that have never been used show "Never". This helps you identify unused keys that can be safely revoked.
+
+## Security considerations
+
+- **Treat API keys like passwords.** Anyone with the key has full admin access to your HappyView instance.
+- **Use descriptive names** so you can identify which service uses which key.
+- **Revoke keys you no longer need.** If a key is compromised, revoke it immediately.
+- **Don't commit keys to version control.** Use environment variables or secret managers instead.
+
+## Next steps
+
+- [Admin API reference](../reference/admin-api.md) — full endpoint documentation
+- [Scripting](scripting.md) — automate record processing with Lua scripts
+- [Index hooks](index-hooks.md) — push records to external services on write
