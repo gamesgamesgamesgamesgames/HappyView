@@ -174,6 +174,11 @@ const sidebars: SidebarsConfig = {
               id: "reference/scripts/algolia-sync",
               label: "Algolia Sync",
             },
+            {
+              type: "doc",
+              id: "reference/scripts/meilisearch-sync",
+              label: "Meilisearch Sync",
+            },
           ],
         },
         {
