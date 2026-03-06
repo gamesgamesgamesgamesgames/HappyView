@@ -1,5 +1,6 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use sha2::{Digest, Sha256};
 
 use crate::AppState;
 use crate::auth::middleware::Claims;
@@ -10,6 +11,9 @@ use crate::event_log::{EventLog, Severity, log_event};
 /// (same as `Claims`), then checks if the returned DID exists in the `admins`
 /// table. If no admins exist yet, the first authenticated user is
 /// auto-bootstrapped as the initial admin.
+///
+/// Also supports `hv_`-prefixed API keys: the token is SHA-256 hashed and
+/// looked up in `admin_api_keys`. If found, the admin's DID is returned.
 pub struct AdminAuth {
     pub did: String,
 }
@@ -21,6 +25,11 @@ impl FromRequestParts<AppState> for AdminAuth {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        // Check for API key auth first (Bearer hv_...).
+        if let Some(auth) = Self::try_api_key_auth(parts, state).await? {
+            return Ok(auth);
+        }
+
         // Validate the Bearer token via AIP userinfo (reuse Claims extractor).
         let claims = Claims::from_request_parts(parts, state).await?;
         let did = claims.did().to_string();
@@ -75,5 +84,60 @@ impl FromRequestParts<AppState> for AdminAuth {
         });
 
         Ok(AdminAuth { did })
+    }
+}
+
+impl AdminAuth {
+    /// If the Authorization header contains a `hv_`-prefixed API key, validate
+    /// it against the `admin_api_keys` table and return the owning admin's DID.
+    /// Returns `Ok(None)` if the token doesn't start with `hv_`, allowing
+    /// fallthrough to the normal OAuth flow.
+    async fn try_api_key_auth(parts: &Parts, state: &AppState) -> Result<Option<Self>, AppError> {
+        let header = match parts
+            .headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+        {
+            Some(h) => h,
+            None => return Ok(None),
+        };
+
+        let token = header
+            .strip_prefix("Bearer ")
+            .or_else(|| header.strip_prefix("DPoP "));
+
+        let token = match token {
+            Some(t) if t.starts_with("hv_") => t,
+            _ => return Ok(None),
+        };
+
+        let hash = hex::encode(Sha256::digest(token.as_bytes()));
+
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT k.id::text, a.did
+             FROM admin_api_keys k
+             JOIN admins a ON a.id = k.admin_id
+             WHERE k.key_hash = $1 AND k.revoked_at IS NULL",
+        )
+        .bind(&hash)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("api key lookup failed: {e}")))?;
+
+        let Some((key_id, did)) = row else {
+            return Err(AppError::Auth("invalid or revoked API key".into()));
+        };
+
+        // Update last_used_at in the background.
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            let _ =
+                sqlx::query("UPDATE admin_api_keys SET last_used_at = NOW() WHERE id::text = $1")
+                    .bind(&key_id)
+                    .execute(&db)
+                    .await;
+        });
+
+        Ok(Some(AdminAuth { did }))
     }
 }
