@@ -118,6 +118,33 @@ pub(super) struct AdminSummary {
 }
 
 // ---------------------------------------------------------------------------
+// API key types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct CreateApiKeyBody {
+    pub(super) name: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct ApiKeySummary {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) key_prefix: String,
+    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(super) revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Serialize)]
+pub(super) struct CreateApiKeyResponse {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) key: String,
+    pub(super) key_prefix: String,
+}
+
+// ---------------------------------------------------------------------------
 // Script variable types
 // ---------------------------------------------------------------------------
 

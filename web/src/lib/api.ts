@@ -1,5 +1,6 @@
 import { createDpopProof, setDpopNonce } from "./dpop"
 
+import type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 import type { StatsResponse } from "@/types/stats"
 import type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
 import type { NetworkLexiconSummary } from "@/types/network-lexicons"
@@ -10,6 +11,7 @@ import type { AdminListRecordsResponse } from "@/types/records"
 import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
 
+export type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 export type { CollectionStat, StatsResponse } from "@/types/stats"
 export type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
 export type { NetworkLexiconSummary } from "@/types/network-lexicons"
@@ -191,6 +193,27 @@ export function addAdmin(
 
 export function deleteAdmin(getToken: () => Promise<string | null>, id: string) {
   return apiFetch(`/admin/admins/${encodeURIComponent(id)}`, getToken, {
+    method: "DELETE",
+  })
+}
+
+// API Keys
+export function getApiKeys(getToken: () => Promise<string | null>) {
+  return apiFetch<ApiKeySummary[]>("/admin/api-keys", getToken)
+}
+
+export function createApiKey(
+  getToken: () => Promise<string | null>,
+  body: { name: string }
+) {
+  return apiFetch<CreateApiKeyResponse>("/admin/api-keys", getToken, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function revokeApiKey(getToken: () => Promise<string | null>, id: string) {
+  return apiFetch(`/admin/api-keys/${encodeURIComponent(id)}`, getToken, {
     method: "DELETE",
   })
 }
