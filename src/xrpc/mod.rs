@@ -3,9 +3,10 @@ mod query;
 
 use axum::Json;
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, RawQuery, State};
 use axum::http::StatusCode;
 use axum::response::Response;
+use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::AppState;
@@ -13,6 +14,38 @@ use crate::auth::Claims;
 use crate::error::AppError;
 use crate::lexicon::LexiconType;
 use crate::resolve::resolve_nsid_authority;
+
+/// Parse a raw query string into a map where repeated keys become JSON arrays.
+/// Single-value keys remain as JSON strings for backward compatibility.
+fn parse_query_params(query: &str) -> HashMap<String, Value> {
+    let mut multi: HashMap<String, Vec<String>> = HashMap::new();
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = match pair.split_once('=') {
+            Some((k, v)) => (
+                urlencoding::decode(k).unwrap_or_default().into_owned(),
+                urlencoding::decode(v).unwrap_or_default().into_owned(),
+            ),
+            None => (
+                urlencoding::decode(pair).unwrap_or_default().into_owned(),
+                String::new(),
+            ),
+        };
+        multi.entry(key).or_default().push(value);
+    }
+    multi
+        .into_iter()
+        .map(|(k, v)| {
+            if v.len() == 1 {
+                (k, Value::String(v.into_iter().next().unwrap()))
+            } else {
+                (k, Value::Array(v.into_iter().map(Value::String).collect()))
+            }
+        })
+        .collect()
+}
 
 /// Proxy an unrecognized XRPC method to its home AppView resolved via DNS.
 async fn proxy_to_authority(
@@ -75,17 +108,15 @@ async fn proxy_to_authority(
 pub async fn xrpc_get(
     State(state): State<AppState>,
     Path(method): Path<String>,
-    Query(params): Query<HashMap<String, String>>,
+    RawQuery(raw_query): RawQuery,
 ) -> Result<Response, AppError> {
+    let raw_query = raw_query.unwrap_or_default();
+    let params = parse_query_params(&raw_query);
+
     let lexicon = match state.lexicons.get(&method).await {
         Some(l) => l,
         None => {
-            let query_string: String = params
-                .iter()
-                .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
-                .collect::<Vec<_>>()
-                .join("&");
-            return proxy_to_authority(&state, &method, &query_string, None).await;
+            return proxy_to_authority(&state, &method, &raw_query, None).await;
         }
     };
 

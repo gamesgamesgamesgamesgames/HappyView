@@ -22,7 +22,7 @@ pub fn set_procedure_context(
 pub fn set_query_context(
     lua: &Lua,
     method: &str,
-    params: &HashMap<String, String>,
+    params: &HashMap<String, Value>,
     collection: &str,
 ) -> LuaResult<()> {
     let globals = lua.globals();
@@ -129,8 +129,8 @@ mod tests {
     fn query_context_sets_all_globals() {
         let lua = create_sandbox().unwrap();
         let mut params = HashMap::new();
-        params.insert("limit".to_string(), "10".to_string());
-        params.insert("cursor".to_string(), "abc".to_string());
+        params.insert("limit".to_string(), json!("10"));
+        params.insert("cursor".to_string(), json!("abc"));
         set_query_context(&lua, "com.example.listThings", &params, "com.example.thing").unwrap();
 
         let globals = lua.globals();
