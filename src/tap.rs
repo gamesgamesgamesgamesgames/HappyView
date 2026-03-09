@@ -444,6 +444,51 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
             };
             let cid = record.cid.as_deref().unwrap_or_default();
 
+            // Run index hook before storing, if configured. The hook's return
+            // value determines what (if anything) gets written to the DB.
+            let rec_to_store =
+                if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
+                    let hook_result = crate::lua::execute_hook_script(&crate::lua::HookEvent {
+                        state,
+                        lexicon_id: &record.collection,
+                        script: &script,
+                        action: &record.action,
+                        uri: &uri,
+                        did: &record.did,
+                        collection: &record.collection,
+                        rkey: &record.rkey,
+                        record: Some(rec),
+                    })
+                    .await;
+
+                    match hook_result {
+                        None => {
+                            // Hook returned nil — skip indexing this record.
+                            log_event(
+                                db,
+                                EventLog {
+                                    event_type: "record.skipped".to_string(),
+                                    severity: Severity::Info,
+                                    actor_did: None,
+                                    subject: Some(uri.clone()),
+                                    detail: serde_json::json!({
+                                        "collection": record.collection,
+                                        "did": record.did,
+                                        "rkey": record.rkey,
+                                        "reason": "hook returned nil",
+                                    }),
+                                },
+                            )
+                            .await;
+                            return;
+                        }
+                        Some(v) => v,
+                    }
+                } else {
+                    // No hook — store the original record as-is.
+                    rec.clone()
+                };
+
             match sqlx::query(
                 r#"
                 INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at)
@@ -458,7 +503,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
             .bind(&record.did)
             .bind(&record.collection)
             .bind(&record.rkey)
-            .bind(rec)
+            .bind(&rec_to_store)
             .bind(cid)
             .execute(db)
             .await
@@ -479,32 +524,6 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                         },
                     )
                     .await;
-
-                    // Fire index hook if configured.
-                    if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
-                        let hook_state = state.clone();
-                        let hook_lexicon_id = record.collection.clone();
-                        let hook_uri = uri.clone();
-                        let hook_did = record.did.clone();
-                        let hook_collection = record.collection.clone();
-                        let hook_rkey = record.rkey.clone();
-                        let hook_action = record.action.clone();
-                        let hook_rec = rec.clone();
-                        tokio::spawn(async move {
-                            crate::lua::execute_hook_script(&crate::lua::HookEvent {
-                                state: &hook_state,
-                                lexicon_id: &hook_lexicon_id,
-                                script: &script,
-                                action: &hook_action,
-                                uri: &hook_uri,
-                                did: &hook_did,
-                                collection: &hook_collection,
-                                rkey: &hook_rkey,
-                                record: Some(&hook_rec),
-                            })
-                            .await;
-                        });
-                    }
                 }
                 Err(e) => {
                     tracing::warn!(uri = %uri, "failed to upsert record: {e}");
@@ -528,6 +547,43 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
             }
         }
         "delete" => {
+            // Run index hook before deleting, if configured.
+            if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
+                let hook_result = crate::lua::execute_hook_script(&crate::lua::HookEvent {
+                    state,
+                    lexicon_id: &record.collection,
+                    script: &script,
+                    action: "delete",
+                    uri: &uri,
+                    did: &record.did,
+                    collection: &record.collection,
+                    rkey: &record.rkey,
+                    record: None,
+                })
+                .await;
+
+                if hook_result.is_none() {
+                    // Hook returned nil — skip the delete.
+                    log_event(
+                        db,
+                        EventLog {
+                            event_type: "record.skipped".to_string(),
+                            severity: Severity::Info,
+                            actor_did: None,
+                            subject: Some(uri.clone()),
+                            detail: serde_json::json!({
+                                "collection": record.collection,
+                                "did": record.did,
+                                "rkey": record.rkey,
+                                "reason": "hook returned nil",
+                            }),
+                        },
+                    )
+                    .await;
+                    return;
+                }
+            }
+
             match sqlx::query("DELETE FROM records WHERE uri = $1")
                 .bind(&uri)
                 .execute(db)
@@ -549,30 +605,6 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                         },
                     )
                     .await;
-
-                    // Fire index hook if configured.
-                    if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
-                        let hook_state = state.clone();
-                        let hook_lexicon_id = record.collection.clone();
-                        let hook_uri = uri.clone();
-                        let hook_did = record.did.clone();
-                        let hook_collection = record.collection.clone();
-                        let hook_rkey = record.rkey.clone();
-                        tokio::spawn(async move {
-                            crate::lua::execute_hook_script(&crate::lua::HookEvent {
-                                state: &hook_state,
-                                lexicon_id: &hook_lexicon_id,
-                                script: &script,
-                                action: "delete",
-                                uri: &hook_uri,
-                                did: &hook_did,
-                                collection: &hook_collection,
-                                rkey: &hook_rkey,
-                                record: None,
-                            })
-                            .await;
-                        });
-                    }
                 }
                 Err(e) => {
                     tracing::warn!(uri = %uri, "failed to delete record: {e}");

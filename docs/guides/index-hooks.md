@@ -1,8 +1,8 @@
 # Index Hooks
 
-Index hooks are Lua scripts that run automatically whenever a record in a collection is created, updated, or deleted on the network. They let you react to record changes in real time — push data to search engines, sync with external APIs, send notifications, or build materialized views.
+Index hooks are Lua scripts that run automatically whenever a record in a collection is created, updated, or deleted on the network. They run **before** the record is indexed, giving you the ability to filter out unwanted records, transform record data before storage, or trigger side effects like syncing with external services.
 
-Unlike [query and procedure scripts](scripting.md) that run in response to XRPC requests, index hooks are triggered by the firehose. They run asynchronously and never block record indexing.
+Unlike [query and procedure scripts](scripting.md) that run in response to XRPC requests, index hooks are triggered by the firehose.
 
 ## Attaching a hook
 
@@ -22,7 +22,17 @@ function handle()
 end
 ```
 
-The function is called once per record event. There is no return value — index hooks are fire-and-forget from the caller's perspective.
+The function is called once per record event. The return value controls what happens next:
+
+| Return value | Effect                                           |
+| ------------ | ------------------------------------------------ |
+| `nil`        | The record is **not** indexed (skipped entirely) |
+| A table      | That table is stored as the record instead       |
+| *(no hook)*  | The original record is stored as-is              |
+
+On **delete** events, returning `nil` skips the delete (the record stays in the database).
+
+If the hook errors after all retries, the system **fails open** — the original record is stored and the failed event is dead-lettered for later inspection.
 
 ## Context globals
 
@@ -54,9 +64,13 @@ Index hooks are designed to be resilient:
 
 1. If a hook fails, it retries up to **3 times** with exponential backoff (1s, 2s, 4s delays).
 2. If all retries are exhausted, the failed event is inserted into the `dead_letter_hooks` table for later inspection.
-3. Hook failures never block record indexing — the record is always indexed regardless of whether the hook succeeds.
+3. On failure the system **fails open** — the original record is stored as-is so indexing is not permanently blocked.
 
 Failed hooks are logged as errors. Check the [event logs](event-logs.md) or query the `dead_letter_hooks` table directly to find and replay failures.
+
+### Performance considerations
+
+Because hooks run synchronously before indexing, they block the firehose consumer while executing. With retry logic (1s + 2s + 4s backoff), a persistently failing hook could block for ~7 seconds per record. Keep hook scripts fast and ensure external services they depend on are reliable.
 
 ### Dead letter table
 
@@ -78,6 +92,39 @@ The `dead_letter_hooks` table stores events that failed all retry attempts:
 
 ## Examples
 
+### Filter out records missing a required field
+
+Skip indexing any record that doesn't have a `title` field:
+
+```lua
+function handle()
+  if action == "delete" then
+    return record  -- allow deletes to proceed
+  end
+
+  if record.title == nil or record.title == "" then
+    return nil  -- skip: no title
+  end
+
+  return record
+end
+```
+
+### Transform a record before storage
+
+Enrich a record with a computed field before it is stored:
+
+```lua
+function handle()
+  if action == "delete" then
+    return record
+  end
+
+  record.slug = string.lower(string.gsub(record.title or "", "%s+", "-"))
+  return record
+end
+```
+
 ### Post to a webhook
 
 ```lua
@@ -91,6 +138,7 @@ function handle()
       record = record
     })
   })
+  return record
 end
 ```
 
@@ -121,6 +169,8 @@ function handle()
       })
     })
   end
+
+  return record
 end
 ```
 
@@ -154,6 +204,8 @@ function handle()
       }))
     })
   end
+
+  return record
 end
 ```
 
