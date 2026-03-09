@@ -338,7 +338,7 @@ pub async fn execute_procedure_script(
 pub async fn execute_query_script(
     state: &AppState,
     method: &str,
-    params: &HashMap<String, String>,
+    params: &HashMap<String, serde_json::Value>,
     lexicon: &ParsedLexicon,
     script: &str,
 ) -> Result<Response, AppError> {

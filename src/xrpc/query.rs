@@ -9,7 +9,7 @@ use crate::error::AppError;
 pub(super) async fn handle_query(
     state: &AppState,
     method: &str,
-    params: &HashMap<String, String>,
+    params: &HashMap<String, Value>,
     lexicon: &crate::lexicon::ParsedLexicon,
 ) -> Result<Response, AppError> {
     if let Some(ref script) = lexicon.script {
@@ -17,7 +17,7 @@ pub(super) async fn handle_query(
     }
 
     // Single-record query: has a `uri` parameter
-    if let Some(uri) = params.get("uri") {
+    if let Some(uri) = params.get("uri").and_then(|v| v.as_str()) {
         return handle_get_record(state, uri).await;
     }
 
@@ -30,16 +30,18 @@ pub(super) async fn handle_query(
 
     let limit: i64 = params
         .get("limit")
+        .and_then(|v| v.as_str())
         .and_then(|l| l.parse().ok())
         .unwrap_or(20)
         .min(100);
 
     let offset: i64 = params
         .get("cursor")
+        .and_then(|v| v.as_str())
         .and_then(|c| c.parse().ok())
         .unwrap_or(0);
 
-    let did = params.get("did");
+    let did = params.get("did").and_then(|v| v.as_str());
 
     let rows: Vec<(String, String, Value)> = if let Some(did) = did {
         sqlx::query_as(
