@@ -584,9 +584,15 @@ pub struct HookEvent<'a> {
 
 /// Execute a Lua hook script triggered by a record index event.
 ///
+/// Runs **before** the record is indexed. The return value determines what
+/// gets stored:
+/// - `None` → skip the DB operation entirely
+/// - `Some(value)` → use that value for the insert/update
+///
 /// Retries up to 3 times with exponential backoff (1s, 2s, 4s).
-/// On final failure, inserts into `dead_letter_hooks` table.
-pub async fn execute_hook_script(event: &HookEvent<'_>) {
+/// On final failure, dead-letters the event and returns `Some(original_record)`
+/// (fail-open so indexing is not permanently blocked).
+pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
     let max_attempts: i32 = 4; // 1 initial + 3 retries
     let mut last_error = String::new();
 
@@ -597,7 +603,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) {
         }
 
         match run_hook_once(event).await {
-            Ok(()) => {
+            Ok(hook_result) => {
                 log_event(
                     &event.state.db,
                     EventLog {
@@ -614,7 +620,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) {
                     },
                 )
                 .await;
-                return;
+                return hook_result;
             }
             Err(e) => {
                 last_error = e;
@@ -628,7 +634,8 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) {
         }
     }
 
-    // All retries exhausted — dead-letter the event.
+    // All retries exhausted — dead-letter the event and fail-open with the
+    // original record so indexing is not permanently blocked.
     tracing::error!(
         uri = event.uri,
         lexicon_id = event.lexicon_id,
@@ -673,10 +680,17 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) {
         },
     )
     .await;
+
+    // Fail-open: return the original record so indexing proceeds.
+    event.record.cloned()
 }
 
-/// Execute a hook script once. Returns Ok(()) on success or Err(message) on failure.
-async fn run_hook_once(event: &HookEvent<'_>) -> Result<(), String> {
+/// Execute a hook script once.
+///
+/// Returns `Ok(None)` when `handle()` returns nil (meaning "skip indexing"),
+/// `Ok(Some(value))` when it returns a table (use that as the record), or
+/// `Ok(Some(original))` for other non-nil types.
+async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
     let lua = sandbox::create_sandbox().map_err(|e| format!("failed to create Lua VM: {e}"))?;
 
     let state_arc = Arc::new(event.state.clone());
@@ -710,12 +724,24 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<(), String> {
         .get("handle")
         .map_err(|e| format!("script missing handle function: {e}"))?;
 
-    handle
+    let result: mlua::Value = handle
         .call_async::<mlua::Value>(())
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(())
+    match result {
+        mlua::Value::Nil => Ok(None),
+        mlua::Value::Table(_) => {
+            let json_value: Value = lua
+                .from_value(result)
+                .map_err(|e| format!("failed to convert lua table to JSON: {e}"))?;
+            Ok(Some(json_value))
+        }
+        _ => {
+            // Non-nil, non-table return — proceed with the original record.
+            Ok(event.record.cloned())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -775,6 +801,42 @@ mod tests {
         let event = make_event(&state, "function handle() end", "create", None);
         let result = run_hook_once(&event).await;
         assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        // handle() returns nil implicitly, so result should be None (skip).
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn hook_returns_nil_to_skip() {
+        let state = test_state();
+        let record = json!({"name": "Test"});
+        let event = make_event(
+            &state,
+            "function handle() return nil end",
+            "create",
+            Some(&record),
+        );
+        let result = run_hook_once(&event).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        assert!(result.unwrap().is_none(), "nil return should produce None");
+    }
+
+    #[tokio::test]
+    async fn hook_returns_modified_record() {
+        let state = test_state();
+        let record = json!({"name": "Original"});
+        let script = r#"
+            function handle()
+                return { name = "Modified", extra = true }
+            end
+        "#;
+        let event = make_event(&state, script, "create", Some(&record));
+        let result = run_hook_once(&event).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        let value = result.unwrap();
+        assert!(value.is_some(), "table return should produce Some");
+        let v = value.unwrap();
+        assert_eq!(v["name"], "Modified");
+        assert_eq!(v["extra"], true);
     }
 
     #[tokio::test]
