@@ -8,7 +8,7 @@ Without Lua scripts, HappyView's query endpoints return raw records and procedur
 - Compose multi-record operations
 - Build entirely custom behavior
 
-Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [read-only database API](#database-api), an [HTTP client API](#http-api), a [JSON API](#json-api), and a set of [context globals](#context-globals).
+Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [database API](#database-api), an [HTTP client API](#http-api), a [JSON API](#json-api), and a set of [context globals](#context-globals).
 
 For scripts that react to record changes from the network (rather than XRPC requests), see [Index Hooks](index-hooks.md).
 
@@ -166,7 +166,7 @@ After a successful save, `_uri` and `_cid` are updated on the record instance.
 
 ## Database API
 
-The `db` table provides read-only access to indexed records. Available in both queries and procedures.
+The `db` table provides access to the database. Available in both queries and procedures.
 
 ### db.query
 
@@ -236,9 +236,10 @@ local n = db.count("xyz.statusphere.status", "did:plc:abc")  -- filter by DID
 
 ### db.raw
 
-Run a raw SQL query against the database. Only `SELECT` statements are allowed.
+Run a raw SQL query against the database. Supports `SELECT`, `INSERT`, `UPDATE`, `DELETE`, and `CREATE TABLE` statements.
 
 ```lua
+-- Read query
 local rows = db.raw(
   "SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 LIMIT $3",
   { "xyz.statusphere.status", "did:plc:abc", 10 }
@@ -247,6 +248,11 @@ local rows = db.raw(
 for _, row in ipairs(rows) do
   -- row.uri, row.did, row.record (JSONB is returned as a Lua table)
 end
+
+-- Write query (returns affected rows, if any)
+db.raw("CREATE TABLE IF NOT EXISTS my_table (id TEXT PRIMARY KEY, value TEXT NOT NULL)")
+db.raw("INSERT INTO my_table (id, value) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET value = $2",
+  { "key1", "hello" })
 ```
 
 Parameters are passed as an array and bound to `$1`, `$2`, etc. Supported parameter types: strings, integers, numbers, booleans, and nil.

@@ -28,6 +28,8 @@ function handle()
       }))
     })
   end
+
+  return record
 end
 ```
 

@@ -24,13 +24,16 @@ end
 
 The function is called once per record event. The return value controls what happens next:
 
-| Return value | Effect                                           |
-| ------------ | ------------------------------------------------ |
-| `nil`        | The record is **not** indexed (skipped entirely) |
-| A table      | That table is stored as the record instead       |
-| *(no hook)*  | The original record is stored as-is              |
+| Return value | Effect                                                      |
+| ------------ | ----------------------------------------------------------- |
+| `nil`        | The record is **not** indexed (skipped entirely)            |
+| A table      | That table is stored as the record instead                  |
+| `true`       | The original record is stored as-is                         |
+| *(no hook)*  | The original record is stored as-is                         |
 
 On **delete** events, returning `nil` skips the delete (the record stays in the database).
+
+**Important:** If your hook has side effects (e.g. syncing to a search index) but you want normal indexing to proceed, return `record` or `true` — not nothing. A missing return statement returns `nil`, which **skips indexing**.
 
 If the hook errors after all retries, the system **fails open** — the original record is stored and the failed event is dead-lettered for later inspection.
 
