@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::watch;
+use tokio::sync::{Semaphore, watch};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
@@ -321,6 +323,9 @@ async fn run(
 
     let (mut write, mut read) = ws.split();
 
+    // Allow up to 50 record events to be processed concurrently.
+    let semaphore = Arc::new(Semaphore::new(50));
+
     loop {
         tokio::select! {
             msg = read.next() => {
@@ -369,7 +374,12 @@ async fn run(
                                 rkey = %record.rkey,
                                 "received record event from tap"
                             );
-                            handle_record_event(state, &record).await;
+                            let sem = semaphore.clone();
+                            let state = state.clone();
+                            tokio::spawn(async move {
+                                let _permit = sem.acquire().await.unwrap();
+                                handle_record_event(&state, &record).await;
+                            });
                         }
                     }
                     "identity" => {
