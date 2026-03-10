@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::AppState;
 
-/// Register the `db` table with read-only database query functions.
+/// Register the `db` table with database query functions.
 pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     let db_table = lua.create_table()?;
 
@@ -290,18 +290,11 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     db_table.set("backlinks", backlinks_fn)?;
 
     // db.raw(sql, params?) -> rows[]
-    // Read-only: only SELECT statements are allowed.
     let state_raw = state;
     let raw_fn =
         lua.create_async_function(move |lua, (sql, params): (String, Option<mlua::Table>)| {
             let state = state_raw.clone();
             async move {
-                // Only allow SELECT statements
-                let trimmed = sql.trim_start().to_uppercase();
-                if !trimmed.starts_with("SELECT") {
-                    return Err(mlua::Error::runtime("db.raw only supports SELECT queries"));
-                }
-
                 // Build query with dynamic parameter binding
                 let mut query = sqlx::query(&sql);
                 if let Some(ref params_table) = params {
@@ -441,18 +434,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn raw_rejects_non_select() {
+    async fn raw_allows_non_select() {
         let state = test_state();
         let lua = setup(&state);
         let result: Result<mlua::Value, _> = lua
             .load(r#"return db.raw("DELETE FROM records")"#)
             .eval_async()
             .await;
+        // Should fail with a DB connection error, NOT a validation error
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("only supports SELECT"),
-            "expected SELECT-only error, got: {err}"
+            !err.contains("only supports SELECT"),
+            "should have passed validation but got: {err}"
         );
     }
 
