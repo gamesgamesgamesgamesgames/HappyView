@@ -326,20 +326,32 @@ async fn run(
             msg = read.next() => {
                 let msg = match msg {
                     Some(Ok(m)) => m,
-                    Some(Err(e)) => return Err(e.into()),
-                    None => break,
+                    Some(Err(e)) => {
+                        tracing::warn!("tap websocket read error: {e}");
+                        return Err(e.into());
+                    }
+                    None => {
+                        tracing::info!("tap websocket stream ended");
+                        break;
+                    }
                 };
 
                 let text = match msg {
                     Message::Text(t) => t,
-                    Message::Close(_) => break,
-                    _ => continue,
+                    Message::Close(_) => {
+                        tracing::info!("tap websocket received close frame");
+                        break;
+                    }
+                    other => {
+                        tracing::debug!(msg_type = ?other, "ignoring non-text websocket message");
+                        continue;
+                    }
                 };
 
                 let event: TapEvent = match serde_json::from_str(&text) {
                     Ok(e) => e,
                     Err(e) => {
-                        tracing::debug!("skipping unparseable tap event: {e}");
+                        tracing::warn!("skipping unparseable tap event: {e}");
                         continue;
                     }
                 };
@@ -349,12 +361,20 @@ async fn run(
                 match event.event_type.as_str() {
                     "record" => {
                         if let Some(record) = event.record {
+                            tracing::info!(
+                                id = event_id,
+                                action = %record.action,
+                                collection = %record.collection,
+                                did = %record.did,
+                                rkey = %record.rkey,
+                                "received record event from tap"
+                            );
                             handle_record_event(state, &record).await;
                         }
                     }
                     "identity" => {
                         if let Some(identity) = event.identity {
-                            tracing::debug!(
+                            tracing::info!(
                                 did = %identity.did,
                                 handle = ?identity.handle,
                                 "received identity event from tap"
@@ -362,7 +382,7 @@ async fn run(
                         }
                     }
                     other => {
-                        tracing::debug!(event_type = %other, "unknown tap event type");
+                        tracing::warn!(event_type = %other, "unknown tap event type");
                     }
                 }
 
@@ -372,6 +392,7 @@ async fn run(
                     tracing::warn!("failed to send ack: {e}");
                     return Err(e.into());
                 }
+                tracing::debug!(id = event_id, "acked tap event");
             }
             // If the collection list changes, sync to Tap and continue.
             _ = collections_rx.changed() => {
