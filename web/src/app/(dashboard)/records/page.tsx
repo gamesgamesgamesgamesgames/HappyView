@@ -20,15 +20,14 @@ import {
 import type { CollectionStat } from "@/types/stats";
 import type { AdminRecord } from "@/types/records";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CodeBlock } from "@/components/code-block";
 import { DataTable } from "@/components/data-table/data-table";
@@ -41,12 +40,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -422,13 +415,13 @@ export default function RecordsPage() {
         )}
 
         {viewRecord && (
-          <Dialog open onOpenChange={() => setViewRecord(null)}>
-            <DialogContent className="sm:max-w-4xl">
-              <DialogHeader>
-                <DialogTitle className="truncate font-mono text-sm">
+          <ResponsiveDialog open onOpenChange={() => setViewRecord(null)}>
+            <ResponsiveDialogContent className="sm:max-w-4xl">
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle className="truncate font-mono text-sm">
                   {viewRecord.uri}
-                </DialogTitle>
-              </DialogHeader>
+                </ResponsiveDialogTitle>
+              </ResponsiveDialogHeader>
               <CodeBlock code={JSON.stringify(viewRecord, null, 2)} />
               <div className="flex justify-end">
                 <Button
@@ -439,32 +432,34 @@ export default function RecordsPage() {
                   {deleting ? "Deleting..." : "Delete Record"}
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+            </ResponsiveDialogContent>
+          </ResponsiveDialog>
         )}
 
-        <AlertDialog
+        <ResponsiveDialog
           open={!!deleteUri}
           onOpenChange={(open) => {
             if (!open) setDeleteUri(null);
           }}
         >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete record?</AlertDialogTitle>
-              <AlertDialogDescription>
+          <ResponsiveDialogContent>
+            <ResponsiveDialogHeader>
+              <ResponsiveDialogTitle>Delete record?</ResponsiveDialogTitle>
+              <ResponsiveDialogDescription>
                 This will permanently delete the record. This action cannot be
                 undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
+              </ResponsiveDialogDescription>
+            </ResponsiveDialogHeader>
             {deleteUri && (
               <code className="text-muted-foreground block truncate text-xs">
                 {deleteUri}
               </code>
             )}
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
+            <ResponsiveDialogFooter>
+              <ResponsiveDialogClose asChild>
+                <Button variant="outline" disabled={deleting}>Cancel</Button>
+              </ResponsiveDialogClose>
+              <Button
                 variant="destructive"
                 disabled={deleting}
                 onClick={() => {
@@ -472,12 +467,12 @@ export default function RecordsPage() {
                 }}
               >
                 {deleting ? "Deleting..." : "Delete"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+              </Button>
+            </ResponsiveDialogFooter>
+          </ResponsiveDialogContent>
+        </ResponsiveDialog>
 
-        <AlertDialog
+        <ResponsiveDialog
           open={bulkDeleteOpen}
           onOpenChange={(open) => {
             if (!open) {
@@ -487,7 +482,7 @@ export default function RecordsPage() {
             }
           }}
         >
-          <AlertDialogContent>
+          <ResponsiveDialogContent>
             {(() => {
               const selectedCount = Object.keys(rowSelection).length;
               const totalCount =
@@ -500,19 +495,19 @@ export default function RecordsPage() {
               if (allInCollection) {
                 return (
                   <>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
+                    <ResponsiveDialogHeader>
+                      <ResponsiveDialogTitle>
                         Delete all records in collection?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
+                      </ResponsiveDialogTitle>
+                      <ResponsiveDialogDescription>
                         This will permanently delete all {totalCount} record(s)
                         in{" "}
                         <code className="font-semibold">
                           {selectedCollection}
                         </code>
                         . This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
+                      </ResponsiveDialogDescription>
+                    </ResponsiveDialogHeader>
                     <div className="flex flex-col gap-2">
                       <label
                         className="text-sm"
@@ -531,11 +526,13 @@ export default function RecordsPage() {
                         placeholder={selectedCollection}
                       />
                     </div>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel disabled={deletingAll}>
-                        Cancel
-                      </AlertDialogCancel>
-                      <AlertDialogAction
+                    <ResponsiveDialogFooter>
+                      <ResponsiveDialogClose asChild>
+                        <Button variant="outline" disabled={deletingAll}>
+                          Cancel
+                        </Button>
+                      </ResponsiveDialogClose>
+                      <Button
                         variant="destructive"
                         disabled={
                           deletingAll ||
@@ -544,8 +541,8 @@ export default function RecordsPage() {
                         onClick={handleDeleteAll}
                       >
                         {deletingAll ? "Deleting..." : "Delete"}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
+                      </Button>
+                    </ResponsiveDialogFooter>
                   </>
                 );
               }
@@ -553,38 +550,40 @@ export default function RecordsPage() {
               if (!table.getIsAllPageRowsSelected()) {
                 return (
                   <>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
+                    <ResponsiveDialogHeader>
+                      <ResponsiveDialogTitle>
                         Delete {selectedCount} record(s)?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
+                      </ResponsiveDialogTitle>
+                      <ResponsiveDialogDescription>
                         This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel disabled={deleting}>
-                        Cancel
-                      </AlertDialogCancel>
-                      <AlertDialogAction
+                      </ResponsiveDialogDescription>
+                    </ResponsiveDialogHeader>
+                    <ResponsiveDialogFooter>
+                      <ResponsiveDialogClose asChild>
+                        <Button variant="outline" disabled={deleting}>
+                          Cancel
+                        </Button>
+                      </ResponsiveDialogClose>
+                      <Button
                         variant="destructive"
                         disabled={deleting}
                         onClick={handleBulkDelete}
                       >
                         {deleting ? "Deleting..." : "Delete"}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
+                      </Button>
+                    </ResponsiveDialogFooter>
                   </>
                 );
               }
 
               return (
                 <>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete records?</AlertDialogTitle>
-                    <AlertDialogDescription>
+                  <ResponsiveDialogHeader>
+                    <ResponsiveDialogTitle>Delete records?</ResponsiveDialogTitle>
+                    <ResponsiveDialogDescription>
                       This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
+                    </ResponsiveDialogDescription>
+                  </ResponsiveDialogHeader>
                   <RadioGroup
                     value={bulkDeleteMode}
                     onValueChange={(v) => {
@@ -641,11 +640,13 @@ export default function RecordsPage() {
                       />
                     </div>
                   )}
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={deleting || deletingAll}>
-                      Cancel
-                    </AlertDialogCancel>
-                    <AlertDialogAction
+                  <ResponsiveDialogFooter>
+                    <ResponsiveDialogClose asChild>
+                      <Button variant="outline" disabled={deleting || deletingAll}>
+                        Cancel
+                      </Button>
+                    </ResponsiveDialogClose>
+                    <Button
                       variant="destructive"
                       disabled={
                         deleting ||
@@ -660,13 +661,13 @@ export default function RecordsPage() {
                       }
                     >
                       {deleting || deletingAll ? "Deleting..." : "Delete"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
+                    </Button>
+                  </ResponsiveDialogFooter>
                 </>
               );
             })()}
-          </AlertDialogContent>
-        </AlertDialog>
+          </ResponsiveDialogContent>
+        </ResponsiveDialog>
       </div>
     </>
   );

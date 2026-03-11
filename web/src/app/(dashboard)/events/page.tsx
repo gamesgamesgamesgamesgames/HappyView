@@ -22,11 +22,11 @@ import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 function severityBadge(severity: string) {
@@ -333,16 +333,16 @@ export default function EventsPage() {
         </div>
 
         {viewEvent && (
-          <Dialog open onOpenChange={() => setViewEvent(null)}>
-            <DialogContent className="sm:max-w-4xl">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
+          <ResponsiveDialog open onOpenChange={() => setViewEvent(null)}>
+            <ResponsiveDialogContent className="sm:max-w-4xl">
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle className="flex items-center gap-2">
                   {severityBadge(viewEvent.severity)}
                   <span className="font-mono text-sm">
                     {viewEvent.event_type}
                   </span>
-                </DialogTitle>
-              </DialogHeader>
+                </ResponsiveDialogTitle>
+              </ResponsiveDialogHeader>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Subject</span>
@@ -370,8 +370,8 @@ export default function EventsPage() {
                   className="mt-1 rounded-md"
                 />
               </div>
-            </DialogContent>
-          </Dialog>
+            </ResponsiveDialogContent>
+          </ResponsiveDialog>
         )}
       </div>
     </>

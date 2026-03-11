@@ -17,26 +17,15 @@ import type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -229,33 +218,38 @@ export default function SettingsPage() {
                       </TableCell>
                       <TableCell className="w-10 sticky right-0 bg-inherit z-[1]">
                         {!key.revoked_at && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
+                          <ResponsiveDialog>
+                            <ResponsiveDialogTrigger asChild>
                               <Button variant="outline" size="sm">
                                 Revoke
                               </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
+                            </ResponsiveDialogTrigger>
+                            <ResponsiveDialogContent>
+                              <ResponsiveDialogHeader>
+                                <ResponsiveDialogTitle>
                                   Revoke API Key
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
+                                </ResponsiveDialogTitle>
+                                <ResponsiveDialogDescription>
                                   This will permanently revoke the key &ldquo;
                                   {key.name}&rdquo;. Any services using this key
                                   will lose access.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleRevoke(key.id)}
-                                >
-                                  Revoke
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                                </ResponsiveDialogDescription>
+                              </ResponsiveDialogHeader>
+                              <ResponsiveDialogFooter>
+                                <ResponsiveDialogClose asChild>
+                                  <Button variant="outline">Cancel</Button>
+                                </ResponsiveDialogClose>
+                                <ResponsiveDialogClose asChild>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => handleRevoke(key.id)}
+                                  >
+                                    Revoke
+                                  </Button>
+                                </ResponsiveDialogClose>
+                              </ResponsiveDialogFooter>
+                            </ResponsiveDialogContent>
+                          </ResponsiveDialog>
                         )}
                       </TableCell>
                     </TableRow>
@@ -303,7 +297,7 @@ function UpsertVariableDialog({
   }
 
   return (
-    <Dialog
+    <ResponsiveDialog
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
@@ -314,7 +308,7 @@ function UpsertVariableDialog({
         }
       }}
     >
-      <DialogTrigger asChild>
+      <ResponsiveDialogTrigger asChild>
         {isEdit ? (
           <Button
             variant="ghost"
@@ -328,18 +322,18 @@ function UpsertVariableDialog({
         ) : (
           <Button>Add Variable</Button>
         )}
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+      </ResponsiveDialogTrigger>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
             {isEdit ? "Edit Variable" : "Add Variable"}
-          </DialogTitle>
-          <DialogDescription>
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             {isEdit
               ? "Update the value for this script variable."
               : "Add a new script variable accessible via env.KEY in Lua scripts."}
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
         <div className="flex flex-col gap-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex flex-col gap-2">
@@ -364,14 +358,14 @@ function UpsertVariableDialog({
             />
           </div>
         </div>
-        <DialogFooter>
-          <DialogClose asChild>
+        <ResponsiveDialogFooter>
+          <ResponsiveDialogClose asChild>
             <Button variant="outline">Cancel</Button>
-          </DialogClose>
+          </ResponsiveDialogClose>
           <Button onClick={handleSave}>Save</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 
@@ -421,21 +415,21 @@ function CreateApiKeyDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
+    <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
+      <ResponsiveDialogTrigger asChild>
         <Button>Create API Key</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+      </ResponsiveDialogTrigger>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
             {createdKey ? "API Key Created" : "Create API Key"}
-          </DialogTitle>
-          <DialogDescription>
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             {createdKey
               ? "Copy your API key now. It won\u2019t be shown again."
               : "Give this key a name to identify its purpose."}
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
         {createdKey ? (
           <div className="flex flex-col gap-4">
@@ -480,19 +474,19 @@ function CreateApiKeyDialog({
           </div>
         )}
 
-        <DialogFooter>
-          <DialogClose asChild>
+        <ResponsiveDialogFooter>
+          <ResponsiveDialogClose asChild>
             <Button variant={createdKey ? "default" : "outline"}>
               {createdKey ? "Done" : "Cancel"}
             </Button>
-          </DialogClose>
+          </ResponsiveDialogClose>
           {!createdKey && (
             <Button onClick={handleCreate} disabled={!name.trim()}>
               Create
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

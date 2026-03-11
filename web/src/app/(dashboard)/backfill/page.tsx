@@ -28,15 +28,15 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -213,18 +213,18 @@ function CreateDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+      <ResponsiveDialogTrigger asChild>
         <Button>Create Backfill Job</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create Backfill Job</DialogTitle>
-          <DialogDescription>
+      </ResponsiveDialogTrigger>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Create Backfill Job</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             Start a backfill for a collection or specific DID. Leave both empty
             to backfill all collections.
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
         <div className="flex flex-col gap-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex flex-col gap-2">
@@ -256,13 +256,13 @@ function CreateDialog({
             />
           </div>
         </div>
-        <DialogFooter>
-          <DialogClose asChild>
+        <ResponsiveDialogFooter>
+          <ResponsiveDialogClose asChild>
             <Button variant="outline">Cancel</Button>
-          </DialogClose>
+          </ResponsiveDialogClose>
           <Button onClick={handleCreate}>Create</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
