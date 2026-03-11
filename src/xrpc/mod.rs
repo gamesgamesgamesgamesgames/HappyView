@@ -3,8 +3,9 @@ mod query;
 
 use axum::Json;
 use axum::body::Body;
-use axum::extract::{Path, RawQuery, State};
+use axum::extract::{FromRequestParts, Path, RawQuery, State};
 use axum::http::StatusCode;
+use axum::http::request::Parts;
 use axum::response::Response;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -109,9 +110,11 @@ pub async fn xrpc_get(
     State(state): State<AppState>,
     Path(method): Path<String>,
     RawQuery(raw_query): RawQuery,
+    mut parts: Parts,
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
     let params = parse_query_params(&raw_query);
+    let claims = Claims::from_request_parts(&mut parts, &state).await.ok();
 
     let lexicon = match state.lexicons.get(&method).await {
         Some(l) => l,
@@ -126,7 +129,7 @@ pub async fn xrpc_get(
         )));
     }
 
-    query::handle_query(&state, &method, &params, &lexicon).await
+    query::handle_query(&state, &method, &params, &lexicon, claims.as_ref()).await
 }
 
 /// Catch-all POST handler for XRPC procedures.

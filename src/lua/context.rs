@@ -24,11 +24,16 @@ pub fn set_query_context(
     method: &str,
     params: &HashMap<String, Value>,
     collection: &str,
+    caller_did: Option<&str>,
 ) -> LuaResult<()> {
     let globals = lua.globals();
     globals.set("method", method.to_string())?;
     globals.set("params", lua.to_value(params)?)?;
     globals.set("collection", collection.to_string())?;
+    match caller_did {
+        Some(did) => globals.set("caller_did", did.to_string())?,
+        None => globals.set("caller_did", mlua::Value::Nil)?,
+    }
     Ok(())
 }
 
@@ -131,7 +136,14 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("limit".to_string(), json!("10"));
         params.insert("cursor".to_string(), json!("abc"));
-        set_query_context(&lua, "com.example.listThings", &params, "com.example.thing").unwrap();
+        set_query_context(
+            &lua,
+            "com.example.listThings",
+            &params,
+            "com.example.thing",
+            Some("did:plc:test"),
+        )
+        .unwrap();
 
         let globals = lua.globals();
         assert_eq!(
