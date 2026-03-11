@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use crate::AppState;
+use crate::auth::Claims;
 use crate::error::AppError;
 
 pub(super) async fn handle_query(
@@ -11,9 +12,11 @@ pub(super) async fn handle_query(
     method: &str,
     params: &HashMap<String, Value>,
     lexicon: &crate::lexicon::ParsedLexicon,
+    claims: Option<&Claims>,
 ) -> Result<Response, AppError> {
     if let Some(ref script) = lexicon.script {
-        return crate::lua::execute_query_script(state, method, params, lexicon, script).await;
+        return crate::lua::execute_query_script(state, method, params, lexicon, script, claims)
+            .await;
     }
 
     // Single-record query: has a `uri` parameter

@@ -341,6 +341,7 @@ pub async fn execute_query_script(
     params: &HashMap<String, serde_json::Value>,
     lexicon: &ParsedLexicon,
     script: &str,
+    claims: Option<&Claims>,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
     let collection = lexicon.target_collection.as_deref().unwrap_or_default();
@@ -413,7 +414,9 @@ pub async fn execute_query_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = context::set_query_context(&lua, method, params, collection) {
+    if let Err(e) =
+        context::set_query_context(&lua, method, params, collection, claims.map(|c| c.did()))
+    {
         let error_message = format!("failed to set context: {e}");
         log_event(
             &state.db,
