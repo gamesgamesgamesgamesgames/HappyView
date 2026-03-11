@@ -9,15 +9,15 @@ import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogClose,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogTrigger,
+} from "@/components/ui/responsive-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -144,15 +144,15 @@ function AddAdminDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <ResponsiveDialog open={open} onOpenChange={setOpen}>
+      <ResponsiveDialogTrigger asChild>
         <Button>Add Admin</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Admin</DialogTitle>
-          <DialogDescription>Add a new admin by their DID.</DialogDescription>
-        </DialogHeader>
+      </ResponsiveDialogTrigger>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Add Admin</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>Add a new admin by their DID.</ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
         <div className="flex flex-col gap-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex flex-col gap-2">
@@ -165,13 +165,13 @@ function AddAdminDialog({
             />
           </div>
         </div>
-        <DialogFooter>
-          <DialogClose asChild>
+        <ResponsiveDialogFooter>
+          <ResponsiveDialogClose asChild>
             <Button variant="outline">Cancel</Button>
-          </DialogClose>
+          </ResponsiveDialogClose>
           <Button onClick={handleAdd}>Add</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
