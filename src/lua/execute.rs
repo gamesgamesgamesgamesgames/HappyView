@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use crate::AppState;
 use crate::auth::Claims;
-use crate::error::AppError;
+use crate::error::{AppError, ScriptErrorType, parse_lua_line};
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::ParsedLexicon;
 use crate::repo;
@@ -39,6 +39,13 @@ pub async fn execute_procedure_script(
     script: &str,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
+    let span = tracing::info_span!(
+        "script.execute",
+        method = method,
+        script_type = "procedure",
+        caller_did = %claims.did(),
+    );
+    span.in_scope(|| tracing::info!("script execution started"));
     let collection = lexicon.target_collection.as_deref().unwrap_or_default();
 
     // Capture script source and input for error logging before anything is consumed.
@@ -62,6 +69,7 @@ pub async fn execute_procedure_script(
                         "input": input_json,
                         "caller_did": claims.did(),
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
@@ -87,6 +95,7 @@ pub async fn execute_procedure_script(
                         "input": input_json,
                         "caller_did": claims.did(),
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
@@ -114,6 +123,7 @@ pub async fn execute_procedure_script(
                     "input": input_json,
                     "caller_did": claims.did(),
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -136,6 +146,7 @@ pub async fn execute_procedure_script(
                     "input": input_json,
                     "caller_did": claims.did(),
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -158,6 +169,7 @@ pub async fn execute_procedure_script(
                     "input": input_json,
                     "caller_did": claims.did(),
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -180,6 +192,7 @@ pub async fn execute_procedure_script(
                     "input": input_json,
                     "caller_did": claims.did(),
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -202,6 +215,7 @@ pub async fn execute_procedure_script(
                     "input": input_json,
                     "caller_did": claims.did(),
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -225,11 +239,18 @@ pub async fn execute_procedure_script(
                     "input": input_json,
                     "caller_did": claims.did(),
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
         .await;
-        return Err(AppError::Internal("script execution failed".into()));
+        let (line, clean_msg) = parse_lua_line(&error_message);
+        return Err(AppError::ScriptError {
+            error_type: ScriptErrorType::Syntax,
+            message: clean_msg,
+            method: method.to_string(),
+            line,
+        });
     }
 
     let handle: mlua::Function = match lua.globals().get("handle") {
@@ -250,11 +271,17 @@ pub async fn execute_procedure_script(
                         "input": input_json,
                         "caller_did": claims.did(),
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
             .await;
-            return Err(AppError::Internal("script execution failed".into()));
+            return Err(AppError::ScriptError {
+                error_type: ScriptErrorType::MissingHandle,
+                message: "script does not define a handle() function".to_string(),
+                method: method.to_string(),
+                line: None,
+            });
         }
     };
 
@@ -263,10 +290,21 @@ pub async fn execute_procedure_script(
         Err(e) => {
             let msg = e.to_string();
             tracing::error!(method, error = %msg, "lua script execution failed");
+            let (line, clean_msg) = parse_lua_line(&msg);
             let app_error = if msg.contains("execution limit") {
-                AppError::Internal("script exceeded execution time limit".into())
+                AppError::ScriptError {
+                    error_type: ScriptErrorType::Timeout,
+                    message: "script exceeded execution time limit".to_string(),
+                    method: method.to_string(),
+                    line,
+                }
             } else {
-                AppError::Internal("script execution failed".into())
+                AppError::ScriptError {
+                    error_type: ScriptErrorType::Runtime,
+                    message: clean_msg,
+                    method: method.to_string(),
+                    line,
+                }
             };
             log_event(
                 &state.db,
@@ -281,6 +319,7 @@ pub async fn execute_procedure_script(
                         "input": input_json,
                         "caller_did": claims.did(),
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
@@ -307,14 +346,26 @@ pub async fn execute_procedure_script(
                         "input": input_json,
                         "caller_did": claims.did(),
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
             .await;
-            return Err(AppError::Internal("script execution failed".into()));
+            return Err(AppError::ScriptError {
+                error_type: ScriptErrorType::Runtime,
+                message: error_message,
+                method: method.to_string(),
+                line: None,
+            });
         }
     };
 
+    span.in_scope(|| {
+        tracing::info!(
+            duration_ms = start.elapsed().as_millis() as u64,
+            "script execution completed"
+        );
+    });
     log_event(
         &state.db,
         EventLog {
@@ -326,6 +377,7 @@ pub async fn execute_procedure_script(
                 "method": method,
                 "caller_did": claims.did(),
                 "duration_ms": start.elapsed().as_millis() as u64,
+                "response_size": json_value.to_string().len(),
             }),
         },
     )
@@ -344,6 +396,8 @@ pub async fn execute_query_script(
     claims: Option<&Claims>,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
+    let span = tracing::info_span!("script.execute", method = method, script_type = "query",);
+    span.in_scope(|| tracing::info!("script execution started"));
     let collection = lexicon.target_collection.as_deref().unwrap_or_default();
 
     // Capture script source for error logging.
@@ -364,6 +418,7 @@ pub async fn execute_query_script(
                         "error": error_message,
                         "script_source": script_source,
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
@@ -387,6 +442,7 @@ pub async fn execute_query_script(
                     "error": error_message,
                     "script_source": script_source,
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -407,6 +463,7 @@ pub async fn execute_query_script(
                     "error": error_message,
                     "script_source": script_source,
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -429,6 +486,7 @@ pub async fn execute_query_script(
                     "error": error_message,
                     "script_source": script_source,
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -449,6 +507,7 @@ pub async fn execute_query_script(
                     "error": error_message,
                     "script_source": script_source,
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
@@ -470,11 +529,18 @@ pub async fn execute_query_script(
                     "error": error_message,
                     "script_source": script_source,
                     "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
         )
         .await;
-        return Err(AppError::Internal("script execution failed".into()));
+        let (line, clean_msg) = parse_lua_line(&error_message);
+        return Err(AppError::ScriptError {
+            error_type: ScriptErrorType::Syntax,
+            message: clean_msg,
+            method: method.to_string(),
+            line,
+        });
     }
 
     let handle: mlua::Function = match lua.globals().get("handle") {
@@ -493,11 +559,17 @@ pub async fn execute_query_script(
                         "error": error_message,
                         "script_source": script_source,
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
             .await;
-            return Err(AppError::Internal("script execution failed".into()));
+            return Err(AppError::ScriptError {
+                error_type: ScriptErrorType::MissingHandle,
+                message: "script does not define a handle() function".to_string(),
+                method: method.to_string(),
+                line: None,
+            });
         }
     };
 
@@ -506,10 +578,21 @@ pub async fn execute_query_script(
         Err(e) => {
             let msg = e.to_string();
             tracing::error!(method, error = %msg, "lua script execution failed");
+            let (line, clean_msg) = parse_lua_line(&msg);
             let app_error = if msg.contains("execution limit") {
-                AppError::Internal("script exceeded execution time limit".into())
+                AppError::ScriptError {
+                    error_type: ScriptErrorType::Timeout,
+                    message: "script exceeded execution time limit".to_string(),
+                    method: method.to_string(),
+                    line,
+                }
             } else {
-                AppError::Internal("script execution failed".into())
+                AppError::ScriptError {
+                    error_type: ScriptErrorType::Runtime,
+                    message: clean_msg,
+                    method: method.to_string(),
+                    line,
+                }
             };
             log_event(
                 &state.db,
@@ -522,6 +605,7 @@ pub async fn execute_query_script(
                         "error": msg,
                         "script_source": script_source,
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
@@ -546,14 +630,26 @@ pub async fn execute_query_script(
                         "error": error_message,
                         "script_source": script_source,
                         "method": method,
+                        "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
             )
             .await;
-            return Err(AppError::Internal("script execution failed".into()));
+            return Err(AppError::ScriptError {
+                error_type: ScriptErrorType::Runtime,
+                message: error_message,
+                method: method.to_string(),
+                line: None,
+            });
         }
     };
 
+    span.in_scope(|| {
+        tracing::info!(
+            duration_ms = start.elapsed().as_millis() as u64,
+            "script execution completed"
+        );
+    });
     log_event(
         &state.db,
         EventLog {
@@ -564,6 +660,7 @@ pub async fn execute_query_script(
             detail: serde_json::json!({
                 "method": method,
                 "duration_ms": start.elapsed().as_millis() as u64,
+                "response_size": json_value.to_string().len(),
             }),
         },
     )
