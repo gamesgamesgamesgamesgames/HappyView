@@ -57,6 +57,151 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+/** Known detail keys that get their own sections — excluded from the "Other" dump. */
+const KNOWN_KEYS = [
+  "error",
+  "errorType",
+  "method",
+  "line",
+  "input",
+  "params",
+  "response",
+  "script_source",
+  "caller_did",
+  "duration_ms",
+  "response_size",
+] as const;
+
+function EventDetailBody({ event }: { event: EventLogEntry }) {
+  const d = event.detail;
+
+  // Collect any keys not in KNOWN_KEYS for the "Other" section
+  const otherKeys = Object.keys(d).filter(
+    (k) => !(KNOWN_KEYS as readonly string[]).includes(k),
+  );
+  const otherDetail =
+    otherKeys.length > 0
+      ? Object.fromEntries(otherKeys.map((k) => [k, d[k]]))
+      : null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Metadata grid */}
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <span className="text-muted-foreground">Subject</span>
+          <p className="font-mono text-xs">{event.subject ?? "--"}</p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Actor</span>
+          <p className="font-mono text-xs">
+            {event.actor_did ?? "System"}
+          </p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Time</span>
+          <p className="text-xs">
+            {new Date(event.created_at).toLocaleString()}
+          </p>
+        </div>
+        {d.method != null && (
+          <div>
+            <span className="text-muted-foreground">Method</span>
+            <p className="font-mono text-xs">{String(d.method)}</p>
+          </div>
+        )}
+        {d.caller_did != null && (
+          <div>
+            <span className="text-muted-foreground">Caller DID</span>
+            <p className="font-mono text-xs">{String(d.caller_did)}</p>
+          </div>
+        )}
+        {d.duration_ms != null && (
+          <div>
+            <span className="text-muted-foreground">Duration</span>
+            <p className="text-xs tabular-nums">{String(d.duration_ms)}ms</p>
+          </div>
+        )}
+        {d.response_size != null && (
+          <div>
+            <span className="text-muted-foreground">Response Size</span>
+            <p className="text-xs tabular-nums">
+              {Number(d.response_size).toLocaleString()} bytes
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Error section */}
+      {d.error != null && (
+        <div>
+          <span className="text-muted-foreground text-sm">Error</span>
+          <div className="bg-destructive/10 text-destructive mt-1 rounded-md p-3 font-mono text-xs">
+            {d.errorType != null && (
+              <Badge variant="destructive" className="mb-2 mr-2">
+                {String(d.errorType)}
+              </Badge>
+            )}
+            {d.line != null && (
+              <Badge variant="outline" className="mb-2">
+                line {String(d.line)}
+              </Badge>
+            )}
+            <p className="mt-1">{String(d.error)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Request input/params */}
+      {(d.input != null || d.params != null) && (
+        <div>
+          <span className="text-muted-foreground text-sm">
+            {d.input != null ? "Request Input" : "Request Params"}
+          </span>
+          <CodeBlock
+            code={JSON.stringify(d.input ?? d.params, null, 2)}
+            className="mt-1 max-h-64 rounded-md"
+          />
+        </div>
+      )}
+
+      {/* Response */}
+      {d.response != null && (
+        <div>
+          <span className="text-muted-foreground text-sm">Response</span>
+          <CodeBlock
+            code={JSON.stringify(d.response, null, 2)}
+            className="mt-1 max-h-96 rounded-md"
+          />
+        </div>
+      )}
+
+      {/* Script source */}
+      {d.script_source != null && (
+        <div>
+          <span className="text-muted-foreground text-sm">Script Source</span>
+          <CodeBlock
+            code={String(d.script_source)}
+            lang="lua"
+            className="mt-1 max-h-64 rounded-md"
+          />
+        </div>
+      )}
+
+      {/* Other detail fields */}
+      {otherDetail && (
+        <div>
+          <span className="text-muted-foreground text-sm">Other</span>
+          <CodeBlock
+            code={JSON.stringify(otherDetail, null, 2)}
+            className="mt-1 rounded-md"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EventsPage() {
   const { getToken } = useAuth();
   const [events, setEvents] = useState<EventLogEntry[]>([]);
@@ -343,33 +488,7 @@ export default function EventsPage() {
                   </span>
                 </ResponsiveDialogTitle>
               </ResponsiveDialogHeader>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Subject</span>
-                  <p className="font-mono text-xs">
-                    {viewEvent.subject ?? "--"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Actor</span>
-                  <p className="font-mono text-xs">
-                    {viewEvent.actor_did ?? "System"}
-                  </p>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-muted-foreground">Time</span>
-                  <p className="text-xs">
-                    {new Date(viewEvent.created_at).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-sm">Detail</span>
-                <CodeBlock
-                  code={JSON.stringify(viewEvent.detail, null, 2)}
-                  className="mt-1 rounded-md"
-                />
-              </div>
+              <EventDetailBody event={viewEvent} />
             </ResponsiveDialogContent>
           </ResponsiveDialog>
         )}
