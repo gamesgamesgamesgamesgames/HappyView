@@ -12,6 +12,17 @@ pub struct Profile {
     pub description: Option<String>,
     #[serde(rename = "avatarURL", skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<AvatarBlob>,
+}
+
+#[derive(Serialize)]
+pub struct AvatarBlob {
+    #[serde(rename = "$link")]
+    pub link: String,
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+    pub size: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -56,9 +67,10 @@ pub async fn resolve_profile(
         .map(|s| s.service_endpoint.clone())
         .ok_or_else(|| AppError::NotFound("no PDS endpoint in DID document".into()))?;
 
-    let (display_name, description, avatar_url) = fetch_profile_from_pds(http, &pds_endpoint, did)
-        .await
-        .unwrap_or((None, None, None));
+    let (display_name, description, avatar_url, avatar) =
+        fetch_profile_from_pds(http, &pds_endpoint, did)
+            .await
+            .unwrap_or((None, None, None, None));
 
     Ok(Profile {
         did: did.to_string(),
@@ -66,6 +78,7 @@ pub async fn resolve_profile(
         display_name,
         description,
         avatar_url,
+        avatar,
     })
 }
 
@@ -120,7 +133,15 @@ async fn fetch_profile_from_pds(
     http: &reqwest::Client,
     pds_endpoint: &str,
     did: &str,
-) -> Result<(Option<String>, Option<String>, Option<String>), AppError> {
+) -> Result<
+    (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<AvatarBlob>,
+    ),
+    AppError,
+> {
     let url = format!(
         "{}/xrpc/com.atproto.repo.getRecord?repo={}&collection=app.bsky.actor.profile&rkey=self",
         pds_endpoint.trim_end_matches('/'),
@@ -134,7 +155,7 @@ async fn fetch_profile_from_pds(
         .map_err(|e| AppError::Internal(format!("PDS request failed: {e}")))?;
 
     if !resp.status().is_success() {
-        return Ok((None, None, None));
+        return Ok((None, None, None, None));
     }
 
     let record: GetRecordResponse = resp
@@ -154,8 +175,9 @@ async fn fetch_profile_from_pds(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let avatar_url = value
-        .get("avatar")
+    let avatar_value = value.get("avatar");
+
+    let avatar_url = avatar_value
         .and_then(|avatar| avatar.get("ref"))
         .and_then(|r| r.get("$link"))
         .and_then(|link| link.as_str())
@@ -168,5 +190,16 @@ async fn fetch_profile_from_pds(
             )
         });
 
-    Ok((display_name, description, avatar_url))
+    let avatar = avatar_value.and_then(|av| {
+        let link = av.get("ref")?.get("$link")?.as_str()?.to_string();
+        let mime_type = av.get("mimeType")?.as_str()?.to_string();
+        let size = av.get("size").and_then(|s| s.as_u64());
+        Some(AvatarBlob {
+            link,
+            mime_type,
+            size,
+        })
+    });
+
+    Ok((display_name, description, avatar_url, avatar))
 }
