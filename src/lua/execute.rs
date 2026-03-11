@@ -378,6 +378,8 @@ pub async fn execute_procedure_script(
                 "caller_did": claims.did(),
                 "duration_ms": start.elapsed().as_millis() as u64,
                 "response_size": json_value.to_string().len(),
+                "input": input_json,
+                "response": json_value,
             }),
         },
     )
@@ -661,6 +663,8 @@ pub async fn execute_query_script(
                 "method": method,
                 "duration_ms": start.elapsed().as_millis() as u64,
                 "response_size": json_value.to_string().len(),
+                "params": params,
+                "response": json_value,
             }),
         },
     )
