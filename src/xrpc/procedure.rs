@@ -6,6 +6,7 @@ use crate::AppState;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::lexicon::ProcedureAction;
+use crate::record_refs::sync_refs;
 use crate::repo;
 
 pub(super) async fn handle_procedure(
@@ -103,6 +104,8 @@ async fn handle_create_record(
             .bind(cid)
             .execute(&state.db)
             .await;
+
+            let _ = sync_refs(&state.db, uri, collection, &record).await;
         }
 
         Ok((
@@ -183,6 +186,8 @@ async fn handle_put_record(
         .bind(cid)
         .execute(&state.db)
         .await;
+
+        let _ = sync_refs(&state.db, uri, collection, &record).await;
 
         Ok((
             StatusCode::OK,

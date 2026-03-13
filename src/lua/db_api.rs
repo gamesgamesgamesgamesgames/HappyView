@@ -1,3 +1,4 @@
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use mlua::{Lua, LuaSerdeExt, Result as LuaResult};
 use serde_json::{Value, json};
 use sqlx::{Column, Row};
@@ -5,11 +6,24 @@ use std::sync::Arc;
 
 use crate::AppState;
 
+/// Encode a cursor from created_at timestamp and uri.
+fn encode_cursor(created_at: &str, uri: &str) -> String {
+    BASE64.encode(format!("{created_at}|{uri}"))
+}
+
+/// Decode a cursor into (created_at, uri). Returns None if invalid.
+fn decode_cursor(cursor: &str) -> Option<(String, String)> {
+    let decoded = BASE64.decode(cursor).ok()?;
+    let s = String::from_utf8(decoded).ok()?;
+    let (ts, uri) = s.split_once('|')?;
+    Some((ts.to_string(), uri.to_string()))
+}
+
 /// Register the `db` table with database query functions.
 pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     let db_table = lua.create_table()?;
 
-    // db.query({ collection, did?, limit?, offset?, sort?, sortDirection? }) -> { records, cursor? }
+    // db.query({ collection, did?, limit?, offset?, cursor?, sort?, sortDirection? }) -> { records, cursor? }
     let state_query = state.clone();
     let query_fn = lua.create_async_function(move |lua, opts: mlua::Table| {
         let state = state_query.clone();
@@ -17,9 +31,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let collection: String = opts.get("collection")?;
             let did: Option<String> = opts.get("did").ok();
             let limit: i64 = opts.get::<i64>("limit").unwrap_or(20).min(100);
-            let offset: i64 = opts.get::<i64>("offset").unwrap_or(0);
             let sort: Option<String> = opts.get("sort").ok();
             let sort_direction: Option<String> = opts.get("sortDirection").ok();
+            let cursor_str: Option<String> = opts.get("cursor").ok();
 
             // Validate sort field name to prevent SQL injection
             if let Some(ref field) = sort {
@@ -42,63 +56,170 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 }
             };
 
-            let top_level_columns = ["indexed_at", "did", "uri"];
-            let order_expr = match &sort {
-                Some(field) if top_level_columns.contains(&field.as_str()) => {
-                    format!("{field} {direction}")
-                }
-                Some(field) => {
-                    format!("record->'value'->>'{field}' {direction}")
-                }
-                None => format!("indexed_at {direction}"),
-            };
-
-            let rows: Vec<(String, String, Value)> = if let Some(ref did) = did {
-                sqlx::query_as(
-                    &format!("SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY {order_expr} LIMIT $3 OFFSET $4"),
-                )
-                .bind(&collection)
-                .bind(did)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&state.db)
-                .await
-                .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
-            } else {
-                sqlx::query_as(
-                    &format!("SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY {order_expr} LIMIT $2 OFFSET $3"),
-                )
-                .bind(&collection)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&state.db)
-                .await
-                .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
-            };
-
-            let has_next = rows.len() as i64 == limit;
-            let records: Vec<Value> = rows
-                .into_iter()
-                .map(|(uri, _did, mut record)| {
-                    if let Some(obj) = record.as_object_mut() {
-                        obj.insert("uri".to_string(), json!(uri));
-                    }
-                    record
-                })
-                .collect();
-
-            let record_values: Vec<mlua::Value> = records
-                .iter()
-                .map(|r| lua.to_value(r))
-                .collect::<LuaResult<_>>()?;
-            let records_table = lua.create_sequence_from(record_values)?;
-            records_table.set_metatable(Some(lua.array_metatable()))?;
-
             let result_table = lua.create_table()?;
-            result_table.set("records", records_table)?;
-            if has_next {
-                let next_cursor = (offset + limit).to_string();
-                result_table.set("cursor", next_cursor)?;
+
+            if let Some(ref sort_field) = sort {
+                // Custom sort: use OFFSET/LIMIT with base64-encoded offset cursor
+                let offset: i64 = if let Some(ref cursor) = cursor_str {
+                    BASE64.decode(cursor).ok()
+                        .and_then(|b| String::from_utf8(b).ok())
+                        .and_then(|s| s.parse::<i64>().ok())
+                        .unwrap_or(0)
+                } else {
+                    opts.get::<i64>("offset").unwrap_or(0)
+                };
+
+                let top_level_columns = ["indexed_at", "did", "uri"];
+                let order_expr = if top_level_columns.contains(&sort_field.as_str()) {
+                    format!("{sort_field} {direction}")
+                } else {
+                    format!("record->'value'->>'{sort_field}' {direction}")
+                };
+
+                let rows: Vec<(String, String, Value)> = if let Some(ref did) = did {
+                    sqlx::query_as(
+                        &format!("SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY {order_expr} LIMIT $3 OFFSET $4"),
+                    )
+                    .bind(&collection)
+                    .bind(did)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&state.db)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
+                } else {
+                    sqlx::query_as(
+                        &format!("SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY {order_expr} LIMIT $2 OFFSET $3"),
+                    )
+                    .bind(&collection)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&state.db)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
+                };
+
+                let has_next = rows.len() as i64 == limit;
+
+                if has_next {
+                    let next_offset = offset + limit;
+                    result_table.set("cursor", BASE64.encode(next_offset.to_string()))?;
+                }
+
+                let records: Vec<Value> = rows
+                    .into_iter()
+                    .map(|(uri, _did, mut record)| {
+                        if let Some(obj) = record.as_object_mut() {
+                            obj.insert("uri".to_string(), json!(uri));
+                        }
+                        record
+                    })
+                    .collect();
+
+                let record_values: Vec<mlua::Value> = records
+                    .iter()
+                    .map(|r| lua.to_value(r))
+                    .collect::<LuaResult<_>>()?;
+                let records_table = lua.create_sequence_from(record_values)?;
+                records_table.set_metatable(Some(lua.array_metatable()))?;
+                result_table.set("records", records_table)?;
+            } else {
+                // Cursor-based pagination on (created_at, uri)
+                let cursor_parts = cursor_str.as_ref().and_then(|c| decode_cursor(c));
+
+                type RowType = (String, String, Value, chrono::DateTime<chrono::Utc>);
+
+                let rows_raw: Vec<RowType> = match (&did, &cursor_parts) {
+                    (Some(did), Some((cursor_ts, cursor_uri))) => {
+                        let ts: chrono::DateTime<chrono::Utc> = cursor_ts.parse()
+                            .map_err(|e| mlua::Error::runtime(format!("invalid cursor timestamp: {e}")))?;
+                        sqlx::query_as(
+                            "SELECT uri, did, record, created_at FROM records \
+                             WHERE collection = $1 AND did = $2 AND (created_at, uri) < ($3, $4) \
+                             ORDER BY created_at DESC, uri DESC \
+                             LIMIT $5",
+                        )
+                        .bind(&collection)
+                        .bind(did)
+                        .bind(ts)
+                        .bind(cursor_uri)
+                        .bind(limit)
+                        .fetch_all(&state.db)
+                        .await
+                        .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
+                    }
+                    (Some(did), None) => {
+                        sqlx::query_as(
+                            "SELECT uri, did, record, created_at FROM records \
+                             WHERE collection = $1 AND did = $2 \
+                             ORDER BY created_at DESC, uri DESC \
+                             LIMIT $3",
+                        )
+                        .bind(&collection)
+                        .bind(did)
+                        .bind(limit)
+                        .fetch_all(&state.db)
+                        .await
+                        .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
+                    }
+                    (None, Some((cursor_ts, cursor_uri))) => {
+                        let ts: chrono::DateTime<chrono::Utc> = cursor_ts.parse()
+                            .map_err(|e| mlua::Error::runtime(format!("invalid cursor timestamp: {e}")))?;
+                        sqlx::query_as(
+                            "SELECT uri, did, record, created_at FROM records \
+                             WHERE collection = $1 AND (created_at, uri) < ($2, $3) \
+                             ORDER BY created_at DESC, uri DESC \
+                             LIMIT $4",
+                        )
+                        .bind(&collection)
+                        .bind(ts)
+                        .bind(cursor_uri)
+                        .bind(limit)
+                        .fetch_all(&state.db)
+                        .await
+                        .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
+                    }
+                    (None, None) => {
+                        sqlx::query_as(
+                            "SELECT uri, did, record, created_at FROM records \
+                             WHERE collection = $1 \
+                             ORDER BY created_at DESC, uri DESC \
+                             LIMIT $2",
+                        )
+                        .bind(&collection)
+                        .bind(limit)
+                        .fetch_all(&state.db)
+                        .await
+                        .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
+                    }
+                };
+
+                let has_next = rows_raw.len() as i64 == limit;
+
+                if has_next
+                    && let Some((last_uri, _, _, last_created_at)) = rows_raw.last()
+                {
+                    let cursor = encode_cursor(&last_created_at.to_rfc3339(), last_uri);
+                    result_table.set("cursor", cursor)?;
+                }
+
+                let records: Vec<Value> = rows_raw
+                    .into_iter()
+                    .map(|(uri, _did, mut record, _created_at)| {
+                        if let Some(obj) = record.as_object_mut() {
+                            obj.insert("uri".to_string(), json!(uri));
+                        }
+                        record
+                    })
+                    .collect();
+
+                let record_values: Vec<mlua::Value> = records
+                    .iter()
+                    .map(|r| lua.to_value(r))
+                    .collect::<LuaResult<_>>()?;
+                let records_table = lua.create_sequence_from(record_values)?;
+                records_table.set_metatable(Some(lua.array_metatable()))?;
+                result_table.set("records", records_table)?;
             }
 
             Ok(mlua::Value::Table(result_table))
@@ -213,8 +334,8 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
         })?;
     db_table.set("count", count_fn)?;
 
-    // db.backlinks({ collection, uri, did?, limit?, offset? }) -> { records, cursor? }
-    // Find records in `collection` whose JSONB contains the given AT URI.
+    // db.backlinks({ collection, uri, did?, limit?, cursor? }) -> { records, cursor? }
+    // Find records in `collection` that reference the given AT URI via record_refs.
     let state_backlinks = state.clone();
     let backlinks_fn = lua.create_async_function(move |lua, opts: mlua::Table| {
         let state = state_backlinks.clone();
@@ -223,46 +344,97 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let uri: String = opts.get("uri")?;
             let did: Option<String> = opts.get("did").ok();
             let limit: i64 = opts.get::<i64>("limit").unwrap_or(20).min(100);
-            let offset: i64 = opts.get::<i64>("offset").unwrap_or(0);
+            let cursor_str: Option<String> = opts.get("cursor").ok();
 
-            let rows: Vec<(String, String, Value)> = if let Some(ref did) = did {
-                sqlx::query_as(
-                    "SELECT uri, did, record FROM records \
-                     WHERE collection = $1 \
-                       AND record::text LIKE '%' || $2 || '%' \
-                       AND did = $3 \
-                     ORDER BY indexed_at DESC \
-                     LIMIT $4 OFFSET $5",
+            let cursor_parts = cursor_str.as_ref().and_then(|c| decode_cursor(c));
+
+            type RowType = (String, String, Value, chrono::DateTime<chrono::Utc>);
+
+            let rows_raw: Vec<RowType> = match (&did, &cursor_parts) {
+                (Some(did), Some((cursor_ts, cursor_uri))) => {
+                    let ts: chrono::DateTime<chrono::Utc> = cursor_ts.parse().map_err(|e| {
+                        mlua::Error::runtime(format!("invalid cursor timestamp: {e}"))
+                    })?;
+                    sqlx::query_as(
+                        "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
+                         INNER JOIN record_refs ref ON ref.source_uri = r.uri \
+                         WHERE ref.target_uri = $1 AND ref.collection = $2 AND r.did = $3 \
+                         AND (r.created_at, r.uri) < ($4, $5) \
+                         ORDER BY r.created_at DESC, r.uri DESC \
+                         LIMIT $6",
+                    )
+                    .bind(&uri)
+                    .bind(&collection)
+                    .bind(did)
+                    .bind(ts)
+                    .bind(cursor_uri)
+                    .bind(limit)
+                    .fetch_all(&state.db)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("DB backlinks failed: {e}")))?
+                }
+                (Some(did), None) => sqlx::query_as(
+                    "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
+                         INNER JOIN record_refs ref ON ref.source_uri = r.uri \
+                         WHERE ref.target_uri = $1 AND ref.collection = $2 AND r.did = $3 \
+                         ORDER BY r.created_at DESC, r.uri DESC \
+                         LIMIT $4",
                 )
-                .bind(&collection)
                 .bind(&uri)
+                .bind(&collection)
                 .bind(did)
                 .bind(limit)
-                .bind(offset)
                 .fetch_all(&state.db)
                 .await
-                .map_err(|e| mlua::Error::runtime(format!("DB backlinks failed: {e}")))?
-            } else {
-                sqlx::query_as(
-                    "SELECT uri, did, record FROM records \
-                     WHERE collection = $1 \
-                       AND record::text LIKE '%' || $2 || '%' \
-                     ORDER BY indexed_at DESC \
-                     LIMIT $3 OFFSET $4",
+                .map_err(|e| mlua::Error::runtime(format!("DB backlinks failed: {e}")))?,
+                (None, Some((cursor_ts, cursor_uri))) => {
+                    let ts: chrono::DateTime<chrono::Utc> = cursor_ts.parse().map_err(|e| {
+                        mlua::Error::runtime(format!("invalid cursor timestamp: {e}"))
+                    })?;
+                    sqlx::query_as(
+                        "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
+                         INNER JOIN record_refs ref ON ref.source_uri = r.uri \
+                         WHERE ref.target_uri = $1 AND ref.collection = $2 \
+                         AND (r.created_at, r.uri) < ($3, $4) \
+                         ORDER BY r.created_at DESC, r.uri DESC \
+                         LIMIT $5",
+                    )
+                    .bind(&uri)
+                    .bind(&collection)
+                    .bind(ts)
+                    .bind(cursor_uri)
+                    .bind(limit)
+                    .fetch_all(&state.db)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("DB backlinks failed: {e}")))?
+                }
+                (None, None) => sqlx::query_as(
+                    "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
+                         INNER JOIN record_refs ref ON ref.source_uri = r.uri \
+                         WHERE ref.target_uri = $1 AND ref.collection = $2 \
+                         ORDER BY r.created_at DESC, r.uri DESC \
+                         LIMIT $3",
                 )
-                .bind(&collection)
                 .bind(&uri)
+                .bind(&collection)
                 .bind(limit)
-                .bind(offset)
                 .fetch_all(&state.db)
                 .await
-                .map_err(|e| mlua::Error::runtime(format!("DB backlinks failed: {e}")))?
+                .map_err(|e| mlua::Error::runtime(format!("DB backlinks failed: {e}")))?,
             };
 
-            let has_next = rows.len() as i64 == limit;
-            let records: Vec<Value> = rows
+            let has_next = rows_raw.len() as i64 == limit;
+
+            let result_table = lua.create_table()?;
+
+            if has_next && let Some((last_uri, _, _, last_created_at)) = rows_raw.last() {
+                let cursor = encode_cursor(&last_created_at.to_rfc3339(), last_uri);
+                result_table.set("cursor", cursor)?;
+            }
+
+            let records: Vec<Value> = rows_raw
                 .into_iter()
-                .map(|(uri, _did, mut record)| {
+                .map(|(uri, _did, mut record, _created_at)| {
                     if let Some(obj) = record.as_object_mut() {
                         obj.insert("uri".to_string(), json!(uri));
                     }
@@ -276,13 +448,7 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 .collect::<LuaResult<_>>()?;
             let records_table = lua.create_sequence_from(record_values)?;
             records_table.set_metatable(Some(lua.array_metatable()))?;
-
-            let result_table = lua.create_table()?;
             result_table.set("records", records_table)?;
-            if has_next {
-                let next_cursor = (offset + limit).to_string();
-                result_table.set("cursor", next_cursor)?;
-            }
 
             Ok(mlua::Value::Table(result_table))
         }
@@ -495,6 +661,26 @@ mod tests {
             err.contains("invalid sortDirection"),
             "expected sortDirection error, got: {err}"
         );
+    }
+
+    #[test]
+    fn cursor_round_trip() {
+        let encoded = super::encode_cursor("2026-03-12T10:00:00Z", "at://did:plc:abc/col/rkey");
+        let (ts, uri) = super::decode_cursor(&encoded).unwrap();
+        assert_eq!(ts, "2026-03-12T10:00:00Z");
+        assert_eq!(uri, "at://did:plc:abc/col/rkey");
+    }
+
+    #[test]
+    fn decode_invalid_cursor_returns_none() {
+        assert!(super::decode_cursor("not-valid-base64!!!").is_none());
+    }
+
+    #[test]
+    fn decode_cursor_missing_pipe_returns_none() {
+        use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+        let encoded = BASE64.encode("no-pipe-here");
+        assert!(super::decode_cursor(&encoded).is_none());
     }
 
     #[tokio::test]

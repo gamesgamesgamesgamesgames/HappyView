@@ -7,6 +7,7 @@ pub mod event_log;
 pub mod lexicon;
 pub mod lua;
 pub mod profile;
+pub mod record_refs;
 pub mod repo;
 pub mod resolve;
 pub mod server;

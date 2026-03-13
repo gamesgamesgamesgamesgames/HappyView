@@ -30,6 +30,36 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    // Backfill record_refs if empty (first run after upgrade)
+    {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM record_refs")
+            .fetch_one(&db)
+            .await
+            .expect("failed to count record_refs");
+
+        if count.0 == 0 {
+            info!("backfilling record_refs table...");
+            let records: Vec<(String, String, serde_json::Value)> =
+                sqlx::query_as("SELECT uri, collection, record FROM records")
+                    .fetch_all(&db)
+                    .await
+                    .expect("failed to fetch records for backfill");
+
+            let total = records.len();
+            for (i, (uri, collection, record)) in records.iter().enumerate() {
+                if let Err(e) =
+                    happyview::record_refs::sync_refs(&db, uri, collection, record).await
+                {
+                    warn!(uri = uri.as_str(), "failed to backfill refs: {e}");
+                }
+                if (i + 1) % 10000 == 0 {
+                    info!("backfill progress: {}/{}", i + 1, total);
+                }
+            }
+            info!("backfill complete: processed {total} records");
+        }
+    }
+
     let lexicons = LexiconRegistry::new();
     lexicons
         .load_from_db(&db)
