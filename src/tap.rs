@@ -540,6 +540,10 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
             .await
             {
                 Ok(_) => {
+                    let _ =
+                        crate::record_refs::sync_refs(db, &uri, &record.collection, &rec_to_store)
+                            .await;
+
                     log_event(
                         db,
                         EventLog {

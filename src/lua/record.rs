@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::AppState;
 use crate::auth::Claims;
+use crate::record_refs::sync_refs;
 use crate::repo::{self, AtpSession};
 
 use super::tid::generate_tid;
@@ -112,6 +113,8 @@ pub fn register_record_api(
                     .execute(&state.db)
                     .await;
 
+                    let _ = sync_refs(&state.db, uri, &collection, &data).await;
+
                     result
                 } else {
                     // CREATE
@@ -169,6 +172,8 @@ pub fn register_record_api(
                         .bind(cid)
                         .execute(&state.db)
                         .await;
+
+                        let _ = sync_refs(&state.db, uri, &collection, &data).await;
                     }
 
                     result
@@ -514,6 +519,8 @@ pub fn register_record_api(
                                 .execute(&state.db)
                                 .await;
 
+                                let _ = sync_refs(&state.db, uri.as_str(), &collection, &data).await;
+
                                 Ok(result)
                             } else {
                                 let mut pds_body = json!({
@@ -576,6 +583,8 @@ pub fn register_record_api(
                                     .bind(cid)
                                     .execute(&state.db)
                                     .await;
+
+                                    let _ = sync_refs(&state.db, uri, &collection, &data).await;
                                 }
 
                                 Ok(result)
