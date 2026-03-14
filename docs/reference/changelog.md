@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.0 — User Permissions & Settings Restructure
+
+- **User permissions system** — replaced the `admins` table with a `users` table supporting 20 granular permissions, permission templates (Viewer, Operator, Manager, Full Access), and a super user concept with escalation and self-modification guards
+- **API key permissions** — API keys now have explicit scoped permissions instead of inheriting full admin access; effective permissions are the intersection of the key's permissions and the user's permissions
+- **User handles** — user handles are now displayed alongside DIDs throughout the dashboard
+- **Settings sub-pages** — Settings page restructured into Users, ENV Variables, and API Keys sub-pages with collapsible sidebar navigation
+- **Dashboard route prefix** — all dashboard pages now live under the `/dashboard` route prefix
+- **New endpoints** — `GET /admin/users/{id}`, `PATCH /admin/users/{id}/permissions`, `POST /admin/users/transfer-super`, `GET/POST/DELETE /admin/script-variables`
+- **New event types** — `user.permissions_updated`, `user.super_transferred`, `auth.permission_denied`, `api_key.created`, `api_key.revoked`, `script_variable.upserted`, `script_variable.deleted`, `hook.executed`, `hook.dead_lettered`
+
 ## v1.9.0 — Event Logs
 
 - **Event logging** — system-wide audit trail for lexicon changes, record operations, Lua script executions/errors, admin actions, backfill jobs, and Tap connectivity

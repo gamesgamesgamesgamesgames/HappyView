@@ -330,6 +330,49 @@ local resp = http.delete(url, { headers = { ... } })
 local resp = http.head(url)
 ```
 
+## AT Protocol API
+
+The `atproto` table provides AT Protocol utility functions. Available in queries, procedures, and [index hooks](index-hooks.md).
+
+### atproto.resolve_service_endpoint
+
+```lua
+local endpoint = atproto.resolve_service_endpoint(did)
+```
+
+Resolves a DID to its AT Protocol service endpoint URL by fetching the DID document. Supports both `did:plc:*` (via the PLC directory) and `did:web:*` (via `.well-known/did.json`).
+
+| Parameter | Type   | Description              |
+| --------- | ------ | ------------------------ |
+| `did`     | string | The DID to resolve       |
+
+**Returns:** The service endpoint URL as a string, or `nil` if resolution fails (DID not found, no PDS service in document, network error).
+
+### Examples
+
+```lua
+-- Resolve a did:plc DID
+local endpoint = atproto.resolve_service_endpoint("did:plc:abc123")
+-- endpoint = "https://pds.example.com"
+
+-- Resolve a did:web DID
+local endpoint = atproto.resolve_service_endpoint("did:web:example.com")
+-- endpoint = "https://example.com"
+
+-- Handle resolution failure
+local endpoint = atproto.resolve_service_endpoint("did:plc:unknown")
+if not endpoint then
+  return { error = "Could not resolve DID" }
+end
+
+-- Use with HTTP API to call a remote XRPC endpoint
+local endpoint = atproto.resolve_service_endpoint(did)
+if endpoint then
+  local resp = http.get(endpoint .. "/xrpc/com.example.method")
+  local data = json.decode(resp.body)
+end
+```
+
 ## JSON API
 
 The `json` global provides JSON serialization and deserialization. Available in queries, procedures, and [index hooks](index-hooks.md).

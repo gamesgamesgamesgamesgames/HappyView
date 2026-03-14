@@ -8,7 +8,7 @@ HappyView uses [AT Protocol OAuth](https://atproto.com/specs/oauth) for authenti
 |---------------|---------------|
 | Queries (`GET /xrpc/{method}`) | No |
 | Procedures (`POST /xrpc/{method}`) | Yes |
-| Admin API (`/admin/*`) | Yes (must be an admin) |
+| Admin API (`/admin/*`) | Yes (must be a user with appropriate [permissions](../guides/permissions.md)) |
 | Health check (`GET /health`) | No |
 
 Authenticated requests must include an `Authorization` header with a token issued by AIP:
@@ -60,6 +60,6 @@ Token validation happens on every request; there is no local token caching.
 
 ## Admin access
 
-Admin endpoints require the authenticated user's DID to exist in the `admins` table. If the table is empty (fresh deployment), the first authenticated request to any admin endpoint auto-bootstraps that user as the initial admin.
+Admin endpoints require the authenticated user's DID to exist in the `users` table with the appropriate [permissions](../guides/permissions.md). If the table is empty (fresh deployment), the first authenticated request to any admin endpoint auto-bootstraps that user as the **super user** with all permissions granted.
 
-To add more admins, use `POST /admin/admins` or the [dashboard](dashboard.md). See [Admin API](../reference/admin-api.md#admin-management) for details.
+To add more users, use `POST /admin/users` or the [dashboard](dashboard.md). You can assign permissions individually or use a template (`viewer`, `operator`, `manager`, `full_access`). See [Admin API](../reference/admin-api.md#user-management) for details.

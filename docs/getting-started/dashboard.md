@@ -4,7 +4,15 @@ HappyView ships with a web dashboard that provides a visual interface for everyt
 
 ## Logging in for the first time
 
-The dashboard uses AT Protocol OAuth via AIP. If no admins exist in the database yet, the first authenticated request to any admin endpoint automatically bootstraps that user as an admin.
+The dashboard uses AT Protocol OAuth via AIP. If no users exist in the database yet, the first authenticated request to any admin endpoint automatically bootstraps that user as the super user with all permissions.
+
+## Settings
+
+The **Settings** page is organized into sub-pages accessible from the collapsible sidebar:
+
+- **Users** — manage user accounts and permissions
+- **ENV Variables** — view and edit script variables
+- **API Keys** — create and revoke API keys
 
 ## Adding a lexicon
 
