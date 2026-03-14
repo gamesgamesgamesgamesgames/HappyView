@@ -1,3 +1,4 @@
+mod atproto_api;
 mod context;
 pub mod db_api;
 mod execute;

@@ -13,6 +13,7 @@ use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::ParsedLexicon;
 use crate::repo;
 
+use super::atproto_api;
 use super::context;
 use super::db_api;
 use super::http_api;
@@ -133,6 +134,29 @@ pub async fn execute_procedure_script(
 
     if let Err(e) = http_api::register_http_api(&lua, state_arc.clone()) {
         let error_message = format!("failed to register http API: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: Some(claims.did().to_string()),
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "input": input_json,
+                    "caller_did": claims.did(),
+                    "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
+                }),
+            },
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = atproto_api::register_atproto_api(&lua, state_arc.clone()) {
+        let error_message = format!("failed to register atproto API: {e}");
         log_event(
             &state.db,
             EventLog {
@@ -452,8 +476,29 @@ pub async fn execute_query_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = http_api::register_http_api(&lua, state_arc) {
+    if let Err(e) = http_api::register_http_api(&lua, state_arc.clone()) {
         let error_message = format!("failed to register http API: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: None,
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
+                }),
+            },
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = atproto_api::register_atproto_api(&lua, state_arc) {
+        let error_message = format!("failed to register atproto API: {e}");
         log_event(
             &state.db,
             EventLog {
@@ -802,8 +847,11 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
     db_api::register_db_api(&lua, state_arc.clone())
         .map_err(|e| format!("failed to register db API: {e}"))?;
 
-    http_api::register_http_api(&lua, state_arc)
+    http_api::register_http_api(&lua, state_arc.clone())
         .map_err(|e| format!("failed to register http API: {e}"))?;
+
+    atproto_api::register_atproto_api(&lua, state_arc)
+        .map_err(|e| format!("failed to register atproto API: {e}"))?;
 
     context::set_hook_context(
         &lua,
