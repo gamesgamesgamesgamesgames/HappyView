@@ -52,6 +52,7 @@ pub enum AppError {
     BadGateway(String),
     BadRequest(String),
     Forbidden(String),
+    InsufficientPermissions(String),
     Internal(String),
     NotFound(String),
     PdsError(StatusCode, Bytes),
@@ -71,6 +72,7 @@ impl std::fmt::Display for AppError {
             AppError::BadGateway(msg) => write!(f, "bad gateway: {msg}"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
             AppError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
+            AppError::InsufficientPermissions(perm) => write!(f, "Missing permission: {perm}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
             AppError::NotFound(msg) => write!(f, "not found: {msg}"),
             AppError::PdsError(status, _) => write!(f, "PDS error: {status}"),
@@ -130,6 +132,13 @@ impl IntoResponse for AppError {
                 });
                 (status, axum::Json(body)).into_response()
             }
+            AppError::InsufficientPermissions(perm) => {
+                let body = serde_json::json!({
+                    "error": "InsufficientPermissions",
+                    "message": format!("Missing permission: {perm}"),
+                });
+                (StatusCode::FORBIDDEN, axum::Json(body)).into_response()
+            }
             other => {
                 let (status, message) = match &other {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
@@ -144,6 +153,7 @@ impl IntoResponse for AppError {
                     AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
                     AppError::PdsError(..)
                     | AppError::AuthDpopNonce(..)
+                    | AppError::InsufficientPermissions(..)
                     | AppError::ScriptError { .. } => unreachable!(),
                 };
 

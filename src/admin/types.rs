@@ -101,20 +101,37 @@ pub(super) struct NetworkLexiconSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Admin management types
+// User management types
 // ---------------------------------------------------------------------------
 
 #[derive(Deserialize)]
-pub(super) struct CreateAdminBody {
+pub(super) struct CreateUserBody {
     pub(super) did: String,
+    pub(super) template: Option<super::permissions::Template>,
+    pub(super) permissions: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
-pub(super) struct AdminSummary {
+pub(super) struct UserSummary {
     pub(super) id: String,
     pub(super) did: String,
+    pub(super) is_super: bool,
+    pub(super) permissions: Vec<String>,
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpdatePermissionsBody {
+    #[serde(default)]
+    pub(super) grant: Vec<String>,
+    #[serde(default)]
+    pub(super) revoke: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TransferSuperBody {
+    pub(super) target_user_id: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +141,7 @@ pub(super) struct AdminSummary {
 #[derive(Deserialize)]
 pub(super) struct CreateApiKeyBody {
     pub(super) name: String,
+    pub(super) permissions: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -131,6 +149,7 @@ pub(super) struct ApiKeySummary {
     pub(super) id: String,
     pub(super) name: String,
     pub(super) key_prefix: String,
+    pub(super) permissions: Vec<String>,
     pub(super) created_at: chrono::DateTime<chrono::Utc>,
     pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(super) revoked_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -142,6 +161,7 @@ pub(super) struct CreateApiKeyResponse {
     pub(super) name: String,
     pub(super) key: String,
     pub(super) key_prefix: String,
+    pub(super) permissions: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

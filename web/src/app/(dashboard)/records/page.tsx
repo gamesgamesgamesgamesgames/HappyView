@@ -11,6 +11,7 @@ import {
 
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getStats,
   getAdminRecords,
@@ -73,6 +74,7 @@ function formatCellValue(value: unknown): string {
 
 export default function RecordsPage() {
   const { getToken } = useAuth();
+  const { hasPermission } = useCurrentUser();
   const searchParams = useSearchParams();
   const initialCollection = searchParams.get("collection") ?? "";
   const appliedInitial = useRef(false);
@@ -356,27 +358,29 @@ export default function RecordsPage() {
               </SelectContent>
             </Select>
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    disabled={Object.keys(rowSelection).length === 0}
-                  >
-                    Actions
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => setBulkDeleteOpen(true)}
-                  >
-                    <Trash2 className="size-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {hasPermission("records:delete") && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={Object.keys(rowSelection).length === 0}
+                    >
+                      Actions
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setBulkDeleteOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <DataTableViewOptions table={table} />
             </div>
           </div>
@@ -423,15 +427,17 @@ export default function RecordsPage() {
                 </ResponsiveDialogTitle>
               </ResponsiveDialogHeader>
               <CodeBlock code={JSON.stringify(viewRecord, null, 2)} />
-              <div className="flex justify-end">
-                <Button
-                  variant="destructive"
-                  onClick={() => setDeleteUri(viewRecord.uri)}
-                  disabled={deleting}
-                >
-                  {deleting ? "Deleting..." : "Delete Record"}
-                </Button>
-              </div>
+              {hasPermission("records:delete") && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="destructive"
+                    onClick={() => setDeleteUri(viewRecord.uri)}
+                    disabled={deleting}
+                  >
+                    {deleting ? "Deleting..." : "Delete Record"}
+                  </Button>
+                </div>
+              )}
             </ResponsiveDialogContent>
           </ResponsiveDialog>
         )}

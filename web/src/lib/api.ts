@@ -6,7 +6,7 @@ import type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
 import type { NetworkLexiconSummary } from "@/types/network-lexicons"
 import type { TapStatsResponse } from "@/types/tap"
 import type { BackfillJob } from "@/types/backfill"
-import type { AdminSummary } from "@/types/admins"
+import type { UserSummary } from "@/types/users"
 import type { AdminListRecordsResponse } from "@/types/records"
 import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
@@ -17,7 +17,7 @@ export type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
 export type { NetworkLexiconSummary } from "@/types/network-lexicons"
 export type { TapStatsResponse } from "@/types/tap"
 export type { BackfillJob } from "@/types/backfill"
-export type { AdminSummary } from "@/types/admins"
+export type { UserSummary } from "@/types/users"
 export type { AdminRecord, AdminListRecordsResponse } from "@/types/records"
 export type { EventLogEntry, EventsListResponse } from "@/types/events"
 export type { ScriptVariableSummary } from "@/types/script-variables"
@@ -176,24 +176,49 @@ export function createBackfillJob(
   })
 }
 
-// Admins
-export function getAdmins(getToken: () => Promise<string | null>) {
-  return apiFetch<AdminSummary[]>("/admin/admins", getToken)
+// Users
+export function getUsers(getToken: () => Promise<string | null>) {
+  return apiFetch<UserSummary[]>("/admin/users", getToken)
 }
 
-export function addAdmin(
+export function getUser(getToken: () => Promise<string | null>, id: string) {
+  return apiFetch<UserSummary>(`/admin/users/${encodeURIComponent(id)}`, getToken)
+}
+
+export function addUser(
   getToken: () => Promise<string | null>,
-  body: { did: string }
+  body: { did: string; template?: string; permissions?: string[] }
 ) {
-  return apiFetch<{ id: string; did: string }>("/admin/admins", getToken, {
+  return apiFetch<{ id: string; did: string }>("/admin/users", getToken, {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function deleteAdmin(getToken: () => Promise<string | null>, id: string) {
-  return apiFetch(`/admin/admins/${encodeURIComponent(id)}`, getToken, {
+export function deleteUser(getToken: () => Promise<string | null>, id: string) {
+  return apiFetch(`/admin/users/${encodeURIComponent(id)}`, getToken, {
     method: "DELETE",
+  })
+}
+
+export function updateUserPermissions(
+  getToken: () => Promise<string | null>,
+  id: string,
+  body: { grant?: string[]; revoke?: string[] }
+) {
+  return apiFetch(`/admin/users/${encodeURIComponent(id)}/permissions`, getToken, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export function transferSuper(
+  getToken: () => Promise<string | null>,
+  body: { target_user_id: string }
+) {
+  return apiFetch("/admin/users/transfer-super", getToken, {
+    method: "POST",
+    body: JSON.stringify(body),
   })
 }
 
@@ -204,7 +229,7 @@ export function getApiKeys(getToken: () => Promise<string | null>) {
 
 export function createApiKey(
   getToken: () => Promise<string | null>,
-  body: { name: string }
+  body: { name: string; permissions: string[] }
 ) {
   return apiFetch<CreateApiKeyResponse>("/admin/api-keys", getToken, {
     method: "POST",

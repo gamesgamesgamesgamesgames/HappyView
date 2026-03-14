@@ -8,7 +8,8 @@ use crate::error::AppError;
 use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 use crate::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use super::types::{AddNetworkLexiconBody, NetworkLexiconSummary};
 
 /// Send the current record collection list to the Tap task so it
@@ -21,9 +22,10 @@ async fn notify_collections(state: &AppState) {
 /// POST /admin/network-lexicons — add a network lexicon to watch.
 pub(super) async fn add(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
     Json(body): Json<AddNetworkLexiconBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
+    auth.require(Permission::LexiconsCreate).await?;
     let nsid = &body.nsid;
 
     // Resolve NSID authority via DNS TXT lookup.
@@ -101,8 +103,9 @@ pub(super) async fn add(
 /// GET /admin/network-lexicons — list tracked network lexicons.
 pub(super) async fn list(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
 ) -> Result<Json<Vec<NetworkLexiconSummary>>, AppError> {
+    auth.require(Permission::LexiconsRead).await?;
     #[allow(clippy::type_complexity)]
     let rows: Vec<(String, Option<String>, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
@@ -133,9 +136,10 @@ pub(super) async fn list(
 /// DELETE /admin/network-lexicons/{nsid} — stop watching a network lexicon.
 pub(super) async fn remove(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
     Path(nsid): Path<String>,
 ) -> Result<StatusCode, AppError> {
+    auth.require(Permission::LexiconsDelete).await?;
     let result = sqlx::query("DELETE FROM lexicons WHERE id = $1 AND source = 'network'")
         .bind(&nsid)
         .execute(&state.db)

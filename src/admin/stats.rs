@@ -4,14 +4,16 @@ use axum::extract::State;
 use crate::AppState;
 use crate::error::AppError;
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use super::types::{CollectionStat, StatsResponse};
 
 /// GET /admin/stats — system statistics.
 pub(super) async fn stats(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
 ) -> Result<Json<StatsResponse>, AppError> {
+    auth.require(Permission::StatsRead).await?;
     let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM records")
         .fetch_one(&state.db)
         .await

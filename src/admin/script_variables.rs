@@ -6,14 +6,16 @@ use crate::AppState;
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use super::types::{ScriptVariableSummary, UpsertScriptVariableBody};
 
 /// GET /admin/script-variables — list all variables with masked preview.
 pub(super) async fn list(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
 ) -> Result<Json<Vec<ScriptVariableSummary>>, AppError> {
+    auth.require(Permission::ScriptVariablesRead).await?;
     let rows: Vec<(
         String,
         String,
@@ -45,9 +47,10 @@ pub(super) async fn list(
 /// POST /admin/script-variables — create or update a variable.
 pub(super) async fn upsert(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
     Json(body): Json<UpsertScriptVariableBody>,
 ) -> Result<StatusCode, AppError> {
+    auth.require(Permission::ScriptVariablesCreate).await?;
     sqlx::query(
         r#"
         INSERT INTO script_variables (key, value)
@@ -79,9 +82,10 @@ pub(super) async fn upsert(
 /// DELETE /admin/script-variables/{key} — delete a variable.
 pub(super) async fn delete(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
     Path(key): Path<String>,
 ) -> Result<StatusCode, AppError> {
+    auth.require(Permission::ScriptVariablesDelete).await?;
     let result = sqlx::query("DELETE FROM script_variables WHERE key = $1")
         .bind(&key)
         .execute(&state.db)

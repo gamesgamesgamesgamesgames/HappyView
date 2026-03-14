@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   deleteLexicon,
   deleteNetworkLexicon,
@@ -35,6 +36,7 @@ import { Eye, Rows3, Trash2 } from "lucide-react";
 
 export default function LexiconsPage() {
   const { getToken } = useAuth();
+  const { hasPermission } = useCurrentUser();
   const router = useRouter();
   const [lexicons, setLexicons] = useState<LexiconSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -222,19 +224,21 @@ export default function LexiconsPage() {
               </Link>
             </Button>
 
-            <Button
-              variant="destructive"
-              size="icon"
-              className="size-8 text-muted-foreground hover:text-destructive"
-              title="Delete lexicon"
-              aria-label="Delete lexicon"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(row.original);
-              }}
-            >
-              <Trash2 className="size-4" />
-            </Button>
+            {hasPermission("lexicons:delete") && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-destructive"
+                title="Delete lexicon"
+                aria-label="Delete lexicon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(row.original);
+                }}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
           </div>
         ),
         enableSorting: false,
@@ -242,7 +246,7 @@ export default function LexiconsPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [getToken],
+    [getToken, hasPermission],
   );
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -294,9 +298,11 @@ export default function LexiconsPage() {
           }
         >
           <DataTableToolbar table={table}>
-            <Button asChild>
-              <Link href="/lexicons/new">Add Lexicon</Link>
-            </Button>
+            {hasPermission("lexicons:create") && (
+              <Button asChild>
+                <Link href="/lexicons/new">Add Lexicon</Link>
+              </Button>
+            )}
           </DataTableToolbar>
         </DataTable>
       </div>

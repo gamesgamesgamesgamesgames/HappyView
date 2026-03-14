@@ -8,7 +8,8 @@ use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use super::types::{LexiconSummary, UploadLexiconBody};
 
 /// Send the current record collection list to the Tap task so it
@@ -21,9 +22,10 @@ async fn notify_collections(state: &AppState) {
 /// POST /admin/lexicons — upload (upsert) a lexicon.
 pub(super) async fn upload_lexicon(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
     Json(body): Json<UploadLexiconBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
+    auth.require(Permission::LexiconsCreate).await?;
     // Validate basic structure
     let lexicon_version = body
         .lexicon_json
@@ -162,8 +164,9 @@ pub(super) async fn upload_lexicon(
 /// GET /admin/lexicons — list all lexicons.
 pub(super) async fn list_lexicons(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
 ) -> Result<Json<Vec<LexiconSummary>>, AppError> {
+    auth.require(Permission::LexiconsRead).await?;
     #[allow(clippy::type_complexity)]
     let rows: Vec<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
@@ -228,9 +231,10 @@ pub(super) async fn list_lexicons(
 /// GET /admin/lexicons/:id — get a single lexicon.
 pub(super) async fn get_lexicon(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, AppError> {
+    auth.require(Permission::LexiconsRead).await?;
     #[allow(clippy::type_complexity)]
     let row: Option<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as(
@@ -293,9 +297,10 @@ pub(super) async fn get_lexicon(
 /// DELETE /admin/lexicons/:id — remove a lexicon.
 pub(super) async fn delete_lexicon(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
+    auth.require(Permission::LexiconsDelete).await?;
     let result = sqlx::query("DELETE FROM lexicons WHERE id = $1")
         .bind(&id)
         .execute(&state.db)

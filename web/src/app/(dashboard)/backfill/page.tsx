@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   createBackfillJob,
   getBackfillJobs,
@@ -50,6 +51,7 @@ import {
 
 export default function BackfillPage() {
   const { getToken } = useAuth();
+  const { hasPermission } = useCurrentUser();
   const [jobs, setJobs] = useState<BackfillJob[]>([]);
   const [tapStats, setTapStats] = useState<TapStatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +60,12 @@ export default function BackfillPage() {
     getBackfillJobs(getToken)
       .then(setJobs)
       .catch((e) => setError(e.message));
-    getTapStats(getToken)
-      .then(setTapStats)
-      .catch(() => setTapStats(null));
-  }, [getToken]);
+    if (hasPermission("stats:read")) {
+      getTapStats(getToken)
+        .then(setTapStats)
+        .catch(() => setTapStats(null));
+    }
+  }, [getToken, hasPermission]);
 
   useEffect(() => {
     load();
@@ -79,36 +83,40 @@ export default function BackfillPage() {
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         {error && <p className="text-destructive text-sm">{error}</p>}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Card>
-            <CardHeader className={"text-center sm:text-left"}>
-              <CardDescription>Tap Repos</CardDescription>
-              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
-                {tapStats ? tapStats.repo_count.toLocaleString() : "--"}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className={"text-center sm:text-left"}>
-              <CardDescription>Tap Records</CardDescription>
-              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
-                {tapStats ? tapStats.record_count.toLocaleString() : "--"}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className={"text-center sm:text-left"}>
-              <CardDescription>Outbox Buffer</CardDescription>
-              <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
-                {tapStats ? tapStats.outbox_buffer.toLocaleString() : "--"}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
+        {hasPermission("stats:read") && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Card>
+              <CardHeader className={"text-center sm:text-left"}>
+                <CardDescription>Tap Repos</CardDescription>
+                <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
+                  {tapStats ? tapStats.repo_count.toLocaleString() : "--"}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className={"text-center sm:text-left"}>
+                <CardDescription>Tap Records</CardDescription>
+                <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
+                  {tapStats ? tapStats.record_count.toLocaleString() : "--"}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className={"text-center sm:text-left"}>
+                <CardDescription>Outbox Buffer</CardDescription>
+                <CardTitle className="text-xl sm:text-2xl font-semibold tabular-nums">
+                  {tapStats ? tapStats.outbox_buffer.toLocaleString() : "--"}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Backfill Jobs</h2>
-          <CreateDialog getToken={getToken} onSuccess={load} />
+          {hasPermission("backfill:create") && (
+            <CreateDialog getToken={getToken} onSuccess={load} />
+          )}
         </div>
 
         <div className="rounded-lg border">

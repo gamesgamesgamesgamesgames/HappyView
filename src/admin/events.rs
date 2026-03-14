@@ -5,7 +5,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use crate::AppState;
 use crate::error::AppError;
 
@@ -39,10 +40,11 @@ pub struct EventsListResponse {
 
 /// GET /admin/events — list event logs with optional filters and pagination.
 pub(super) async fn list_events(
-    _auth: AdminAuth,
+    auth: UserAuth,
     State(state): State<AppState>,
     Query(query): Query<EventsQuery>,
 ) -> Result<Json<EventsListResponse>, AppError> {
+    auth.require(Permission::EventsRead).await?;
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
 
     let mut sql = String::from(

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Copy, Check, Trash2, Pencil } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getScriptVariables,
   upsertScriptVariable,
@@ -26,6 +27,8 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from "@/components/ui/responsive-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,8 +47,25 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
+const PERMISSION_CATEGORIES: Record<string, string[]> = {
+  Lexicons: ["lexicons:create", "lexicons:read", "lexicons:delete"],
+  Records: ["records:read", "records:delete", "records:delete-collection"],
+  "Script Variables": [
+    "script-variables:create",
+    "script-variables:read",
+    "script-variables:delete",
+  ],
+  Users: ["users:create", "users:read", "users:update", "users:delete"],
+  "API Keys": ["api-keys:create", "api-keys:read", "api-keys:delete"],
+  Backfill: ["backfill:create", "backfill:read"],
+  System: ["stats:read", "events:read"],
+};
+
+const ALL_PERMISSIONS = Object.values(PERMISSION_CATEGORIES).flat();
+
 export default function SettingsPage() {
   const { getToken } = useAuth();
+  const { hasPermission } = useCurrentUser();
   const [vars, setVars] = useState<ScriptVariableSummary[]>([]);
   const [keys, setKeys] = useState<ApiKeySummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -91,9 +111,11 @@ export default function SettingsPage() {
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         {error && <p className="text-destructive text-sm">{error}</p>}
 
-        <Tabs defaultValue="env-variables">
+        <Tabs defaultValue={hasPermission("script-variables:read") ? "env-variables" : "api-keys"}>
           <TabsList>
-            <TabsTrigger value="env-variables">ENV Variables</TabsTrigger>
+            {hasPermission("script-variables:read") && (
+              <TabsTrigger value="env-variables">ENV Variables</TabsTrigger>
+            )}
             <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           </TabsList>
 
@@ -106,7 +128,9 @@ export default function SettingsPage() {
                   <code className="text-xs">env</code> global table.
                 </p>
               </div>
-              <UpsertVariableDialog getToken={getToken} onSuccess={loadVars} />
+              {hasPermission("script-variables:create") && (
+                <UpsertVariableDialog getToken={getToken} onSuccess={loadVars} />
+              )}
             </div>
 
             <div className="overflow-clip rounded-lg border">
@@ -148,16 +172,18 @@ export default function SettingsPage() {
                             onSuccess={loadVars}
                             editKey={v.key}
                           />
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="size-8 text-muted-foreground hover:text-destructive"
-                            title="Delete variable"
-                            aria-label="Delete variable"
-                            onClick={() => handleDeleteVar(v.key)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          {hasPermission("script-variables:delete") && (
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-destructive"
+                              title="Delete variable"
+                              aria-label="Delete variable"
+                              onClick={() => handleDeleteVar(v.key)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -170,7 +196,9 @@ export default function SettingsPage() {
           <TabsContent value="api-keys" className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">API Keys</h2>
-              <CreateApiKeyDialog getToken={getToken} onSuccess={loadKeys} />
+              {hasPermission("api-keys:create") && (
+                <CreateApiKeyDialog getToken={getToken} onSuccess={loadKeys} />
+              )}
             </div>
 
             <div className="overflow-clip rounded-lg border">
@@ -179,6 +207,7 @@ export default function SettingsPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Key</TableHead>
+                    <TableHead>Permissions</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Last Used</TableHead>
                     <TableHead className="w-10 sticky right-0 bg-inherit z-[1]" />
@@ -188,7 +217,7 @@ export default function SettingsPage() {
                   {keys.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-muted-foreground text-center"
                       >
                         No API keys yet.
@@ -209,6 +238,11 @@ export default function SettingsPage() {
                         {key.key_prefix}...
                       </TableCell>
                       <TableCell>
+                        <Badge variant="secondary">
+                          {key.permissions?.length ?? 0} perms
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         {new Date(key.created_at).toLocaleString()}
                       </TableCell>
                       <TableCell>
@@ -217,7 +251,7 @@ export default function SettingsPage() {
                           : "Never"}
                       </TableCell>
                       <TableCell className="w-10 sticky right-0 bg-inherit z-[1]">
-                        {!key.revoked_at && (
+                        {!key.revoked_at && hasPermission("api-keys:delete") && (
                           <ResponsiveDialog>
                             <ResponsiveDialogTrigger asChild>
                               <Button variant="outline" size="sm">
@@ -377,6 +411,8 @@ function CreateApiKeyDialog({
   onSuccess: () => void;
 }) {
   const [name, setName] = useState("");
+  const [selectedPermissions, setSelectedPermissions] =
+    useState<string[]>(ALL_PERMISSIONS);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<CreateApiKeyResponse | null>(
@@ -388,6 +424,7 @@ function CreateApiKeyDialog({
     setOpen(nextOpen);
     if (!nextOpen) {
       setName("");
+      setSelectedPermissions(ALL_PERMISSIONS);
       setError(null);
       if (createdKey) {
         setCreatedKey(null);
@@ -396,10 +433,31 @@ function CreateApiKeyDialog({
     }
   }
 
+  function togglePermission(perm: string) {
+    setSelectedPermissions((prev) =>
+      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+    );
+  }
+
+  function toggleCategory(perms: string[]) {
+    const allSelected = perms.every((p) => selectedPermissions.includes(p));
+    if (allSelected) {
+      setSelectedPermissions((prev) => prev.filter((p) => !perms.includes(p)));
+    } else {
+      setSelectedPermissions((prev) => [
+        ...prev,
+        ...perms.filter((p) => !prev.includes(p)),
+      ]);
+    }
+  }
+
   async function handleCreate() {
     setError(null);
     try {
-      const result = await createApiKey(getToken, { name });
+      const result = await createApiKey(getToken, {
+        name,
+        permissions: selectedPermissions,
+      });
       setCreatedKey(result);
       setCopied(false);
     } catch (e: unknown) {
@@ -470,6 +528,61 @@ function CreateApiKeyDialog({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., CI Deploy"
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Permissions</Label>
+              <div className="max-h-64 overflow-y-auto rounded-md border p-3 flex flex-col gap-4">
+                {Object.entries(PERMISSION_CATEGORIES).map(
+                  ([category, perms]) => {
+                    const allSelected = perms.every((p) =>
+                      selectedPermissions.includes(p)
+                    );
+                    const someSelected = perms.some((p) =>
+                      selectedPermissions.includes(p)
+                    );
+                    return (
+                      <div key={category} className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 text-left"
+                          onClick={() => toggleCategory(perms)}
+                        >
+                          <Checkbox
+                            checked={allSelected}
+                            data-state={
+                              someSelected && !allSelected
+                                ? "indeterminate"
+                                : undefined
+                            }
+                            className="pointer-events-none"
+                          />
+                          <span className="text-sm font-medium">
+                            {category}
+                          </span>
+                        </button>
+                        <div className="ml-6 flex flex-col gap-1.5">
+                          {perms.map((perm) => (
+                            <label
+                              key={perm}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={selectedPermissions.includes(perm)}
+                                onCheckedChange={() => togglePermission(perm)}
+                              />
+                              <span className="font-mono text-xs">{perm}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {selectedPermissions.length} of {ALL_PERMISSIONS.length}{" "}
+                permissions selected
+              </p>
             </div>
           </div>
         )}
