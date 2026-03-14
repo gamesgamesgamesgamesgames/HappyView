@@ -19,8 +19,10 @@ pub async fn test_pool() -> PgPool {
 
 /// Truncate all application tables, preserving schema.
 pub async fn truncate_all(pool: &PgPool) {
-    sqlx::query("TRUNCATE records, lexicons, backfill_jobs, admins RESTART IDENTITY CASCADE")
-        .execute(pool)
-        .await
-        .expect("failed to truncate tables");
+    sqlx::query(
+        "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs RESTART IDENTITY CASCADE",
+    )
+    .execute(pool)
+    .await
+    .expect("failed to truncate tables");
 }
