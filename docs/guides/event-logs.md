@@ -1,6 +1,6 @@
 # Event Logs
 
-HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, admin actions, backfill jobs, and Tap connectivity. Events are stored in a Postgres table and queryable via the [admin API](../reference/admin-api.md#event-logs).
+HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Tap connectivity. Events are stored in a Postgres table and queryable via the [admin API](../reference/admin-api.md#event-logs).
 
 ## Event types
 
@@ -14,7 +14,7 @@ Events follow a `category.action` naming convention. Each event has a severity l
 | `lexicon.updated` | info | Lexicon NSID | `revision`, `has_script`, `source` |
 | `lexicon.deleted` | info | Lexicon NSID | — |
 
-Logged when lexicons are uploaded, updated, or deleted via the [admin API](../reference/admin-api.md#lexicons). The `actor_did` is the admin who performed the action.
+Logged when lexicons are uploaded, updated, or deleted via the [admin API](../reference/admin-api.md#lexicons). The `actor_did` is the user who performed the action.
 
 ### Record events
 
@@ -38,15 +38,48 @@ Logged when Lua scripts run for XRPC query or procedure endpoints. Script errors
 For query scripts (unauthenticated), `caller_did` and `input` are omitted from the detail since queries don't have an authenticated user or request body.
 :::
 
-### Admin events
+### User events
 
 | Event Type | Severity | Subject | Detail |
 |---|---|---|---|
-| `admin.created` | info | New admin DID | — |
-| `admin.deleted` | info | Removed admin ID | — |
-| `admin.bootstrapped` | info | Bootstrapped admin DID | — |
+| `user.created` | info | New user DID | `template` (if used) |
+| `user.deleted` | info | Removed user ID | — |
+| `user.bootstrapped` | info | Bootstrapped user DID | — |
+| `user.permissions_updated` | info | User ID | `granted`, `revoked` |
+| `user.super_transferred` | warn | New super user ID | `from_user_id` |
 
-The `admin.bootstrapped` event is logged when the first user is auto-promoted to admin (see [Auth - Auto-bootstrap](../reference/admin-api.md#auth)).
+The `user.bootstrapped` event is logged when the first user is auto-promoted to super user (see [Auth - Auto-bootstrap](../reference/admin-api.md#auth)).
+
+### Auth events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `auth.permission_denied` | error | Endpoint path | `required_permission`, `user_id` |
+
+Logged when a user attempts to access an endpoint they don't have permission for.
+
+### API Key events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `api_key.created` | info | Key ID | `name`, `permissions` |
+| `api_key.revoked` | info | Key ID | `name` |
+
+### Script Variable events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `script_variable.upserted` | info | Variable key | — |
+| `script_variable.deleted` | info | Variable key | — |
+
+### Hook events
+
+| Event Type | Severity | Subject | Detail |
+|---|---|---|---|
+| `hook.executed` | info | Record AT URI | `lexicon_id` |
+| `hook.dead_lettered` | error | Record AT URI | `lexicon_id`, `error` |
+
+Logged when [index hooks](index-hooks.md) run. Dead-lettered events indicate a hook failed all retry attempts.
 
 ### Backfill events
 

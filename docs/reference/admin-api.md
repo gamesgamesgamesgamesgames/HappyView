@@ -1,6 +1,6 @@
 # Admin API
 
-The admin API lets you manage lexicons, monitor records, run backfill jobs, and control admin access. All endpoints live under `/admin` and require an [AIP](https://github.com/graze-social/aip)-issued Bearer token from a DID that exists in the `admins` table. You can also manage all of this through the [web dashboard](../getting-started/dashboard.md).
+The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require an [AIP](https://github.com/graze-social/aip)-issued Bearer token from a DID that exists in the `users` table, with the appropriate [permissions](../guides/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../getting-started/dashboard.md).
 
 ## Auth
 
@@ -9,11 +9,11 @@ The admin API supports two authentication methods:
 1. **OAuth (AIP)** — the Bearer token is validated against AIP's `/oauth/userinfo` endpoint to retrieve the caller's DID.
 2. **API keys** — read/write tokens starting with `hv_`. See the [API Keys guide](../guides/api-keys.md) for details.
 
-In both cases the resolved DID is checked against the `admins` table.
+In both cases the resolved DID is checked against the `users` table, and the user's permissions are loaded to authorize the request.
 
-**Auto-bootstrap**: If the `admins` table is empty, the first authenticated request automatically inserts the caller as the initial admin.
+**Auto-bootstrap**: If the `users` table is empty, the first authenticated request automatically creates the caller as the **super user** with all permissions granted.
 
-Non-admin DIDs receive a `403 Forbidden` response.
+Non-user DIDs receive a `403 Forbidden` response. Users without the required permission for a specific endpoint also receive `403 Forbidden`.
 
 All error responses return JSON with an `error` field:
 
@@ -27,8 +27,8 @@ All error responses return JSON with an `error` field:
 | ------------------ | -------------------------------------------------------------------------------------------------------------- |
 | `400 Bad Request`  | Invalid input (missing required fields, malformed lexicon JSON)                                                |
 | `401 Unauthorized` | Missing or invalid Bearer token. See [AIP documentation](https://github.com/graze-social/aip) for token issues |
-| `403 Forbidden`    | Authenticated DID is not in the admins table                                                                   |
-| `404 Not Found`    | Lexicon, admin, or backfill job not found                                                                      |
+| `403 Forbidden`    | Authenticated DID is not in the users table, or user lacks the required permission                             |
+| `404 Not Found`    | Lexicon, user, or backfill job not found                                                                       |
 
 ```sh
 # All examples assume $TOKEN is an AIP-issued access token or API key
@@ -310,7 +310,7 @@ curl http://localhost:3000/admin/backfill/status -H "$AUTH"
 
 ## Event Logs
 
-HappyView records an audit trail of system events: lexicon changes, record operations, Lua script executions and errors, admin actions, backfill jobs, and Tap connectivity. See the [Event Logs guide](../guides/event-logs.md) for details on event types and retention.
+HappyView records an audit trail of system events: lexicon changes, record operations, Lua script executions and errors, user actions, backfill jobs, and Tap connectivity. See the [Event Logs guide](../guides/event-logs.md) for details on event types and retention.
 
 ### List event logs
 
@@ -368,16 +368,22 @@ Manage API keys for programmatic access. See the [API Keys guide](../guides/api-
 POST /admin/api-keys
 ```
 
+Requires `api-keys:create` permission.
+
 ```sh
 curl -X POST http://localhost:3000/admin/api-keys \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
-  -d '{ "name": "CI Deploy" }'
+  -d '{
+    "name": "CI Deploy",
+    "permissions": ["lexicons:read", "lexicons:create", "backfill:create"]
+  }'
 ```
 
-| Field  | Type   | Required | Description                          |
-| ------ | ------ | -------- | ------------------------------------ |
-| `name` | string | yes      | A label to identify this key's usage |
+| Field         | Type     | Required | Description                                                                                  |
+| ------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
+| `name`        | string   | yes      | A label to identify this key's usage                                                         |
+| `permissions` | string[] | yes      | Permissions to grant the key (must be a subset of the creating user's own permissions)        |
 
 **Response**: `201 Created`
 
@@ -386,17 +392,20 @@ curl -X POST http://localhost:3000/admin/api-keys \
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "CI Deploy",
   "key": "hv_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
-  "key_prefix": "hv_a1b2c3d4"
+  "key_prefix": "hv_a1b2c3d4",
+  "permissions": ["lexicons:read", "lexicons:create", "backfill:create"]
 }
 ```
 
-The `key` field contains the full API key. It is only returned in this response — store it securely.
+The `key` field contains the full API key. It is only returned in this response — store it securely. The key's effective permissions are the **intersection** of the permissions specified here and the creating user's permissions at the time of each request.
 
 ### List API keys
 
 ```
 GET /admin/api-keys
 ```
+
+Requires `api-keys:read` permission.
 
 ```sh
 curl http://localhost:3000/admin/api-keys -H "$AUTH"
@@ -410,6 +419,7 @@ curl http://localhost:3000/admin/api-keys -H "$AUTH"
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "CI Deploy",
     "key_prefix": "hv_a1b2c3d4",
+    "permissions": ["lexicons:read", "lexicons:create", "backfill:create"],
     "created_at": "2026-03-01T00:00:00Z",
     "last_used_at": "2026-03-06T12:00:00Z",
     "revoked_at": null
@@ -417,13 +427,15 @@ curl http://localhost:3000/admin/api-keys -H "$AUTH"
 ]
 ```
 
-Only returns keys belonging to the authenticated admin. The full key is never included — only the prefix.
+Only returns keys belonging to the authenticated user. The full key is never included — only the prefix.
 
 ### Revoke an API key
 
 ```
 DELETE /admin/api-keys/{id}
 ```
+
+Requires `api-keys:delete` permission.
 
 ```sh
 curl -X DELETE http://localhost:3000/admin/api-keys/550e8400-e29b-41d4-a716-446655440000 \
@@ -434,38 +446,55 @@ Sets `revoked_at` on the key. The key remains in the database for audit purposes
 
 **Response**: `204 No Content`
 
-## Admin management
+## User Management
 
-### Add an admin
+### Create a user
 
 ```
-POST /admin/admins
+POST /admin/users
 ```
+
+Requires `users:create` permission. You cannot grant permissions you don't have yourself (escalation guard).
 
 ```sh
-curl -X POST http://localhost:3000/admin/admins \
+curl -X POST http://localhost:3000/admin/users \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
-  -d '{ "did": "did:plc:newadmin" }'
+  -d '{
+    "did": "did:plc:newuser",
+    "template": "operator"
+  }'
 ```
+
+| Field         | Type     | Required | Description                                                                                       |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `did`         | string   | yes      | The AT Protocol DID of the user to add                                                            |
+| `template`    | string   | no       | Permission template: `viewer`, `operator`, `manager`, or `full_access`                            |
+| `permissions` | string[] | no       | Explicit list of permissions to grant (used instead of or in addition to `template`)               |
+
+If neither `template` nor `permissions` is provided, the user is created with no permissions.
 
 **Response**: `201 Created`
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "did": "did:plc:newadmin"
+  "did": "did:plc:newuser",
+  "is_super": false,
+  "permissions": ["lexicons:read", "records:read", "script-variables:read", "users:read", "api-keys:read", "api-keys:create", "api-keys:delete", "backfill:read", "backfill:create", "stats:read", "events:read"]
 }
 ```
 
-### List admins
+### List users
 
 ```
-GET /admin/admins
+GET /admin/users
 ```
+
+Requires `users:read` permission.
 
 ```sh
-curl http://localhost:3000/admin/admins -H "$AUTH"
+curl http://localhost:3000/admin/users -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -475,21 +504,116 @@ curl http://localhost:3000/admin/admins -H "$AUTH"
   {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "did": "did:plc:admin",
+    "is_super": true,
+    "permissions": ["lexicons:create", "lexicons:read", "lexicons:delete", "records:read", "records:delete", "records:delete-collection", "script-variables:create", "script-variables:read", "script-variables:delete", "users:create", "users:read", "users:update", "users:delete", "api-keys:create", "api-keys:read", "api-keys:delete", "backfill:create", "backfill:read", "stats:read", "events:read"],
     "created_at": "2025-01-01T00:00:00Z",
     "last_used_at": "2025-01-02T12:00:00Z"
   }
 ]
 ```
 
-### Remove an admin
+### Get a user
 
 ```
-DELETE /admin/admins/{id}
+GET /admin/users/{id}
 ```
+
+Requires `users:read` permission.
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/admins/550e8400-e29b-41d4-a716-446655440000 \
+curl http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-446655440000 -H "$AUTH"
+```
+
+**Response**: `200 OK` with the same shape as a single item from the list response.
+
+### Update user permissions
+
+```
+PATCH /admin/users/{id}/permissions
+```
+
+Requires `users:update` permission. You cannot grant permissions you don't have yourself, and you cannot modify the super user's permissions.
+
+```sh
+curl -X PATCH http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-446655440000/permissions \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant": ["lexicons:create", "lexicons:delete"],
+    "revoke": ["records:delete"]
+  }'
+```
+
+| Field    | Type     | Required | Description                    |
+| -------- | -------- | -------- | ------------------------------ |
+| `grant`  | string[] | no       | Permissions to add             |
+| `revoke` | string[] | no       | Permissions to remove          |
+
+**Response**: `200 OK` with the updated user object.
+
+### Transfer super user
+
+```
+POST /admin/users/transfer-super
+```
+
+Only the current super user can call this endpoint. Transfers super user status to another existing user.
+
+```sh
+curl -X POST http://localhost:3000/admin/users/transfer-super \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "target_user_id": "550e8400-e29b-41d4-a716-446655440000" }'
+```
+
+| Field            | Type   | Required | Description                              |
+| ---------------- | ------ | -------- | ---------------------------------------- |
+| `target_user_id` | string | yes      | The ID of the user to receive super status |
+
+**Response**: `200 OK`
+
+### Delete a user
+
+```
+DELETE /admin/users/{id}
+```
+
+Requires `users:delete` permission. You cannot delete the super user or yourself.
+
+```sh
+curl -X DELETE http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-446655440000 \
   -H "$AUTH"
 ```
 
 **Response**: `204 No Content`
+
+## Permissions
+
+Each admin API endpoint requires a specific permission. See the [Permissions guide](../guides/permissions.md) for the full list of permissions and templates.
+
+| Endpoint                              | Required Permission          |
+| ------------------------------------- | ---------------------------- |
+| `POST /admin/lexicons`                | `lexicons:create`            |
+| `GET /admin/lexicons`                 | `lexicons:read`              |
+| `GET /admin/lexicons/{id}`            | `lexicons:read`              |
+| `DELETE /admin/lexicons/{id}`         | `lexicons:delete`            |
+| `POST /admin/network-lexicons`        | `lexicons:create`            |
+| `GET /admin/network-lexicons`         | `lexicons:read`              |
+| `DELETE /admin/network-lexicons/{id}` | `lexicons:delete`            |
+| `GET /admin/stats`                    | `stats:read`                 |
+| `GET /admin/tap/stats`               | `stats:read`                 |
+| `POST /admin/backfill`               | `backfill:create`            |
+| `GET /admin/backfill/status`         | `backfill:read`              |
+| `GET /admin/events`                  | `events:read`                |
+| `POST /admin/api-keys`              | `api-keys:create`            |
+| `GET /admin/api-keys`               | `api-keys:read`              |
+| `DELETE /admin/api-keys/{id}`        | `api-keys:delete`            |
+| `POST /admin/users`                  | `users:create`               |
+| `GET /admin/users`                   | `users:read`                 |
+| `GET /admin/users/{id}`             | `users:read`                 |
+| `PATCH /admin/users/{id}/permissions`| `users:update`               |
+| `DELETE /admin/users/{id}`           | `users:delete`               |
+| `POST /admin/users/transfer-super`   | Super user only              |
+| `GET /admin/script-variables`        | `script-variables:read`      |
+| `POST /admin/script-variables`       | `script-variables:create`    |
+| `DELETE /admin/script-variables/{key}`| `script-variables:delete`   |

@@ -40,4 +40,10 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **Tap** — A [firehose consumer and backfill worker](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) that handles real-time record streaming, cryptographic verification, and historical record fetching. HappyView connects to Tap via WebSocket to receive record events, and delegates backfill work to Tap via its HTTP API.
 
+**Permission** — A granular access control right that authorizes a specific action in the admin API. HappyView defines 20 permissions organized by category (e.g. `lexicons:create`, `users:read`). See [Permissions](../guides/permissions.md).
+
+**Permission template** — A predefined set of permissions that can be applied when creating a user. Templates are: **Viewer** (read-only access), **Operator** (viewer + backfill and API key management), **Manager** (operator + lexicon and record management), and **Full Access** (all 20 permissions).
+
+**Super user** — The bootstrapped user created on first login to a fresh HappyView instance. The super user has unrestricted access to all endpoints regardless of permissions, can transfer super status to another user, and cannot be deleted.
+
 **Target collection** — The record collection that a query or procedure lexicon operates on. Set via the `target_collection` field when uploading a lexicon.

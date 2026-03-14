@@ -49,8 +49,12 @@ src/
     jwks.rs         JWKS key fetching
   admin/
     mod.rs          Admin route definitions
-    auth.rs         AdminAuth extractor (Claims + DID lookup + auto-bootstrap)
-    admins.rs       Admin CRUD handlers
+    auth.rs         UserAuth extractor (Claims + DID lookup + permission check + auto-bootstrap)
+    users.rs        User CRUD handlers (create, list, get, delete, update permissions, transfer super)
+    permissions.rs  Permission enum (20 permissions), templates (Viewer, Operator, Manager, FullAccess)
+    api_keys.rs     API key CRUD handlers (create, list, revoke) with scoped permissions
+    events.rs       Event log query handler
+    script_variables.rs  Script variable CRUD handlers (list, upsert, delete)
     lexicons.rs     Lexicon CRUD handlers
     network_lexicons.rs  Network lexicon tracking (add, list, remove)
     records.rs      Record listing handler
@@ -112,8 +116,8 @@ Client POST /xrpc/{method} + Bearer token
 Client request + Bearer token
   -> AdminAuth extractor:
      1. Claims validation via AIP
-     2. DID lookup in admins table (auto-bootstrap if empty)
-     3. 403 if not admin
+     2. DID lookup in users table (auto-bootstrap super user if empty)
+     3. Permission check (403 if missing required permission)
   -> Admin handler
   -> JSON response
 ```
@@ -171,14 +175,58 @@ POST /admin/backfill
 | `created_at`        | timestamptz |                                                 |
 | `updated_at`        | timestamptz |                                                 |
 
-### `admins`
+### `users`
 
-| Column         | Type          | Description                           |
-| -------------- | ------------- | ------------------------------------- |
-| `id`           | uuid (PK)     |                                       |
-| `did`          | text (unique) | Admin's AT Protocol DID                   |
-| `created_at`   | timestamptz   |                                       |
-| `last_used_at` | timestamptz   | Updated on each authenticated request |
+| Column         | Type          | Description                                      |
+| -------------- | ------------- | ------------------------------------------------ |
+| `id`           | uuid (PK)     |                                                  |
+| `did`          | text (unique) | User's AT Protocol DID                           |
+| `is_super`     | boolean       | Whether this is the super user (only one allowed)|
+| `created_at`   | timestamptz   |                                                  |
+| `last_used_at` | timestamptz   | Updated on each authenticated request            |
+
+### `user_permissions`
+
+| Column       | Type        | Description                                  |
+| ------------ | ----------- | -------------------------------------------- |
+| `user_id`    | uuid (FK)   | References `users.id`                        |
+| `permission` | text        | Permission string (e.g. `lexicons:create`)   |
+| (PK)         |             | Composite primary key: (`user_id`, `permission`) |
+
+### `api_keys`
+
+| Column       | Type        | Description                                  |
+| ------------ | ----------- | -------------------------------------------- |
+| `id`         | uuid (PK)   |                                              |
+| `user_id`    | uuid (FK)   | References `users.id`                        |
+| `name`       | text        | Descriptive label                            |
+| `key_hash`   | text        | SHA-256 hash of the full key                 |
+| `key_prefix` | text        | First 11 characters for display              |
+| `permissions`| text[]      | Permissions granted to this key              |
+| `created_at` | timestamptz |                                              |
+| `last_used_at`| timestamptz|                                              |
+| `revoked_at` | timestamptz | Set when revoked (soft delete)               |
+
+### `event_logs`
+
+| Column       | Type        | Description                                  |
+| ------------ | ----------- | -------------------------------------------- |
+| `id`         | uuid (PK)   |                                              |
+| `event_type` | text        | Category.action format (e.g. `user.created`) |
+| `severity`   | text        | `info`, `warn`, or `error`                   |
+| `actor_did`  | text        | DID of the user who triggered the event      |
+| `subject`    | text        | What was affected (DID, NSID, URI, etc.)     |
+| `detail`     | jsonb       | Event-specific data                          |
+| `created_at` | timestamptz |                                              |
+
+### `script_variables`
+
+| Column       | Type        | Description                                  |
+| ------------ | ----------- | -------------------------------------------- |
+| `key`        | text (PK)   | Variable name                                |
+| `value`      | text        | Variable value (encrypted at rest)           |
+| `created_at` | timestamptz |                                              |
+| `updated_at` | timestamptz |                                              |
 
 ### `backfill_jobs`
 

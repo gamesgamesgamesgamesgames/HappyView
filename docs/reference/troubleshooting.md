@@ -40,8 +40,19 @@ For AIP-specific issues, see the [AIP documentation](https://github.com/graze-so
 
 **Causes**:
 
-- Your DID is not in the admins table. Ask an existing admin to add you via `POST /admin/admins`.
-- If this is a fresh deployment with no admins, the first authenticated request to any admin endpoint automatically bootstraps you as admin. Make sure you're sending a valid Bearer token.
+- Your DID is not in the users table. Ask an existing user with `users:create` permission to add you via `POST /admin/users`.
+- If this is a fresh deployment with no users, the first authenticated request to any admin endpoint automatically bootstraps you as the super user. Make sure you're sending a valid Bearer token.
+- You may be in the users table but lack the required permission for the endpoint you're calling. Check your permissions with `GET /admin/users` or ask a user with `users:update` permission to grant the permission you need.
+
+## Permission denied errors
+
+**Symptom**: Admin API calls return `{"error": "insufficient permissions"}` with status 403, even though you can access other endpoints.
+
+**Causes**:
+
+- Your user account doesn't have the specific permission required by the endpoint. Each endpoint requires a specific permission — see the [permissions table](admin-api.md#permissions).
+- If using an API key, the key's effective permissions are the intersection of the key's permissions and your user permissions. A key can never have more access than the user who created it.
+- Only the super user can call `POST /admin/users/transfer-super`. This endpoint cannot be accessed with any permission — it requires super user status.
 
 ## Lua script errors
 

@@ -18,7 +18,7 @@ If you're just trying HappyView for the first time, start with Railway.
 
 Open your HappyView instance in a browser. The built-in [dashboard](dashboard.md) is served at the root URL.
 
-Click **Log in** and authenticate with your AT Protocol identity. On a fresh deployment with no admins configured, the first authenticated request to any admin endpoint automatically bootstraps that user as an admin.
+Click **Log in** and authenticate with your AT Protocol identity. On a fresh deployment with no users configured, the first authenticated request to any admin endpoint automatically bootstraps that user as the **super user** with all permissions granted.
 
 ## 3. Add your first lexicon
 
