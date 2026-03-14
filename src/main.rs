@@ -30,34 +30,60 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    // Backfill record_refs if empty (first run after upgrade)
+    // Backfill record_refs in the background (first run after upgrade)
     {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM record_refs")
-            .fetch_one(&db)
-            .await
-            .expect("failed to count record_refs");
+        let db_bg = db.clone();
+        tokio::spawn(async move {
+            let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM record_refs")
+                .fetch_one(&db_bg)
+                .await
+                .expect("failed to count record_refs");
 
-        if count.0 == 0 {
-            info!("backfilling record_refs table...");
-            let records: Vec<(String, String, serde_json::Value)> =
-                sqlx::query_as("SELECT uri, collection, record FROM records")
-                    .fetch_all(&db)
+            if count.0 == 0 {
+                info!("backfilling record_refs table in background...");
+                let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM records")
+                    .fetch_one(&db_bg)
+                    .await
+                    .expect("failed to count records");
+                let total = total.0 as usize;
+
+                let batch_size = 1000i64;
+                let mut offset = 0i64;
+                let mut processed = 0usize;
+
+                loop {
+                    let batch: Vec<(String, String, serde_json::Value)> = sqlx::query_as(
+                        "SELECT uri, collection, record FROM records ORDER BY uri LIMIT $1 OFFSET $2",
+                    )
+                    .bind(batch_size)
+                    .bind(offset)
+                    .fetch_all(&db_bg)
                     .await
                     .expect("failed to fetch records for backfill");
 
-            let total = records.len();
-            for (i, (uri, collection, record)) in records.iter().enumerate() {
-                if let Err(e) =
-                    happyview::record_refs::sync_refs(&db, uri, collection, record).await
-                {
-                    warn!(uri = uri.as_str(), "failed to backfill refs: {e}");
+                    if batch.is_empty() {
+                        break;
+                    }
+
+                    for (uri, collection, record) in &batch {
+                        if let Err(e) =
+                            happyview::record_refs::sync_refs(&db_bg, uri, collection, record).await
+                        {
+                            warn!(uri = uri.as_str(), "failed to backfill refs: {e}");
+                        }
+                    }
+
+                    processed += batch.len();
+                    offset += batch_size;
+
+                    if processed.is_multiple_of(10000) || processed == total {
+                        info!("backfill progress: {processed}/{total}");
+                    }
                 }
-                if (i + 1) % 10000 == 0 {
-                    info!("backfill progress: {}/{}", i + 1, total);
-                }
+
+                info!("backfill complete: processed {processed} records");
             }
-            info!("backfill complete: processed {total} records");
-        }
+        });
     }
 
     let lexicons = LexiconRegistry::new();
