@@ -9,6 +9,9 @@ import {
   IconUsers,
   IconSettings,
   IconLogout,
+  IconKey,
+  IconVariable,
+  IconChevronRight,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -16,6 +19,11 @@ import { usePathname } from "next/navigation"
 
 import { useAuth } from "@/lib/auth-context"
 import { useCurrentUser } from "@/hooks/use-current-user"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +34,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 
 const navItems = [
@@ -34,8 +45,12 @@ const navItems = [
   { title: "Backfill", url: "/backfill", icon: IconDatabase },
   { title: "Records", url: "/records", icon: IconTable },
   { title: "Event Logs", url: "/events", icon: IconClipboardList, requiredPermissions: ["events:read"] },
-  { title: "Users", url: "/users", icon: IconUsers },
-  { title: "Settings", url: "/settings", icon: IconSettings, requiredPermissions: ["api-keys:read", "script-variables:read"] },
+] as const
+
+const settingsSubItems = [
+  { title: "Users", url: "/settings/users", icon: IconUsers, requiredPermissions: ["users:read"] },
+  { title: "ENV Variables", url: "/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
+  { title: "API Keys", url: "/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
 ] as const
 
 export function AppSidebar({
@@ -49,6 +64,12 @@ export function AppSidebar({
     if (!("requiredPermissions" in item)) return true
     return item.requiredPermissions.some((perm) => hasPermission(perm))
   })
+
+  const visibleSettingsItems = settingsSubItems.filter((item) =>
+    item.requiredPermissions.some((perm) => hasPermission(perm))
+  )
+
+  const isSettingsActive = pathname.startsWith("/settings")
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -90,6 +111,37 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              {visibleSettingsItems.length > 0 && (
+                <Collapsible defaultOpen={isSettingsActive} className="group/collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton tooltip="Settings" isActive={isSettingsActive}>
+                        <IconSettings />
+                        <span>Settings</span>
+                        <IconChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {visibleSettingsItems.map((item) => (
+                          <SidebarMenuSubItem key={item.title}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === item.url}
+                            >
+                              <Link href={item.url}>
+                                <item.icon />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
