@@ -30,7 +30,7 @@ export default function AddLexiconPage() {
   // Redirect if the user cannot create lexicons
   useEffect(() => {
     if (!hasPermission("lexicons:create")) {
-      router.replace("/lexicons");
+      router.replace("/dashboard/lexicons");
     }
   }, [hasPermission, router]);
 
@@ -137,7 +137,7 @@ export default function AddLexiconPage() {
         backfill: localMainType === "record" && backfill,
         script: showScript && script ? script : undefined,
       });
-      router.push("/lexicons");
+      router.push("/dashboard/lexicons");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
@@ -154,7 +154,7 @@ export default function AddLexiconPage() {
           ? networkTargetCollection || undefined
           : undefined,
       });
-      router.push("/lexicons");
+      router.push("/dashboard/lexicons");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
@@ -163,7 +163,7 @@ export default function AddLexiconPage() {
 
   return (
     <>
-      <SiteHeader title="Add Lexicon" backHref="/lexicons" />
+      <SiteHeader title="Add Lexicon" backHref="/dashboard/lexicons" />
 
       <div className="flex flex-1 flex-col">
         <Tabs

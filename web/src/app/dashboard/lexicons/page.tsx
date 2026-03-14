@@ -200,7 +200,7 @@ export default function LexiconsPage() {
                 asChild
               >
                 <Link
-                  href={`/records?collection=${encodeURIComponent(row.original.id)}`}
+                  href={`/dashboard/records?collection=${encodeURIComponent(row.original.id)}`}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Rows3 className="size-4" />
@@ -217,7 +217,7 @@ export default function LexiconsPage() {
               asChild
             >
               <Link
-                href={`/lexicons/${encodeURIComponent(row.original.id)}`}
+                href={`/dashboard/lexicons/${encodeURIComponent(row.original.id)}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <Eye className="size-4" />
@@ -294,13 +294,13 @@ export default function LexiconsPage() {
         <DataTable
           table={table}
           onRowClick={(lex) =>
-            router.push(`/lexicons/${encodeURIComponent(lex.id)}`)
+            router.push(`/dashboard/lexicons/${encodeURIComponent(lex.id)}`)
           }
         >
           <DataTableToolbar table={table}>
             {hasPermission("lexicons:create") && (
               <Button asChild>
-                <Link href="/lexicons/new">Add Lexicon</Link>
+                <Link href="/dashboard/lexicons/new">Add Lexicon</Link>
               </Button>
             )}
           </DataTableToolbar>

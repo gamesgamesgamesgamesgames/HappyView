@@ -40,17 +40,17 @@ import {
 } from "@/components/ui/sidebar"
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: IconDashboard },
-  { title: "Lexicons", url: "/lexicons", icon: IconFileDescription },
-  { title: "Backfill", url: "/backfill", icon: IconDatabase },
-  { title: "Records", url: "/records", icon: IconTable },
-  { title: "Event Logs", url: "/events", icon: IconClipboardList, requiredPermissions: ["events:read"] },
+  { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+  { title: "Lexicons", url: "/dashboard/lexicons", icon: IconFileDescription },
+  { title: "Backfill", url: "/dashboard/backfill", icon: IconDatabase },
+  { title: "Records", url: "/dashboard/records", icon: IconTable },
+  { title: "Event Logs", url: "/dashboard/events", icon: IconClipboardList, requiredPermissions: ["events:read"] },
 ] as const
 
 const settingsSubItems = [
-  { title: "Users", url: "/settings/users", icon: IconUsers, requiredPermissions: ["users:read"] },
-  { title: "ENV Variables", url: "/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
-  { title: "API Keys", url: "/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
+  { title: "Users", url: "/dashboard/settings/users", icon: IconUsers, requiredPermissions: ["users:read"] },
+  { title: "ENV Variables", url: "/dashboard/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
+  { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
 ] as const
 
 export function AppSidebar({
@@ -69,7 +69,7 @@ export function AppSidebar({
     item.requiredPermissions.some((perm) => hasPermission(perm))
   )
 
-  const isSettingsActive = pathname.startsWith("/settings")
+  const isSettingsActive = pathname.startsWith("/dashboard/settings")
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -99,8 +99,8 @@ export function AppSidebar({
                     asChild
                     tooltip={item.title}
                     isActive={
-                      item.url === "/"
-                        ? pathname === "/"
+                      item.url === "/dashboard"
+                        ? pathname === "/dashboard"
                         : pathname.startsWith(item.url)
                     }
                   >

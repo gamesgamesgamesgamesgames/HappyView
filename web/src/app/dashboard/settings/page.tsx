@@ -11,11 +11,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (hasPermission("users:read")) {
-      router.replace("/settings/users");
+      router.replace("/dashboard/settings/users");
     } else if (hasPermission("script-variables:read")) {
-      router.replace("/settings/env-variables");
+      router.replace("/dashboard/settings/env-variables");
     } else if (hasPermission("api-keys:read")) {
-      router.replace("/settings/api-keys");
+      router.replace("/dashboard/settings/api-keys");
     }
   }, [router, hasPermission]);
 

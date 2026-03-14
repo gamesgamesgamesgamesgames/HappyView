@@ -122,7 +122,7 @@ export default function LexiconDetailPage() {
       } else {
         await deleteLexicon(getToken, lexicon.id);
       }
-      router.push("/lexicons");
+      router.push("/dashboard/lexicons");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setDeleting(false);
@@ -132,7 +132,7 @@ export default function LexiconDetailPage() {
   if (error && !lexicon) {
     return (
       <>
-        <SiteHeader title="Lexicon" backHref="/lexicons" />
+        <SiteHeader title="Lexicon" backHref="/dashboard/lexicons" />
         <div className="p-4 md:p-6">
           <p className="text-destructive text-sm">{error}</p>
         </div>
@@ -143,7 +143,7 @@ export default function LexiconDetailPage() {
   if (!lexicon) {
     return (
       <>
-        <SiteHeader title="Lexicon" backHref="/lexicons" />
+        <SiteHeader title="Lexicon" backHref="/dashboard/lexicons" />
         <div className="p-4 md:p-6">
           <p className="text-muted-foreground text-sm">Loading...</p>
         </div>
@@ -161,7 +161,7 @@ export default function LexiconDetailPage() {
 
   return (
     <div className="flex flex-col h-full max-h-screen md:max-h-[calc(100vh-((var(--spacing)*2)*2))] overflow-hidden">
-      <SiteHeader title={lexicon.id} backHref="/lexicons" />
+      <SiteHeader title={lexicon.id} backHref="/dashboard/lexicons" />
       <div className="flex flex-col flex-1 min-h-0 gap-6 items-stretch overflow-hidden">
         <div className="p-4 md:p-6">
           {error && <p className="text-destructive text-sm mb-4">{error}</p>}
