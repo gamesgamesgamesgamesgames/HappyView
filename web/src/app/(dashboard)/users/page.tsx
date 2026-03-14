@@ -77,6 +77,7 @@ const TEMPLATE_PERMISSIONS: Record<string, string[]> = {
 export default function UsersPage() {
   const { getToken, did: currentDid } = useAuth();
   const [users, setUsers] = useState<UserSummary[]>([]);
+  const [handles, setHandles] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
@@ -92,6 +93,26 @@ export default function UsersPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Resolve DIDs to handles via PLC directory
+  useEffect(() => {
+    const newDids = users.map((u) => u.did).filter((did) => !(did in handles));
+    if (newDids.length === 0) return;
+    for (const did of newDids) {
+      fetch(`https://plc.directory/${encodeURIComponent(did)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data) return;
+          const handle = data.alsoKnownAs
+            ?.find((aka: string) => aka.startsWith("at://"))
+            ?.replace("at://", "");
+          if (handle) {
+            setHandles((prev) => ({ ...prev, [did]: handle }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [users, handles]);
 
   async function handleDelete(id: string) {
     try {
@@ -179,7 +200,7 @@ export default function UsersPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-6" />
-                <TableHead>DID</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Permissions</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Last Used</TableHead>
@@ -224,7 +245,7 @@ export default function UsersPage() {
                           </Button>
                       </TableCell>
                       <TableCell
-                        className="font-mono text-sm"
+                        className="text-sm"
                         onClick={() =>
                           setExpandedUserId(
                             expandedUserId === user.id ? null : user.id
@@ -232,7 +253,12 @@ export default function UsersPage() {
                         }
                       >
                         <div className="flex items-center gap-2">
-                          {user.did}
+                          <div className="flex flex-col">
+                            {handles[user.did] && (
+                              <span className="font-medium">@{handles[user.did]}</span>
+                            )}
+                            <span className="font-mono text-muted-foreground text-xs">{user.did}</span>
+                          </div>
                           {user.is_super && (
                             <Badge variant="secondary" className="text-xs">
                               Owner
