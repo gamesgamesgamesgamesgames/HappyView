@@ -125,8 +125,8 @@ async fn admin_non_admin_did_returns_403() {
 async fn admin_auto_bootstrap_first_user() {
     let app = TestApp::new().await;
 
-    // Clear the seeded admin so the table is empty.
-    sqlx::query("DELETE FROM admins")
+    // Clear the seeded user so the table is empty.
+    sqlx::query("DELETE FROM users")
         .execute(&app.state.db)
         .await
         .unwrap();
@@ -145,7 +145,7 @@ async fn admin_auto_bootstrap_first_user() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Verify the DID was inserted.
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins WHERE did = $1")
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE did = $1")
         .bind(bootstrap_did)
         .fetch_one(&app.state.db)
         .await
@@ -514,7 +514,7 @@ async fn admin_create_returns_did() {
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/admins", &app.admin_token, &body))
+        .oneshot(admin_post("/admin/users", &app.admin_token, &body))
         .await
         .unwrap();
 
@@ -536,7 +536,7 @@ async fn admin_created_did_authenticates() {
     // Create admin via the existing admin
     app.router
         .clone()
-        .oneshot(admin_post("/admin/admins", &app.admin_token, &body))
+        .oneshot(admin_post("/admin/users", &app.admin_token, &body))
         .await
         .unwrap();
 
@@ -560,7 +560,7 @@ async fn admin_list_returns_dids() {
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/admins", &app.admin_token))
+        .oneshot(admin_get("/admin/users", &app.admin_token))
         .await
         .unwrap();
 
@@ -586,7 +586,7 @@ async fn admin_delete_returns_204() {
         .router
         .clone()
         .oneshot(admin_post(
-            "/admin/admins",
+            "/admin/users",
             &app.admin_token,
             &json!({ "did": "did:plc:disposable" }),
         ))
@@ -598,7 +598,7 @@ async fn admin_delete_returns_204() {
     let resp = app
         .router
         .oneshot(admin_delete(
-            &format!("/admin/admins/{id}"),
+            &format!("/admin/users/{id}"),
             &app.admin_token,
         ))
         .await
@@ -616,7 +616,7 @@ async fn admin_delete_not_found() {
     let resp = app
         .router
         .oneshot(admin_delete(
-            "/admin/admins/00000000-0000-0000-0000-000000000000",
+            "/admin/users/00000000-0000-0000-0000-000000000000",
             &app.admin_token,
         ))
         .await

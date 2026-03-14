@@ -44,12 +44,12 @@ impl TestApp {
             event_log_retention_days: 30,
         };
 
-        // Seed the admin DID directly so tests don't rely on auto-bootstrap.
-        sqlx::query("INSERT INTO admins (did) VALUES ($1) ON CONFLICT DO NOTHING")
+        // Seed the admin user directly so tests don't rely on auto-bootstrap.
+        sqlx::query("INSERT INTO users (did, is_super) VALUES ($1, TRUE) ON CONFLICT DO NOTHING")
             .bind(&admin_did)
             .execute(&pool)
             .await
-            .expect("failed to seed admin DID");
+            .expect("failed to seed admin user");
 
         let lexicons = LexiconRegistry::new();
         lexicons
