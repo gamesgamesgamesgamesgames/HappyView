@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { useAuth } from "@/lib/auth-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   addNetworkLexicon,
   uploadLexicon,
@@ -21,9 +22,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AddLexiconPage() {
   const { getToken } = useAuth();
+  const { hasPermission } = useCurrentUser();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Redirect if the user cannot create lexicons
+  useEffect(() => {
+    if (!hasPermission("lexicons:create")) {
+      router.replace("/lexicons");
+    }
+  }, [hasPermission, router]);
 
   // Local state
   const [json, setJson] = useState(LEXICON_TEMPLATE);

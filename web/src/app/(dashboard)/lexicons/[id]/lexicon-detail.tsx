@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { CodePanels } from "@/components/code-panels";
 import {
   deleteLexicon,
@@ -35,6 +36,7 @@ export default function LexiconDetailPage() {
     pathname.split("/").filter(Boolean).pop() ?? "",
   );
   const { getToken } = useAuth();
+  const { hasPermission } = useCurrentUser();
   const router = useRouter();
   const [lexicon, setLexicon] = useState<LexiconDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -237,16 +239,18 @@ export default function LexiconDetailPage() {
 
         {/* Actions */}
         <footer className="bg-sidebar-accent flex justify-between gap-2 ps-4 py-2 md:px-6 md:py-4 rounded-b-md">
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? "Deleting..." : "Delete Lexicon"}
-          </Button>
+          {hasPermission("lexicons:delete") && (
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete Lexicon"}
+            </Button>
+          )}
 
           <div className="flex gap-2">
-            {isRecord && !showHook && (
+            {hasPermission("lexicons:create") && isRecord && !showHook && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -268,7 +272,7 @@ export default function LexiconDetailPage() {
                 </Tooltip>
               </TooltipProvider>
             )}
-            {isRecord && showHook && (
+            {hasPermission("lexicons:create") && isRecord && showHook && (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -280,9 +284,11 @@ export default function LexiconDetailPage() {
               </Button>
             )}
 
-            <Button onClick={handleSave} disabled={!isDirty || saving}>
-              {saving ? "Saving..." : "Save"}
-            </Button>
+            {hasPermission("lexicons:create") && (
+              <Button onClick={handleSave} disabled={!isDirty || saving}>
+                {saving ? "Saving..." : "Save"}
+              </Button>
+            )}
           </div>
         </footer>
       </div>

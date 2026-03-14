@@ -7,7 +7,8 @@ use serde_json::Value;
 use crate::AppState;
 use crate::error::AppError;
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 
 #[derive(Deserialize)]
 pub(super) struct ListRecordsParams {
@@ -38,9 +39,10 @@ pub(super) struct ListRecordsResponse {
 /// GET /admin/records?collection=X&limit=N&cursor=C — browse records by collection.
 pub(super) async fn list_records(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
     Query(params): Query<ListRecordsParams>,
 ) -> Result<Json<ListRecordsResponse>, AppError> {
+    auth.require(Permission::RecordsRead).await?;
     let limit = params.limit.unwrap_or(20).min(100);
     let offset: i64 = params
         .cursor
@@ -82,9 +84,11 @@ pub(super) struct DeleteCollectionParams {
 /// DELETE /admin/records/collection?collection=X — delete all records in a collection.
 pub(super) async fn delete_collection_records(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
     Query(params): Query<DeleteCollectionParams>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    auth.require(Permission::RecordsDeleteCollection).await?;
+    auth.require(Permission::RecordsDelete).await?;
     let result = sqlx::query("DELETE FROM records WHERE collection = $1")
         .bind(&params.collection)
         .execute(&state.db)
@@ -99,9 +103,10 @@ pub(super) async fn delete_collection_records(
 /// DELETE /admin/records?uri=at://... — delete a single record by URI.
 pub(super) async fn delete_record(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
     Query(params): Query<DeleteRecordParams>,
 ) -> Result<StatusCode, AppError> {
+    auth.require(Permission::RecordsDelete).await?;
     let result = sqlx::query("DELETE FROM records WHERE uri = $1")
         .bind(&params.uri)
         .execute(&state.db)

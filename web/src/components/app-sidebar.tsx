@@ -15,6 +15,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { useAuth } from "@/lib/auth-context"
+import { useCurrentUser } from "@/hooks/use-current-user"
 import {
   Sidebar,
   SidebarContent,
@@ -32,16 +33,22 @@ const navItems = [
   { title: "Lexicons", url: "/lexicons", icon: IconFileDescription },
   { title: "Backfill", url: "/backfill", icon: IconDatabase },
   { title: "Records", url: "/records", icon: IconTable },
-  { title: "Event Logs", url: "/events", icon: IconClipboardList },
-  { title: "Admins", url: "/admins", icon: IconUsers },
-  { title: "Settings", url: "/settings", icon: IconSettings },
-]
+  { title: "Event Logs", url: "/events", icon: IconClipboardList, requiredPermissions: ["events:read"] },
+  { title: "Users", url: "/users", icon: IconUsers },
+  { title: "Settings", url: "/settings", icon: IconSettings, requiredPermissions: ["api-keys:read", "script-variables:read"] },
+] as const
 
 export function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { logout } = useAuth()
+  const { hasPermission } = useCurrentUser()
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (!("requiredPermissions" in item)) return true
+    return item.requiredPermissions.some((perm) => hasPermission(perm))
+  })
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -65,7 +72,7 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupContent className="flex flex-col gap-2">
             <SidebarMenu>
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

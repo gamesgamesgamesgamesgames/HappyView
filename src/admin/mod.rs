@@ -1,18 +1,19 @@
-mod admins;
 mod api_keys;
 pub(crate) mod auth;
 mod backfill;
 mod events;
 mod lexicons;
 mod network_lexicons;
+pub(crate) mod permissions;
 mod records;
 mod script_variables;
 mod stats;
 mod tap_stats;
 mod types;
+mod users;
 
 use axum::Router;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 
 use crate::AppState;
 
@@ -30,11 +31,13 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route("/backfill", post(backfill::create_backfill))
         .route("/backfill/status", get(backfill::backfill_status))
         .route("/events", get(events::list_events))
+        .route("/users", post(users::create_user).get(users::list_users))
+        .route("/users/transfer-super", post(users::transfer_super))
         .route(
-            "/admins",
-            post(admins::create_admin).get(admins::list_admins),
+            "/users/{id}",
+            get(users::get_user).delete(users::delete_user),
         )
-        .route("/admins/{id}", delete(admins::delete_admin))
+        .route("/users/{id}/permissions", patch(users::update_permissions))
         .route(
             "/api-keys",
             post(api_keys::create_api_key).get(api_keys::list_api_keys),

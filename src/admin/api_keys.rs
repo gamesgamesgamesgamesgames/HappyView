@@ -9,22 +9,33 @@ use crate::AppState;
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use super::types::{ApiKeySummary, CreateApiKeyBody, CreateApiKeyResponse};
 
 /// POST /admin/api-keys — create a new API key for the authenticated admin.
 pub(super) async fn create_api_key(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
     Json(body): Json<CreateApiKeyBody>,
 ) -> Result<(StatusCode, Json<CreateApiKeyResponse>), AppError> {
-    // Look up the admin's UUID from their DID.
-    let admin_row: (String,) = sqlx::query_as("SELECT id::text FROM admins WHERE did = $1")
-        .bind(&auth.did)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to find admin: {e}")))?;
-    let admin_id = admin_row.0;
+    auth.require(Permission::ApiKeysCreate).await?;
+
+    // Validate requested permissions are a subset of the user's permissions
+    if !auth.is_super {
+        for perm_str in &body.permissions {
+            #[allow(clippy::collapsible_if)]
+            if let Ok(p) =
+                serde_json::from_value::<Permission>(serde_json::Value::String(perm_str.clone()))
+            {
+                if !auth.permissions.contains(&p) {
+                    return Err(AppError::Forbidden(format!(
+                        "Cannot grant API key permission you don't have: {perm_str}"
+                    )));
+                }
+            }
+        }
+    }
 
     // Generate the raw key: "hv_" + 32 random hex chars.
     let mut random_bytes = [0u8; 16];
@@ -38,14 +49,15 @@ pub(super) async fn create_api_key(
     let key_prefix = raw_key[..11].to_string(); // "hv_" + 8 hex chars
 
     let row: (String,) = sqlx::query_as(
-        "INSERT INTO admin_api_keys (admin_id, name, key_hash, key_prefix)
-         VALUES ($1::uuid, $2, $3, $4)
+        "INSERT INTO api_keys (user_id, name, key_hash, key_prefix, permissions)
+         VALUES ($1::uuid, $2, $3, $4, $5)
          RETURNING id::text",
     )
-    .bind(&admin_id)
+    .bind(&auth.user_id)
     .bind(&body.name)
     .bind(&hash)
     .bind(&key_prefix)
+    .bind(&body.permissions)
     .fetch_one(&state.db)
     .await
     .map_err(|e| AppError::Internal(format!("failed to create api key: {e}")))?;
@@ -57,7 +69,7 @@ pub(super) async fn create_api_key(
             severity: Severity::Info,
             actor_did: Some(auth.did.clone()),
             subject: Some(body.name.clone()),
-            detail: serde_json::json!({ "key_prefix": key_prefix }),
+            detail: serde_json::json!({ "key_prefix": key_prefix, "permissions": &body.permissions }),
         },
     )
     .await;
@@ -69,6 +81,7 @@ pub(super) async fn create_api_key(
             name: body.name,
             key: raw_key,
             key_prefix,
+            permissions: body.permissions,
         }),
     ))
 }
@@ -76,21 +89,24 @@ pub(super) async fn create_api_key(
 /// GET /admin/api-keys — list API keys for the authenticated admin.
 pub(super) async fn list_api_keys(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
 ) -> Result<Json<Vec<ApiKeySummary>>, AppError> {
+    auth.require(Permission::ApiKeysRead).await?;
+
     #[allow(clippy::type_complexity)]
     let rows: Vec<(
         String,
         String,
         String,
+        Vec<String>,
         chrono::DateTime<chrono::Utc>,
         Option<chrono::DateTime<chrono::Utc>>,
         Option<chrono::DateTime<chrono::Utc>>,
     )> = sqlx::query_as(
-        "SELECT k.id::text, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at
-         FROM admin_api_keys k
-         JOIN admins a ON a.id = k.admin_id
-         WHERE a.did = $1
+        "SELECT k.id::text, k.name, k.key_prefix, k.permissions, k.created_at, k.last_used_at, k.revoked_at
+         FROM api_keys k
+         JOIN users u ON u.id = k.user_id
+         WHERE u.did = $1
          ORDER BY k.created_at DESC",
     )
     .bind(&auth.did)
@@ -101,13 +117,16 @@ pub(super) async fn list_api_keys(
     let keys: Vec<ApiKeySummary> = rows
         .into_iter()
         .map(
-            |(id, name, key_prefix, created_at, last_used_at, revoked_at)| ApiKeySummary {
-                id,
-                name,
-                key_prefix,
-                created_at,
-                last_used_at,
-                revoked_at,
+            |(id, name, key_prefix, permissions, created_at, last_used_at, revoked_at)| {
+                ApiKeySummary {
+                    id,
+                    name,
+                    key_prefix,
+                    permissions,
+                    created_at,
+                    last_used_at,
+                    revoked_at,
+                }
             },
         )
         .collect();
@@ -118,13 +137,15 @@ pub(super) async fn list_api_keys(
 /// DELETE /admin/api-keys/:id — revoke an API key (soft delete).
 pub(super) async fn revoke_api_key(
     State(state): State<AppState>,
-    auth: AdminAuth,
+    auth: UserAuth,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
+    auth.require(Permission::ApiKeysDelete).await?;
+
     let result = sqlx::query(
-        "UPDATE admin_api_keys SET revoked_at = NOW()
+        "UPDATE api_keys SET revoked_at = NOW()
          WHERE id::text = $1
-           AND admin_id = (SELECT id FROM admins WHERE did = $2)
+           AND user_id = (SELECT id FROM users WHERE did = $2)
            AND revoked_at IS NULL",
     )
     .bind(&id)

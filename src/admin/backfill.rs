@@ -9,7 +9,8 @@ use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::tap;
 
-use super::auth::AdminAuth;
+use super::auth::UserAuth;
+use super::permissions::Permission;
 use super::types::{BackfillJob, CreateBackfillBody};
 
 // ---------------------------------------------------------------------------
@@ -82,9 +83,10 @@ async fn list_repos_by_collection(
 /// POST /admin/backfill — create a backfill job, discover repos, and add them to Tap.
 pub(super) async fn create_backfill(
     State(state): State<AppState>,
-    admin: AdminAuth,
+    admin: UserAuth,
     Json(body): Json<CreateBackfillBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
+    admin.require(Permission::BackfillCreate).await?;
     // Create a backfill_jobs record for tracking/audit.
     let row: (String,) = sqlx::query_as(
         "INSERT INTO backfill_jobs (collection, did) VALUES ($1, $2) RETURNING id::text",
@@ -306,8 +308,9 @@ pub(super) async fn create_backfill(
 /// GET /admin/backfill/status — list all backfill jobs.
 pub(super) async fn backfill_status(
     State(state): State<AppState>,
-    _admin: AdminAuth,
+    auth: UserAuth,
 ) -> Result<Json<Vec<BackfillJob>>, AppError> {
+    auth.require(Permission::BackfillRead).await?;
     #[allow(clippy::type_complexity)]
     let rows: Vec<(
         String,
