@@ -11,6 +11,7 @@ import {
   IconLogout,
   IconKey,
   IconVariable,
+  IconTag,
   IconChevronRight,
 } from "@tabler/icons-react"
 import Image from "next/image"
@@ -51,6 +52,7 @@ const settingsSubItems = [
   { title: "Users", url: "/dashboard/settings/users", icon: IconUsers, requiredPermissions: ["users:read"] },
   { title: "ENV Variables", url: "/dashboard/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
   { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
+  { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
 ] as const
 
 export function AppSidebar({

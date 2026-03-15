@@ -12,13 +12,19 @@ const nextConfig: NextConfig = {
 if (process.env.NODE_ENV === "production") {
   nextConfig.output = "export";
 } else {
-  nextConfig.rewrites = async () => [
-    { source: "/admin/:path*", destination: `${apiBase}/admin/:path*` },
-    { source: "/xrpc/:path*", destination: `${apiBase}/xrpc/:path*` },
-    { source: "/health", destination: `${apiBase}/health` },
-    { source: "/aip/:path*", destination: `${aipBase}/:path*` },
-    { source: "/config", destination: `${apiBase}/config` },
-  ];
+  nextConfig.rewrites = async () => ({
+    // beforeFiles rewrites run before the trailingSlash redirect,
+    // preventing 308s on API fetch calls.
+    beforeFiles: [
+      { source: "/admin/:path*", destination: `${apiBase}/admin/:path*` },
+      { source: "/xrpc/:path*", destination: `${apiBase}/xrpc/:path*` },
+      { source: "/health", destination: `${apiBase}/health` },
+      { source: "/aip/:path*", destination: `${aipBase}/:path*` },
+      { source: "/config", destination: `${apiBase}/config` },
+    ],
+    afterFiles: [],
+    fallback: [],
+  });
 }
 
 export default nextConfig;

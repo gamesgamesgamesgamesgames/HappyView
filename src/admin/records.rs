@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -23,10 +26,18 @@ pub(super) struct DeleteRecordParams {
 }
 
 #[derive(Serialize)]
+pub(super) struct RecordLabel {
+    pub src: String,
+    pub val: String,
+    pub cts: String,
+}
+
+#[derive(Serialize)]
 pub(super) struct RecordEntry {
     pub uri: String,
     pub did: String,
     pub record: Value,
+    pub labels: Vec<RecordLabel>,
 }
 
 #[derive(Serialize)]
@@ -61,10 +72,61 @@ pub(super) async fn list_records(
     .map_err(|e| AppError::Internal(format!("failed to list records: {e}")))?;
 
     let has_more = rows.len() as i64 > limit;
-    let records: Vec<RecordEntry> = rows
+    let visible_rows: Vec<(String, String, Value)> =
+        rows.into_iter().take(limit as usize).collect();
+
+    // Batch-query external labels for all visible URIs
+    let uris: Vec<&str> = visible_rows
+        .iter()
+        .map(|(uri, _, _)| uri.as_str())
+        .collect();
+    let label_rows: Vec<(String, String, String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT uri, src, val, cts FROM labels WHERE uri = ANY($1) AND (exp IS NULL OR exp > NOW())",
+    )
+    .bind(&uris)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to fetch labels: {e}")))?;
+
+    // Group external labels by URI
+    let mut labels_by_uri: HashMap<String, Vec<RecordLabel>> = HashMap::new();
+    for (uri, src, val, cts) in label_rows {
+        labels_by_uri.entry(uri).or_default().push(RecordLabel {
+            src,
+            val,
+            cts: cts.to_rfc3339(),
+        });
+    }
+
+    let records: Vec<RecordEntry> = visible_rows
         .into_iter()
-        .take(limit as usize)
-        .map(|(uri, did, record)| RecordEntry { uri, did, record })
+        .map(|(uri, did, record)| {
+            let mut labels = labels_by_uri.remove(&uri).unwrap_or_default();
+
+            // Extract self-labels from record JSONB
+            if let Some(values) = record
+                .get("labels")
+                .and_then(|l| l.get("values"))
+                .and_then(|v| v.as_array())
+            {
+                for entry in values {
+                    if let Some(val) = entry.get("val").and_then(|v| v.as_str()) {
+                        labels.push(RecordLabel {
+                            src: did.clone(),
+                            val: val.to_string(),
+                            cts: String::new(),
+                        });
+                    }
+                }
+            }
+
+            RecordEntry {
+                uri,
+                did,
+                record,
+                labels,
+            }
+        })
         .collect();
 
     let cursor = if has_more {
