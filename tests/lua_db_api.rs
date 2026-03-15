@@ -27,12 +27,14 @@ async fn test_state_with_pool(pool: sqlx::PgPool) -> AppState {
         event_log_retention_days: 30,
     };
     let (tx, _) = watch::channel(vec![]);
+    let (labeler_tx, _) = watch::channel(());
     AppState {
         config,
         http: reqwest::Client::new(),
         db: pool,
         lexicons: LexiconRegistry::new(),
         collections_tx: tx,
+        labeler_subscriptions_tx: labeler_tx,
     }
 }
 

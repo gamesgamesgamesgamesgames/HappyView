@@ -181,3 +181,26 @@ pub(super) struct UpsertScriptVariableBody {
     pub(super) key: String,
     pub(super) value: String,
 }
+
+// ---------------------------------------------------------------------------
+// Labeler subscription types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct AddLabelerBody {
+    pub(super) did: String,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub(super) struct LabelerSummary {
+    pub(super) did: String,
+    pub(super) status: String,
+    pub(super) cursor: Option<i64>,
+    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpdateLabelerBody {
+    pub(super) status: String,
+}

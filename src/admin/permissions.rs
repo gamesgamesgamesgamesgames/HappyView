@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-/// All 20 permissions in the system.
+/// All 23 permissions in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Permission {
     #[serde(rename = "lexicons:create")]
@@ -52,6 +52,13 @@ pub enum Permission {
 
     #[serde(rename = "events:read")]
     EventsRead,
+
+    #[serde(rename = "labelers:create")]
+    LabelersCreate,
+    #[serde(rename = "labelers:read")]
+    LabelersRead,
+    #[serde(rename = "labelers:delete")]
+    LabelersDelete,
 }
 
 impl Permission {
@@ -78,10 +85,13 @@ impl Permission {
             Self::BackfillRead => "backfill:read",
             Self::StatsRead => "stats:read",
             Self::EventsRead => "events:read",
+            Self::LabelersCreate => "labelers:create",
+            Self::LabelersRead => "labelers:read",
+            Self::LabelersDelete => "labelers:delete",
         }
     }
 
-    /// All 20 permissions.
+    /// All 23 permissions.
     pub fn all() -> HashSet<Permission> {
         HashSet::from([
             Self::LexiconsCreate,
@@ -104,6 +114,9 @@ impl Permission {
             Self::BackfillRead,
             Self::StatsRead,
             Self::EventsRead,
+            Self::LabelersCreate,
+            Self::LabelersRead,
+            Self::LabelersDelete,
         ])
     }
 }
@@ -145,6 +158,9 @@ impl Template {
                 perms.insert(Permission::ScriptVariablesCreate);
                 perms.insert(Permission::ScriptVariablesDelete);
                 perms.insert(Permission::RecordsDelete);
+                perms.insert(Permission::LabelersCreate);
+                perms.insert(Permission::LabelersRead);
+                perms.insert(Permission::LabelersDelete);
                 perms
             }
             Self::FullAccess => Permission::all(),

@@ -111,12 +111,14 @@ mod tests {
             event_log_retention_days: 30,
         };
         let (tx, _) = watch::channel(vec![]);
+        let (labeler_tx, _) = watch::channel(());
         AppState {
             config,
             http: reqwest::Client::new(),
             db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
             lexicons: crate::lexicon::LexiconRegistry::new(),
             collections_tx: tx,
+            labeler_subscriptions_tx: labeler_tx,
         }
     }
 
