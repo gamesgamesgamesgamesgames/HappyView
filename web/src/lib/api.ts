@@ -10,6 +10,7 @@ import type { UserSummary } from "@/types/users"
 import type { AdminListRecordsResponse } from "@/types/records"
 import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
+import type { LabelerSummary } from "@/types/labelers"
 
 export type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 export type { CollectionStat, StatsResponse } from "@/types/stats"
@@ -21,6 +22,8 @@ export type { UserSummary } from "@/types/users"
 export type { AdminRecord, AdminListRecordsResponse } from "@/types/records"
 export type { EventLogEntry, EventsListResponse } from "@/types/events"
 export type { ScriptVariableSummary } from "@/types/script-variables"
+export type { LabelerSummary } from "@/types/labelers"
+export type { RecordLabel } from "@/types/records"
 
 // The DPoP proof for admin API calls must target AIP's userinfo URL,
 // because the backend forwards the proof to AIP for token validation.
@@ -86,7 +89,9 @@ async function apiFetch<T = unknown>(
     throw new ApiError(res.status, text)
   }
   if (res.status === 204) return null as T
-  return res.json()
+  const text = await res.text()
+  if (!text) return null as T
+  return JSON.parse(text)
 }
 
 // Stats
@@ -319,6 +324,41 @@ export function deleteScriptVariable(
     getToken,
     { method: "DELETE" }
   )
+}
+
+// Labelers
+export function getLabelers(getToken: () => Promise<string | null>) {
+  return apiFetch<LabelerSummary[]>("/admin/labelers", getToken)
+}
+
+export function addLabeler(
+  getToken: () => Promise<string | null>,
+  body: { did: string }
+) {
+  return apiFetch("/admin/labelers", getToken, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateLabeler(
+  getToken: () => Promise<string | null>,
+  did: string,
+  body: { status: string }
+) {
+  return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, getToken, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteLabeler(
+  getToken: () => Promise<string | null>,
+  did: string
+) {
+  return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, getToken, {
+    method: "DELETE",
+  })
 }
 
 // Event Logs

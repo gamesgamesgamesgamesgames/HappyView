@@ -39,6 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LabelBadges } from "@/components/label-badges";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -263,6 +264,19 @@ export default function RecordsPage() {
         enableSorting: false,
         enableHiding: false,
         meta: { label: "Record Key" },
+      },
+      {
+        id: "labels",
+        accessorFn: (row) => row.labels,
+        header: "Labels",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <LabelBadges
+            labels={row.original.labels}
+            recordDid={row.original.did}
+          />
+        ),
+        meta: { label: "Labels" },
       },
     ];
 
