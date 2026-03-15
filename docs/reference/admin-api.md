@@ -587,6 +587,101 @@ curl -X DELETE http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-4466554
 
 **Response**: `204 No Content`
 
+## Labelers
+
+Manage external labeler subscriptions. See the [Labelers guide](../guides/labelers.md) for background.
+
+### Add a labeler
+
+```
+POST /admin/labelers
+```
+
+Requires `labelers:create` permission.
+
+```sh
+curl -X POST http://localhost:3000/admin/labelers \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "did": "did:plc:ar7c4by46qjdydhdevvrndac" }'
+```
+
+| Field | Type   | Required | Description            |
+| ----- | ------ | -------- | ---------------------- |
+| `did` | string | yes      | The labeler's AT Protocol DID |
+
+**Response**: `201 Created` (empty body)
+
+### List labelers
+
+```
+GET /admin/labelers
+```
+
+Requires `labelers:read` permission.
+
+```sh
+curl http://localhost:3000/admin/labelers -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+[
+  {
+    "did": "did:plc:ar7c4by46qjdydhdevvrndac",
+    "status": "active",
+    "cursor": 1234,
+    "created_at": "2026-03-15T00:00:00Z",
+    "updated_at": "2026-03-15T00:00:00Z"
+  }
+]
+```
+
+| Field        | Type         | Description                                      |
+| ------------ | ------------ | ------------------------------------------------ |
+| `did`        | string       | The labeler's DID                                |
+| `status`     | string       | `active` or `paused`                             |
+| `cursor`     | number\|null | Last processed event cursor (null if never synced) |
+| `created_at` | string       | ISO 8601 creation timestamp                      |
+| `updated_at` | string       | ISO 8601 last-updated timestamp                  |
+
+### Update a labeler
+
+```
+PATCH /admin/labelers/{did}
+```
+
+Requires `labelers:create` permission.
+
+```sh
+curl -X PATCH http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "paused" }'
+```
+
+| Field    | Type   | Required | Description                  |
+| -------- | ------ | -------- | ---------------------------- |
+| `status` | string | yes      | New status: `active` or `paused` |
+
+**Response**: `200 OK`
+
+### Delete a labeler
+
+```
+DELETE /admin/labelers/{did}
+```
+
+Requires `labelers:delete` permission. Removes the subscription and all labels emitted by this labeler.
+
+```sh
+curl -X DELETE http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
+  -H "$AUTH"
+```
+
+**Response**: `204 No Content`
+
 ## Permissions
 
 Each admin API endpoint requires a specific permission. See the [Permissions guide](../guides/permissions.md) for the full list of permissions and templates.
@@ -617,3 +712,7 @@ Each admin API endpoint requires a specific permission. See the [Permissions gui
 | `GET /admin/script-variables`        | `script-variables:read`      |
 | `POST /admin/script-variables`       | `script-variables:create`    |
 | `DELETE /admin/script-variables/{key}`| `script-variables:delete`   |
+| `POST /admin/labelers`               | `labelers:create`            |
+| `GET /admin/labelers`                | `labelers:read`              |
+| `PATCH /admin/labelers/{did}`        | `labelers:create`            |
+| `DELETE /admin/labelers/{did}`       | `labelers:delete`            |

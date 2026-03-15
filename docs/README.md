@@ -14,6 +14,7 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - 🪝 **Index Hooks**: Attach Lua scripts to record collections that fire on every create, update, or delete — sync to search engines, trigger webhooks, or build materialized views in real time
 - 🌐 **Network Lexicons**: Fetch lexicon schemas directly from the AT Protocol network via DNS authority resolution
 - ⚡ **Hot Reloading**: Upload or update lexicons at runtime, and new endpoints are available immediately with no restart
+- 🏷️ **Label Support**: Subscribe to external [labelers](guides/labelers.md) and surface content labels on records, with self-label detection and color-coded badges in the dashboard
 - 🛠️ **Admin Dashboard**: Manage lexicons, monitor record stats, and run backfill jobs through a built-in admin API
 
 ## Design Principles
@@ -32,4 +33,5 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - [Lexicons](guides/lexicons.md): Upload lexicon schemas and start indexing records
 - [Lua Scripting](guides/scripting.md): Write custom query and procedure logic
 - [Index Hooks](guides/index-hooks.md): React to record changes in real time
+- [Labelers](guides/labelers.md): Subscribe to external labelers and manage content labels
 - [Event Logs](guides/event-logs.md): Monitor system activity, debug script errors, and audit admin actions
