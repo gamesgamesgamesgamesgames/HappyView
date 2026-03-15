@@ -23,6 +23,148 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     })?;
 
     atproto_table.set("resolve_service_endpoint", resolve_fn)?;
+
+    // get_labels(uri) -> array of { src, uri, val, cts }
+    let state_clone = state.clone();
+    let get_labels_fn = lua.create_async_function(move |lua, uri: String| {
+        let state = state_clone.clone();
+        async move {
+            // Query external labels from the labels table.
+            let rows: Vec<(String, String, String, chrono::DateTime<chrono::Utc>)> =
+                sqlx::query_as(
+                    "SELECT src, uri, val, cts FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > NOW())",
+                )
+                .bind(&uri)
+                .fetch_all(&state.db)
+                .await
+                .map_err(|e| mlua::Error::runtime(format!("label query failed: {e}")))?;
+
+            let result = lua.create_table()?;
+            let mut idx = 1;
+
+            for (src, label_uri, val, cts) in &rows {
+                let label = lua.create_table()?;
+                label.set("src", src.as_str())?;
+                label.set("uri", label_uri.as_str())?;
+                label.set("val", val.as_str())?;
+                label.set("cts", cts.to_rfc3339())?;
+                result.set(idx, label)?;
+                idx += 1;
+            }
+
+            // Check for self-labels in the record itself.
+            let record: Option<(String, serde_json::Value)> = sqlx::query_as(
+                "SELECT did, record FROM records WHERE uri = $1",
+            )
+            .bind(&uri)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| mlua::Error::runtime(format!("record query failed: {e}")))?;
+
+            if let Some((did, record)) = record
+                && let Some(labels) = record.get("labels")
+                && let Some(values) = labels.get("values")
+                && let Some(arr) = values.as_array()
+            {
+                for item in arr {
+                    if let Some(val) = item.get("val").and_then(|v| v.as_str()) {
+                        let label = lua.create_table()?;
+                        label.set("src", did.as_str())?;
+                        label.set("uri", uri.as_str())?;
+                        label.set("val", val)?;
+                        label.set("cts", "")?;
+                        result.set(idx, label)?;
+                        idx += 1;
+                    }
+                }
+            }
+
+            Ok(mlua::Value::Table(result))
+        }
+    })?;
+    atproto_table.set("get_labels", get_labels_fn)?;
+
+    // get_labels_batch(uris) -> table keyed by URI
+    let state_clone = state.clone();
+    let get_labels_batch_fn = lua.create_async_function(move |lua, uris: mlua::Table| {
+        let state = state_clone.clone();
+        async move {
+            // Collect URIs from the Lua table.
+            let uri_list: Vec<String> = uris
+                .sequence_values::<String>()
+                .collect::<Result<Vec<_>, _>>()?;
+
+            // Query all labels for all URIs at once.
+            let rows: Vec<(String, String, String, chrono::DateTime<chrono::Utc>)> =
+                sqlx::query_as(
+                    "SELECT src, uri, val, cts FROM labels WHERE uri = ANY($1) AND (exp IS NULL OR exp > NOW())",
+                )
+                .bind(&uri_list)
+                .fetch_all(&state.db)
+                .await
+                .map_err(|e| mlua::Error::runtime(format!("label batch query failed: {e}")))?;
+
+            // Query records for self-labels.
+            let records: Vec<(String, String, serde_json::Value)> = sqlx::query_as(
+                "SELECT uri, did, record FROM records WHERE uri = ANY($1)",
+            )
+            .bind(&uri_list)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| mlua::Error::runtime(format!("record batch query failed: {e}")))?;
+
+            // Build result table keyed by URI.
+            let result = lua.create_table()?;
+
+            // Initialize empty arrays for each URI.
+            let mut counters: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+            for uri in &uri_list {
+                result.set(uri.as_str(), lua.create_table()?)?;
+                counters.insert(uri.clone(), 1);
+            }
+
+            // Add external labels.
+            for (src, uri, val, cts) in &rows {
+                let label = lua.create_table()?;
+                label.set("src", src.as_str())?;
+                label.set("uri", uri.as_str())?;
+                label.set("val", val.as_str())?;
+                label.set("cts", cts.to_rfc3339())?;
+
+                let uri_table: mlua::Table = result.get(uri.as_str())?;
+                let idx = counters.get(uri).copied().unwrap_or(1);
+                uri_table.set(idx, label)?;
+                counters.insert(uri.clone(), idx + 1);
+            }
+
+            // Add self-labels from records.
+            for (uri, did, record) in &records {
+                if let Some(labels) = record.get("labels")
+                    && let Some(values) = labels.get("values")
+                    && let Some(arr) = values.as_array()
+                {
+                    for item in arr {
+                        if let Some(val) = item.get("val").and_then(|v| v.as_str()) {
+                            let label = lua.create_table()?;
+                            label.set("src", did.as_str())?;
+                            label.set("uri", uri.as_str())?;
+                            label.set("val", val)?;
+                            label.set("cts", "")?;
+
+                            let uri_table: mlua::Table = result.get(uri.as_str())?;
+                            let idx = counters.get(uri).copied().unwrap_or(1);
+                            uri_table.set(idx, label)?;
+                            counters.insert(uri.clone(), idx + 1);
+                        }
+                    }
+                }
+            }
+
+            Ok(mlua::Value::Table(result))
+        }
+    })?;
+    atproto_table.set("get_labels_batch", get_labels_batch_fn)?;
+
     lua.globals().set("atproto", atproto_table)?;
     Ok(())
 }
@@ -49,12 +191,14 @@ mod tests {
             event_log_retention_days: 30,
         };
         let (tx, _) = watch::channel(vec![]);
+        let (labeler_tx, _) = watch::channel(());
         AppState {
             config,
             http: reqwest::Client::new(),
             db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
+            labeler_subscriptions_tx: labeler_tx,
         }
     }
 

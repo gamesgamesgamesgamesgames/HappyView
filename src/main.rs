@@ -1,7 +1,7 @@
 use happyview::config::Config;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
-use happyview::{AppState, server, tap};
+use happyview::{AppState, labeler, server, tap};
 use tokio::sync::watch;
 use tracing::{info, warn};
 
@@ -157,6 +157,7 @@ async fn main() {
     let initial_collections = lexicons.get_record_collections().await;
     let initial_collections_for_sync = initial_collections.clone();
     let (collections_tx, collections_rx) = watch::channel(initial_collections);
+    let (labeler_subscriptions_tx, labeler_subscriptions_rx) = watch::channel(());
 
     let state = AppState {
         config: config.clone(),
@@ -164,6 +165,7 @@ async fn main() {
         db,
         lexicons,
         collections_tx,
+        labeler_subscriptions_tx,
     };
 
     // Sync initial collections to Tap on startup.
@@ -185,6 +187,9 @@ async fn main() {
     }
 
     tap::spawn(state.clone(), collections_rx);
+
+    labeler::spawn(state.clone(), labeler_subscriptions_rx);
+    tokio::spawn(labeler::spawn_label_gc(state.db.clone()));
 
     tokio::spawn(happyview::event_log::spawn_retention_cleanup(
         state.db.clone(),

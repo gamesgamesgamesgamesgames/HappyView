@@ -4,6 +4,7 @@ pub mod auth;
 pub mod config;
 pub mod error;
 pub mod event_log;
+pub mod labeler;
 pub mod lexicon;
 pub mod lua;
 pub mod profile;
@@ -25,4 +26,5 @@ pub struct AppState {
     pub db: sqlx::PgPool,
     pub lexicons: LexiconRegistry,
     pub collections_tx: watch::Sender<Vec<String>>,
+    pub labeler_subscriptions_tx: watch::Sender<()>,
 }

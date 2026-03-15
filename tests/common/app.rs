@@ -59,6 +59,7 @@ impl TestApp {
 
         let initial_collections = lexicons.get_record_collections().await;
         let (collections_tx, _collections_rx) = watch::channel(initial_collections);
+        let (labeler_subscriptions_tx, _) = watch::channel(());
 
         let state = AppState {
             config,
@@ -66,6 +67,7 @@ impl TestApp {
             db: pool,
             lexicons,
             collections_tx,
+            labeler_subscriptions_tx,
         };
 
         let router = server::router(state.clone());

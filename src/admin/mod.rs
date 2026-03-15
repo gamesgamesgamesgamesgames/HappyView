@@ -2,6 +2,7 @@ mod api_keys;
 pub(crate) mod auth;
 mod backfill;
 mod events;
+mod labelers;
 mod lexicons;
 mod network_lexicons;
 pub(crate) mod permissions;
@@ -62,4 +63,9 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             post(script_variables::upsert).get(script_variables::list),
         )
         .route("/script-variables/{key}", delete(script_variables::delete))
+        .route("/labelers", post(labelers::add).get(labelers::list))
+        .route(
+            "/labelers/{did}",
+            patch(labelers::update).delete(labelers::delete),
+        )
 }

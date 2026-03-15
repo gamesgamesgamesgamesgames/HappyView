@@ -1,0 +1,387 @@
+mod common;
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
+use serial_test::serial;
+use tower::ServiceExt;
+
+use common::app::TestApp;
+use common::auth::admin_auth_header;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async fn json_body(resp: axum::response::Response) -> Value {
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&body).unwrap()
+}
+
+fn admin_get(uri: &str, token: &str) -> Request<Body> {
+    let (hname, hval) = admin_auth_header(token);
+    Request::builder()
+        .uri(uri)
+        .header(hname, hval)
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn admin_post(uri: &str, token: &str, body: &Value) -> Request<Body> {
+    let (hname, hval) = admin_auth_header(token);
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(hname, hval)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(body).unwrap()))
+        .unwrap()
+}
+
+fn admin_patch(uri: &str, token: &str, body: &Value) -> Request<Body> {
+    let (hname, hval) = admin_auth_header(token);
+    Request::builder()
+        .method("PATCH")
+        .uri(uri)
+        .header(hname, hval)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(body).unwrap()))
+        .unwrap()
+}
+
+fn admin_delete(uri: &str, token: &str) -> Request<Body> {
+    let (hname, hval) = admin_auth_header(token);
+    Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .header(hname, hval)
+        .body(Body::empty())
+        .unwrap()
+}
+
+// ---------------------------------------------------------------------------
+// POST /admin/labelers
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn labeler_add_returns_201() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    let body = json!({ "did": "did:plc:labeler1" });
+
+    let resp = app
+        .router
+        .oneshot(admin_post("/admin/labelers", &app.admin_token, &body))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+#[serial]
+async fn labeler_add_upsert_reactivates() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    let body = json!({ "did": "did:plc:labeler1" });
+
+    // First add
+    app.router
+        .clone()
+        .oneshot(admin_post("/admin/labelers", &app.admin_token, &body))
+        .await
+        .unwrap();
+
+    // Pause it
+    app.router
+        .clone()
+        .oneshot(admin_patch(
+            "/admin/labelers/did:plc:labeler1",
+            &app.admin_token,
+            &json!({ "status": "paused" }),
+        ))
+        .await
+        .unwrap();
+
+    // Re-add (upsert should reactivate)
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_post("/admin/labelers", &app.admin_token, &body))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // Verify it's active again
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .await
+        .unwrap();
+
+    let json = json_body(resp).await;
+    let labelers = json.as_array().unwrap();
+    assert_eq!(labelers.len(), 1);
+    assert_eq!(labelers[0]["status"], "active");
+}
+
+// ---------------------------------------------------------------------------
+// GET /admin/labelers
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn labeler_list_empty() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = json_body(resp).await;
+    assert!(json.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+#[serial]
+async fn labeler_list_returns_added() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    app.router
+        .clone()
+        .oneshot(admin_post(
+            "/admin/labelers",
+            &app.admin_token,
+            &json!({ "did": "did:plc:lab1" }),
+        ))
+        .await
+        .unwrap();
+
+    app.router
+        .clone()
+        .oneshot(admin_post(
+            "/admin/labelers",
+            &app.admin_token,
+            &json!({ "did": "did:plc:lab2" }),
+        ))
+        .await
+        .unwrap();
+
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = json_body(resp).await;
+    let labelers = json.as_array().unwrap();
+    assert_eq!(labelers.len(), 2);
+    assert_eq!(labelers[0]["did"], "did:plc:lab1");
+    assert_eq!(labelers[0]["status"], "active");
+    assert_eq!(labelers[1]["did"], "did:plc:lab2");
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /admin/labelers/{did}
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn labeler_update_status() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    app.router
+        .clone()
+        .oneshot(admin_post(
+            "/admin/labelers",
+            &app.admin_token,
+            &json!({ "did": "did:plc:lab1" }),
+        ))
+        .await
+        .unwrap();
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_patch(
+            "/admin/labelers/did:plc:lab1",
+            &app.admin_token,
+            &json!({ "status": "paused" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Verify status changed
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .await
+        .unwrap();
+
+    let json = json_body(resp).await;
+    let labelers = json.as_array().unwrap();
+    assert_eq!(labelers[0]["status"], "paused");
+}
+
+#[tokio::test]
+#[serial]
+async fn labeler_update_not_found() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    let resp = app
+        .router
+        .oneshot(admin_patch(
+            "/admin/labelers/did:plc:nonexistent",
+            &app.admin_token,
+            &json!({ "status": "paused" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/labelers/{did}
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn labeler_delete_returns_204() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    app.router
+        .clone()
+        .oneshot(admin_post(
+            "/admin/labelers",
+            &app.admin_token,
+            &json!({ "did": "did:plc:lab1" }),
+        ))
+        .await
+        .unwrap();
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_delete(
+            "/admin/labelers/did:plc:lab1",
+            &app.admin_token,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Verify it's gone
+    let resp = app
+        .router
+        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .await
+        .unwrap();
+
+    let json = json_body(resp).await;
+    assert!(json.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+#[serial]
+async fn labeler_delete_not_found() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    let resp = app
+        .router
+        .oneshot(admin_delete(
+            "/admin/labelers/did:plc:nonexistent",
+            &app.admin_token,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+#[serial]
+async fn labeler_delete_removes_labels() {
+    let app = TestApp::new().await;
+    app.mock_admin_userinfo().await;
+
+    // Add a labeler
+    app.router
+        .clone()
+        .oneshot(admin_post(
+            "/admin/labelers",
+            &app.admin_token,
+            &json!({ "did": "did:plc:lab1" }),
+        ))
+        .await
+        .unwrap();
+
+    // Seed some labels from that labeler
+    sqlx::query("INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, NOW())")
+        .bind("did:plc:lab1")
+        .bind("at://did:plc:user/test.collection/rkey1")
+        .bind("adult-content")
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+
+    // Delete the labeler
+    app.router
+        .clone()
+        .oneshot(admin_delete(
+            "/admin/labelers/did:plc:lab1",
+            &app.admin_token,
+        ))
+        .await
+        .unwrap();
+
+    // Verify labels were also removed
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM labels WHERE src = $1")
+        .bind("did:plc:lab1")
+        .fetch_one(&app.state.db)
+        .await
+        .unwrap();
+
+    assert_eq!(count.0, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn labeler_no_auth_returns_401() {
+    let app = TestApp::new().await;
+
+    let resp = app
+        .router
+        .oneshot(
+            Request::builder()
+                .uri("/admin/labelers")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}

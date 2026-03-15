@@ -559,6 +559,8 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                         },
                     )
                     .await;
+
+                    crate::labeler::backfill_labels_for_uri(Arc::new(state.clone()), uri.clone());
                 }
                 Err(e) => {
                     tracing::warn!(uri = %uri, "failed to upsert record: {e}");
