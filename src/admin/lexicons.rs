@@ -60,6 +60,7 @@ pub(super) async fn upload_lexicon(
         action.clone(),
         body.script.clone(),
         body.index_hook.clone(),
+        body.token_cost.map(|c| c as u32),
     )
     .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
 
@@ -79,8 +80,8 @@ pub(super) async fn upload_lexicon(
     // Upsert into database
     let row: (i32,) = sqlx::query_as(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, action, script, index_hook, source)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')
+        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, action, script, index_hook, token_cost, source)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual')
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             backfill = EXCLUDED.backfill,
@@ -88,6 +89,7 @@ pub(super) async fn upload_lexicon(
             action = EXCLUDED.action,
             script = EXCLUDED.script,
             index_hook = EXCLUDED.index_hook,
+            token_cost = EXCLUDED.token_cost,
             source = 'manual',
             revision = lexicons.revision + 1,
             updated_at = NOW()
@@ -101,6 +103,7 @@ pub(super) async fn upload_lexicon(
     .bind(action_str)
     .bind(&body.script)
     .bind(&body.index_hook)
+    .bind(body.token_cost)
     .fetch_one(&state.db)
     .await
     .map_err(|e| AppError::Internal(format!("failed to upsert lexicon: {e}")))?;
@@ -115,6 +118,7 @@ pub(super) async fn upload_lexicon(
         action,
         body.script,
         body.index_hook.clone(),
+        body.token_cost.map(|c| c as u32),
     )
     .map_err(|e| AppError::Internal(format!("failed to re-parse lexicon: {e}")))?;
     let is_record = parsed.lexicon_type == LexiconType::Record;
@@ -168,9 +172,9 @@ pub(super) async fn list_lexicons(
 ) -> Result<Json<Vec<LexiconSummary>>, AppError> {
     auth.require(Permission::LexiconsRead).await?;
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
+    let rows: Vec<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<i32>)> =
         sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at FROM lexicons ORDER BY id",
+            "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons ORDER BY id",
         )
         .fetch_all(&state.db)
         .await
@@ -193,9 +197,17 @@ pub(super) async fn list_lexicons(
                 last_fetched_at,
                 created_at,
                 updated_at,
+                token_cost,
             )| {
-                let parsed =
-                    ParsedLexicon::parse(json, revision, None, ProcedureAction::Upsert, None, None);
+                let parsed = ParsedLexicon::parse(
+                    json,
+                    revision,
+                    None,
+                    ProcedureAction::Upsert,
+                    None,
+                    None,
+                    None,
+                );
                 let lexicon_type = parsed
                     .as_ref()
                     .map(|p| format!("{:?}", p.lexicon_type).to_lowercase())
@@ -220,6 +232,7 @@ pub(super) async fn list_lexicons(
                     created_at,
                     updated_at,
                     record_schema,
+                    token_cost,
                 }
             },
         )
@@ -236,9 +249,9 @@ pub(super) async fn get_lexicon(
 ) -> Result<Json<Value>, AppError> {
     auth.require(Permission::LexiconsRead).await?;
     #[allow(clippy::type_complexity)]
-    let row: Option<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> =
+    let row: Option<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<i32>)> =
         sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at FROM lexicons WHERE id = $1",
+            "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons WHERE id = $1",
         )
         .bind(&id)
         .fetch_optional(&state.db)
@@ -259,6 +272,7 @@ pub(super) async fn get_lexicon(
         last_fetched_at,
         created_at,
         updated_at,
+        token_cost,
     ) = row.ok_or_else(|| AppError::NotFound(format!("lexicon '{id}' not found")))?;
 
     let lexicon_type = ParsedLexicon::parse(
@@ -266,6 +280,7 @@ pub(super) async fn get_lexicon(
         revision,
         None,
         ProcedureAction::Upsert,
+        None,
         None,
         None,
     )
@@ -291,6 +306,7 @@ pub(super) async fn get_lexicon(
         "last_fetched_at": last_fetched_at,
         "created_at": created_at,
         "updated_at": updated_at,
+        "token_cost": token_cost,
     })))
 }
 

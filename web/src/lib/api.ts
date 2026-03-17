@@ -25,7 +25,7 @@ export type { EventLogEntry, EventsListResponse } from "@/types/events"
 export type { ScriptVariableSummary } from "@/types/script-variables"
 export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
-export type { RateLimitSummary, AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
+export type { AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
 
 // The DPoP proof for admin API calls must target AIP's userinfo URL,
 // because the backend forwards the proof to AIP for token validation.
@@ -122,6 +122,7 @@ export function uploadLexicon(
     action?: string
     script?: string
     index_hook?: string
+    token_cost?: number | null
   }
 ) {
   return apiFetch<{ id: string; revision: number }>("/admin/lexicons", getToken, {
@@ -370,20 +371,17 @@ export function getRateLimits(getToken: () => Promise<string | null>) {
 
 export function upsertRateLimit(
   getToken: () => Promise<string | null>,
-  body: { method?: string; capacity: number; refill_rate: number }
+  body: {
+    capacity: number
+    refill_rate: number
+    default_query_cost: number
+    default_procedure_cost: number
+    default_proxy_cost: number
+  }
 ) {
   return apiFetch("/admin/rate-limits", getToken, {
     method: "POST",
     body: JSON.stringify(body),
-  })
-}
-
-export function deleteRateLimit(
-  getToken: () => Promise<string | null>,
-  id: number
-) {
-  return apiFetch(`/admin/rate-limits/${encodeURIComponent(id)}`, getToken, {
-    method: "DELETE",
   })
 }
 

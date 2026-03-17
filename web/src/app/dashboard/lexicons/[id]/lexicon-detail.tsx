@@ -22,6 +22,7 @@ import { useLuaCompletions } from "@/hooks/use-lua-completions";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Tooltip,
@@ -51,6 +52,8 @@ export default function LexiconDetailPage() {
   const [hookText, setHookText] = useState("");
   const [originalHook, setOriginalHook] = useState("");
   const [showHookEditor, setShowHookEditor] = useState(false);
+  const [tokenCost, setTokenCost] = useState("");
+  const [originalTokenCost, setOriginalTokenCost] = useState("");
   const { luaCompletions, collections } = useLuaCompletions(jsonText);
 
   const load = useCallback(() => {
@@ -80,6 +83,8 @@ export default function LexiconDetailPage() {
         setHookText(lex.index_hook ?? "");
         setOriginalHook(lex.index_hook ?? "");
         setShowHookEditor(!!lex.index_hook);
+        setTokenCost(lex.token_cost != null ? String(lex.token_cost) : "");
+        setOriginalTokenCost(lex.token_cost != null ? String(lex.token_cost) : "");
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [getToken, id]);
@@ -91,7 +96,8 @@ export default function LexiconDetailPage() {
   const isDirty =
     jsonText !== originalJson ||
     luaText !== originalLua ||
-    hookText !== originalHook;
+    hookText !== originalHook ||
+    tokenCost !== originalTokenCost;
 
   async function handleSave() {
     if (!lexicon) return;
@@ -104,6 +110,7 @@ export default function LexiconDetailPage() {
         backfill: lexicon.backfill,
         script: luaText || undefined,
         index_hook: hookText || undefined,
+        token_cost: tokenCost ? Number(tokenCost) : null,
       });
       load();
     } catch (e: unknown) {
@@ -218,6 +225,24 @@ export default function LexiconDetailPage() {
                 <p className="mt-1 text-sm">
                   {new Date(lexicon.last_fetched_at).toLocaleString()}
                 </p>
+              </div>
+            )}
+            {(lexicon.lexicon_type === "query" ||
+              lexicon.lexicon_type === "procedure") && (
+              <div>
+                <Label htmlFor="token-cost" className="text-muted-foreground">
+                  Token Cost
+                </Label>
+                <Input
+                  id="token-cost"
+                  type="number"
+                  min={0}
+                  className="mt-1 w-24"
+                  placeholder="default"
+                  value={tokenCost}
+                  onChange={(e) => setTokenCost(e.target.value)}
+                  disabled={!hasPermission("lexicons:create")}
+                />
               </div>
             )}
           </div>

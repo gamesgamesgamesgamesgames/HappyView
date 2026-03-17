@@ -23,6 +23,7 @@ pub(super) struct LexiconSummary {
     /// For record-type lexicons: the `properties` object from `defs.main.record`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) record_schema: Option<Value>,
+    pub(super) token_cost: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -34,6 +35,7 @@ pub(super) struct UploadLexiconBody {
     pub(super) action: Option<String>,
     pub(super) script: Option<String>,
     pub(super) index_hook: Option<String>,
+    pub(super) token_cost: Option<i32>,
 }
 
 fn default_backfill() -> bool {
@@ -211,9 +213,11 @@ pub(super) struct UpdateLabelerBody {
 
 #[derive(Deserialize)]
 pub(super) struct UpsertRateLimitBody {
-    pub(super) method: Option<String>,
     pub(super) capacity: u32,
     pub(super) refill_rate: f64,
+    pub(super) default_query_cost: u32,
+    pub(super) default_procedure_cost: u32,
+    pub(super) default_proxy_cost: u32,
 }
 
 #[derive(Deserialize)]
@@ -230,18 +234,12 @@ pub(super) struct AddAllowlistBody {
 #[derive(Serialize)]
 pub(super) struct RateLimitsResponse {
     pub(super) enabled: bool,
-    pub(super) limits: Vec<RateLimitSummary>,
-    pub(super) allowlist: Vec<AllowlistEntry>,
-}
-
-#[derive(Serialize, sqlx::FromRow)]
-pub(super) struct RateLimitSummary {
-    pub(super) id: i32,
-    pub(super) method: Option<String>,
     pub(super) capacity: i32,
     pub(super) refill_rate: f32,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
-    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+    pub(super) default_query_cost: i32,
+    pub(super) default_procedure_cost: i32,
+    pub(super) default_proxy_cost: i32,
+    pub(super) allowlist: Vec<AllowlistEntry>,
 }
 
 #[derive(Serialize, sqlx::FromRow)]

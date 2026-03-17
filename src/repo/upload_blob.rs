@@ -25,9 +25,11 @@ pub async fn upload_blob(
         .and_then(|s| s.trim().parse().ok());
 
     let rate_key = claims.did().to_string();
-    let check = state
-        .rate_limiter
-        .check(&rate_key, Some("com.atproto.repo.uploadBlob"), client_ip);
+    let check = state.rate_limiter.check(
+        &rate_key,
+        state.rate_limiter.default_cost_for_type("procedure"),
+        client_ip,
+    );
 
     if let CheckResult::Limited {
         retry_after,

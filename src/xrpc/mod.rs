@@ -154,9 +154,19 @@ pub async fn xrpc_get(
                 .unwrap_or_else(|| "unknown".to_string())
         });
 
-    let check = state
-        .rate_limiter
-        .check(&rate_key, Some(&method), client_ip);
+    let lexicon = state.lexicons.get(&method).await;
+
+    // Determine token cost: per-NSID override → type default → 1
+    let cost = if let Some(ref lex) = lexicon {
+        lex.token_cost.unwrap_or_else(|| {
+            let type_str = format!("{:?}", lex.lexicon_type).to_lowercase();
+            state.rate_limiter.default_cost_for_type(&type_str)
+        })
+    } else {
+        state.rate_limiter.default_cost_for_type("proxy")
+    };
+
+    let check = state.rate_limiter.check(&rate_key, cost, client_ip);
 
     match check {
         CheckResult::Limited {
@@ -173,7 +183,7 @@ pub async fn xrpc_get(
         CheckResult::Allowed { .. } | CheckResult::Disabled => {}
     }
 
-    let lexicon = match state.lexicons.get(&method).await {
+    let lexicon = match lexicon {
         Some(l) => l,
         None => {
             let mut response = proxy_to_authority(&state, &method, &raw_query, None).await?;
@@ -227,9 +237,19 @@ pub async fn xrpc_post(
         ip_from_forwarded_for(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
     let rate_key = claims.did().to_string();
 
-    let check = state
-        .rate_limiter
-        .check(&rate_key, Some(&method), client_ip);
+    let lexicon = state.lexicons.get(&method).await;
+
+    // Determine token cost: per-NSID override → type default → 1
+    let cost = if let Some(ref lex) = lexicon {
+        lex.token_cost.unwrap_or_else(|| {
+            let type_str = format!("{:?}", lex.lexicon_type).to_lowercase();
+            state.rate_limiter.default_cost_for_type(&type_str)
+        })
+    } else {
+        state.rate_limiter.default_cost_for_type("proxy")
+    };
+
+    let check = state.rate_limiter.check(&rate_key, cost, client_ip);
 
     match check {
         CheckResult::Limited {
@@ -246,7 +266,7 @@ pub async fn xrpc_post(
         CheckResult::Allowed { .. } | CheckResult::Disabled => {}
     }
 
-    let lexicon = match state.lexicons.get(&method).await {
+    let lexicon = match lexicon {
         Some(l) => l,
         None => {
             let mut response = proxy_to_authority(&state, &method, "", Some(&body)).await?;

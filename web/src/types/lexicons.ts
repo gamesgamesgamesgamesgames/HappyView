@@ -12,6 +12,7 @@ export interface LexiconSummary {
   last_fetched_at: string | null
   created_at: string
   updated_at: string
+  token_cost: number | null
 }
 
 export interface LexiconDetail extends LexiconSummary {

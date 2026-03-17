@@ -1,12 +1,3 @@
-export interface RateLimitSummary {
-  id: number
-  method: string | null
-  capacity: number
-  refill_rate: number
-  created_at: string
-  updated_at: string
-}
-
 export interface AllowlistEntry {
   id: number
   cidr: string
@@ -16,6 +7,10 @@ export interface AllowlistEntry {
 
 export interface RateLimitsResponse {
   enabled: boolean
-  limits: RateLimitSummary[]
+  capacity: number
+  refill_rate: number
+  default_query_cost: number
+  default_procedure_cost: number
+  default_proxy_cost: number
   allowlist: AllowlistEntry[]
 }

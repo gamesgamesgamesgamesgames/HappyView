@@ -114,6 +114,7 @@ async fn main() {
                             ProcedureAction::Upsert,
                             None,
                             None,
+                            None,
                         ) {
                             Ok(parsed) => {
                                 if let Err(e) = sqlx::query(
@@ -157,12 +158,7 @@ async fn main() {
 
     // Initialize rate limiter from DB.
     let rl_state = RateLimiter::load_from_db(&db).await;
-    let rate_limiter = RateLimiter::new(
-        rl_state.enabled,
-        rl_state.global,
-        rl_state.overrides,
-        rl_state.allowlist,
-    );
+    let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global, rl_state.allowlist);
     tokio::spawn(rate_limiter.clone().spawn_cleanup());
 
     let initial_collections = lexicons.get_record_collections().await;

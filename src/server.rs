@@ -102,9 +102,11 @@ async fn get_profile(
     let client_ip =
         ip_from_forwarded_for(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
     let rate_key = claims.did().to_string();
-    let check = state
-        .rate_limiter
-        .check(&rate_key, Some("app.bsky.actor.getProfile"), client_ip);
+    let check = state.rate_limiter.check(
+        &rate_key,
+        state.rate_limiter.default_cost_for_type("query"),
+        client_ip,
+    );
 
     if let CheckResult::Limited {
         retry_after,
