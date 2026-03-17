@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use serde::Deserialize;
+use tokio::net::TcpStream;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tokio_tungstenite::Connector;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
@@ -16,6 +16,14 @@ use crate::profile;
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/// AT Protocol event stream frame header (DAG-CBOR).
+#[derive(Deserialize)]
+struct FrameHeader {
+    op: i64,
+    #[serde(default)]
+    t: Option<String>,
+}
 
 #[derive(Deserialize)]
 struct SubscribeLabelsMessage {
@@ -129,10 +137,11 @@ async fn run_subscription_once(
     state: &AppState,
     did: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Resolve the labeler's PDS endpoint from its DID.
-    let pds_endpoint = profile::resolve_pds_endpoint(&state.http, &state.config.plc_url, did)
+    // Resolve the labeler's service endpoint from its DID document.
+    // Prefers #atproto_labeler, falls back to #atproto_pds.
+    let pds_endpoint = profile::resolve_labeler_endpoint(&state.http, &state.config.plc_url, did)
         .await
-        .map_err(|e| format!("failed to resolve PDS for {did}: {e:?}"))?;
+        .map_err(|e| format!("failed to resolve labeler endpoint for {did}: {e:?}"))?;
 
     // Convert HTTP URL to WebSocket URL.
     let ws_url = http_to_ws(&pds_endpoint);
@@ -156,9 +165,19 @@ async fn run_subscription_once(
 
     let request = url.into_client_request()?;
 
-    // Build a rustls config that only advertises HTTP/1.1 in ALPN.
-    // Without this, rustls negotiates h2 and the WebSocket upgrade fails
-    // ("HTTP version must be 1.1 or higher").
+    // Manually establish TCP + TLS with HTTP/1.1 ALPN, then do the
+    // WebSocket handshake over the established stream. This avoids
+    // tokio-tungstenite's default TLS which may negotiate h2 via ALPN.
+    let host = request
+        .uri()
+        .host()
+        .ok_or("missing host in WebSocket URL")?
+        .to_string();
+    let port = request.uri().port_u16().unwrap_or(443);
+
+    let tcp = TcpStream::connect((&*host, port)).await?;
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let mut tls_config = rustls::ClientConfig::builder()
@@ -166,11 +185,11 @@ async fn run_subscription_once(
         .with_no_client_auth();
     tls_config.alpn_protocols = vec![b"http/1.1".to_vec()];
 
-    let connector = Connector::Rustls(Arc::new(tls_config));
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
+    let domain = rustls::pki_types::ServerName::try_from(host)?;
+    let tls_stream = connector.connect(domain, tcp).await?;
 
-    let (ws, _) =
-        tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector))
-            .await?;
+    let (ws, _) = tokio_tungstenite::client_async(request, tls_stream).await?;
 
     tracing::info!(did = %did, "connected to labeler");
 
@@ -206,7 +225,6 @@ async fn run_subscription_once(
         };
 
         let bytes = match msg {
-            Message::Text(t) => t.as_bytes().to_vec(),
             Message::Binary(b) => b.to_vec(),
             Message::Close(_) => {
                 tracing::info!(did = %did, "labeler websocket received close frame");
@@ -215,8 +233,12 @@ async fn run_subscription_once(
             _ => continue,
         };
 
-        let message: SubscribeLabelsMessage = match serde_json::from_slice(&bytes) {
-            Ok(m) => m,
+        // AT Protocol event streams use two concatenated DAG-CBOR objects:
+        // 1. Frame header: { op: int, t: string? }
+        // 2. Frame body: the actual message payload
+        let message: SubscribeLabelsMessage = match parse_event_frame(&bytes) {
+            Ok(Some(m)) => m,
+            Ok(None) => continue, // non-message frame (error, info, etc.)
             Err(e) => {
                 tracing::warn!(did = %did, "skipping unparseable labeler message: {e}");
                 continue;
@@ -257,6 +279,32 @@ async fn run_subscription_once(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Parse an AT Protocol event stream frame (two concatenated DAG-CBOR objects).
+/// Returns `Ok(Some(msg))` for label messages, `Ok(None)` for other frame types.
+fn parse_event_frame(
+    bytes: &[u8],
+) -> Result<Option<SubscribeLabelsMessage>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut cursor = std::io::Cursor::new(bytes);
+
+    // Decode frame header.
+    let header: FrameHeader = ciborium::from_reader(&mut cursor)?;
+
+    // op=1 is a regular message, op=-1 is an error frame.
+    if header.op != 1 {
+        return Ok(None);
+    }
+
+    // Only process #labels messages.
+    match header.t.as_deref() {
+        Some("#labels") => {}
+        _ => return Ok(None),
+    }
+
+    // Decode the body (remaining bytes after header).
+    let message: SubscribeLabelsMessage = ciborium::from_reader(&mut cursor)?;
+    Ok(Some(message))
+}
 
 fn http_to_ws(url: &str) -> String {
     let base = url.trim_end_matches('/');

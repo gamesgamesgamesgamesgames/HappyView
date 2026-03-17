@@ -98,6 +98,24 @@ pub async fn resolve_pds_endpoint(
         .ok_or_else(|| AppError::NotFound("no PDS endpoint in DID document".into()))
 }
 
+/// Resolve the labeler service endpoint for a DID.
+/// Tries `#atproto_labeler` first, falls back to `#atproto_pds`.
+pub async fn resolve_labeler_endpoint(
+    http: &reqwest::Client,
+    plc_url: &str,
+    did: &str,
+) -> Result<String, AppError> {
+    let did_doc = resolve_did_document(http, plc_url, did).await?;
+
+    did_doc
+        .service
+        .iter()
+        .find(|s| s.id == "#atproto_labeler")
+        .or_else(|| did_doc.service.iter().find(|s| s.id == "#atproto_pds"))
+        .map(|s| s.service_endpoint.clone())
+        .ok_or_else(|| AppError::NotFound("no labeler or PDS endpoint in DID document".into()))
+}
+
 /// Fetch a DID document from the PLC directory or via `did:web` resolution.
 async fn resolve_did_document(
     http: &reqwest::Client,
