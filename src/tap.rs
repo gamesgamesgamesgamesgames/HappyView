@@ -708,6 +708,7 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
                 ProcedureAction::Upsert,
                 None,
                 None,
+                None,
             ) {
                 Ok(p) => p,
                 Err(e) => {

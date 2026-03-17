@@ -2,7 +2,6 @@ use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use ipnet::IpNet;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,6 +10,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 pub struct RateLimitConfig {
     pub capacity: u32,
     pub refill_rate: f64,
+    pub default_query_cost: u32,
+    pub default_procedure_cost: u32,
+    pub default_proxy_cost: u32,
 }
 
 pub enum CheckResult {
@@ -39,14 +41,12 @@ pub struct RateLimiter {
     enabled: AtomicBool,
     buckets: DashMap<String, TokenBucket>,
     global_config: ArcSwap<RateLimitConfig>,
-    overrides: ArcSwap<HashMap<String, RateLimitConfig>>,
     allowlist: ArcSwap<Vec<IpNet>>,
 }
 
 pub struct RateLimiterState {
     pub enabled: bool,
     pub global: RateLimitConfig,
-    pub overrides: HashMap<String, RateLimitConfig>,
     pub allowlist: Vec<IpNet>,
 }
 
@@ -58,22 +58,16 @@ fn now_unix() -> u64 {
 }
 
 impl RateLimiter {
-    pub fn new(
-        enabled: bool,
-        global: RateLimitConfig,
-        overrides: HashMap<String, RateLimitConfig>,
-        allowlist: Vec<IpNet>,
-    ) -> Arc<Self> {
+    pub fn new(enabled: bool, global: RateLimitConfig, allowlist: Vec<IpNet>) -> Arc<Self> {
         Arc::new(Self {
             enabled: AtomicBool::new(enabled),
             buckets: DashMap::new(),
             global_config: ArcSwap::new(Arc::new(global)),
-            overrides: ArcSwap::new(Arc::new(overrides)),
             allowlist: ArcSwap::new(Arc::new(allowlist)),
         })
     }
 
-    pub fn check(&self, key: &str, method: Option<&str>, client_ip: Option<IpAddr>) -> CheckResult {
+    pub fn check(&self, key: &str, cost: u32, client_ip: Option<IpAddr>) -> CheckResult {
         if !self.enabled.load(Ordering::Relaxed) {
             return CheckResult::Disabled;
         }
@@ -87,18 +81,10 @@ impl RateLimiter {
             }
         }
 
-        let overrides = self.overrides.load();
         let global = self.global_config.load();
-
-        let (capacity, refill_rate) = if let Some(method) = method {
-            if let Some(cfg) = overrides.get(method) {
-                (cfg.capacity, cfg.refill_rate)
-            } else {
-                (global.capacity, global.refill_rate)
-            }
-        } else {
-            (global.capacity, global.refill_rate)
-        };
+        let capacity = global.capacity;
+        let refill_rate = global.refill_rate;
+        let cost_f64 = cost as f64;
 
         let now = Instant::now();
 
@@ -130,20 +116,31 @@ impl RateLimiter {
         };
         let reset = now_unix() + reset_secs;
 
-        if bucket.tokens >= 1.0 {
-            bucket.tokens -= 1.0;
+        if bucket.tokens >= cost_f64 {
+            bucket.tokens -= cost_f64;
             CheckResult::Allowed {
                 remaining: bucket.tokens.floor() as u32,
                 limit: capacity,
                 reset,
             }
         } else {
-            let retry_after = ((1.0 - bucket.tokens) / refill_rate).ceil() as u64;
+            let retry_after = ((cost_f64 - bucket.tokens) / refill_rate).ceil() as u64;
             CheckResult::Limited {
                 retry_after,
                 limit: capacity,
                 reset: now_unix() + ((capacity as f64) / refill_rate).ceil() as u64,
             }
+        }
+    }
+
+    /// Get the default cost for a given request type.
+    pub fn default_cost_for_type(&self, request_type: &str) -> u32 {
+        let config = self.global_config.load();
+        match request_type {
+            "query" => config.default_query_cost,
+            "procedure" => config.default_procedure_cost,
+            "proxy" => config.default_proxy_cost,
+            _ => 1,
         }
     }
 
@@ -155,13 +152,8 @@ impl RateLimiter {
         self.enabled.load(Ordering::Relaxed)
     }
 
-    pub fn update_config(
-        &self,
-        global: RateLimitConfig,
-        overrides: HashMap<String, RateLimitConfig>,
-    ) {
+    pub fn update_config(&self, global: RateLimitConfig) {
         self.global_config.store(Arc::new(global));
-        self.overrides.store(Arc::new(overrides));
     }
 
     pub fn update_allowlist(&self, entries: Vec<IpNet>) {
@@ -191,31 +183,32 @@ impl RateLimiter {
         .map(|v| v == "true")
         .unwrap_or(true);
 
-        // Load rate limit configs
-        let rows: Vec<(Option<String>, i32, f32)> =
-            sqlx::query_as("SELECT method, capacity, refill_rate FROM rate_limits")
-                .fetch_all(db)
-                .await
-                .unwrap_or_default();
+        // Load global rate limit config (method IS NULL row)
+        let row: Option<(i32, f32, i32, i32, i32)> = sqlx::query_as(
+            "SELECT capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost FROM rate_limits WHERE method IS NULL",
+        )
+        .fetch_optional(db)
+        .await
+        .unwrap_or(None);
 
-        let mut global = RateLimitConfig {
-            capacity: 100,
-            refill_rate: 2.0,
-        };
-        let mut overrides = HashMap::new();
-
-        for (method, capacity, refill_rate) in rows {
-            let config = RateLimitConfig {
-                capacity: capacity as u32,
-                refill_rate: refill_rate as f64,
-            };
-            match method {
-                None => global = config,
-                Some(m) => {
-                    overrides.insert(m, config);
+        let global = match row {
+            Some((capacity, refill_rate, query_cost, procedure_cost, proxy_cost)) => {
+                RateLimitConfig {
+                    capacity: capacity as u32,
+                    refill_rate: refill_rate as f64,
+                    default_query_cost: query_cost as u32,
+                    default_procedure_cost: procedure_cost as u32,
+                    default_proxy_cost: proxy_cost as u32,
                 }
             }
-        }
+            None => RateLimitConfig {
+                capacity: 100,
+                refill_rate: 2.0,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
+            },
+        };
 
         // Load allowlist
         let cidr_rows: Vec<(String,)> = sqlx::query_as("SELECT cidr FROM rate_limit_allowlist")
@@ -231,7 +224,6 @@ impl RateLimiter {
         RateLimiterState {
             enabled,
             global,
-            overrides,
             allowlist,
         }
     }
@@ -240,7 +232,7 @@ impl RateLimiter {
     pub async fn reload_from_db(&self, db: &PgPool) {
         let state = Self::load_from_db(db).await;
         self.set_enabled(state.enabled);
-        self.update_config(state.global, state.overrides);
+        self.update_config(state.global);
         self.update_allowlist(state.allowlist);
     }
 }
@@ -256,21 +248,53 @@ mod tests {
             RateLimitConfig {
                 capacity: 3,
                 refill_rate: 1.0,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
             },
-            HashMap::new(),
             vec![],
         );
 
-        // Should allow 3 requests (bucket starts full)
+        // Should allow 3 requests (bucket starts full, cost=1 each)
         for _ in 0..3 {
             assert!(matches!(
-                rl.check("k", None, None),
+                rl.check("k", 1, None),
                 CheckResult::Allowed { .. }
             ));
         }
         // 4th should be limited
         assert!(matches!(
-            rl.check("k", None, None),
+            rl.check("k", 1, None),
+            CheckResult::Limited { .. }
+        ));
+    }
+
+    #[test]
+    fn cost_deducts_multiple_tokens() {
+        let rl = RateLimiter::new(
+            true,
+            RateLimitConfig {
+                capacity: 10,
+                refill_rate: 1.0,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
+            },
+            vec![],
+        );
+
+        // Cost of 5 should allow 2 requests (10 tokens total)
+        assert!(matches!(
+            rl.check("k", 5, None),
+            CheckResult::Allowed { remaining: 5, .. }
+        ));
+        assert!(matches!(
+            rl.check("k", 5, None),
+            CheckResult::Allowed { remaining: 0, .. }
+        ));
+        // 3rd should be limited
+        assert!(matches!(
+            rl.check("k", 5, None),
             CheckResult::Limited { .. }
         ));
     }
@@ -282,11 +306,13 @@ mod tests {
             RateLimitConfig {
                 capacity: 1,
                 refill_rate: 1.0,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
             },
-            HashMap::new(),
             vec![],
         );
-        assert!(matches!(rl.check("k", None, None), CheckResult::Disabled));
+        assert!(matches!(rl.check("k", 1, None), CheckResult::Disabled));
     }
 
     #[test]
@@ -296,53 +322,36 @@ mod tests {
             RateLimitConfig {
                 capacity: 1,
                 refill_rate: 0.001,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
             },
-            HashMap::new(),
             vec!["10.0.0.0/8".parse().unwrap()],
         );
 
         let ip: IpAddr = "10.0.0.5".parse().unwrap();
         // Even after exhausting, allowlisted IP gets Disabled
-        assert!(matches!(
-            rl.check("k", None, Some(ip)),
-            CheckResult::Disabled
-        ));
+        assert!(matches!(rl.check("k", 1, Some(ip)), CheckResult::Disabled));
     }
 
     #[test]
-    fn method_override_applies() {
-        let mut overrides = HashMap::new();
-        overrides.insert(
-            "com.atproto.repo.uploadBlob".to_string(),
-            RateLimitConfig {
-                capacity: 2,
-                refill_rate: 0.001,
-            },
-        );
-
+    fn default_cost_for_type() {
         let rl = RateLimiter::new(
             true,
             RateLimitConfig {
                 capacity: 100,
-                refill_rate: 100.0,
+                refill_rate: 10.0,
+                default_query_cost: 2,
+                default_procedure_cost: 5,
+                default_proxy_cost: 3,
             },
-            overrides,
             vec![],
         );
 
-        // Override has capacity 2
-        assert!(matches!(
-            rl.check("k", Some("com.atproto.repo.uploadBlob"), None),
-            CheckResult::Allowed { limit: 2, .. }
-        ));
-        assert!(matches!(
-            rl.check("k", Some("com.atproto.repo.uploadBlob"), None),
-            CheckResult::Allowed { limit: 2, .. }
-        ));
-        assert!(matches!(
-            rl.check("k", Some("com.atproto.repo.uploadBlob"), None),
-            CheckResult::Limited { limit: 2, .. }
-        ));
+        assert_eq!(rl.default_cost_for_type("query"), 2);
+        assert_eq!(rl.default_cost_for_type("procedure"), 5);
+        assert_eq!(rl.default_cost_for_type("proxy"), 3);
+        assert_eq!(rl.default_cost_for_type("unknown"), 1);
     }
 
     #[test]
@@ -352,13 +361,15 @@ mod tests {
             RateLimitConfig {
                 capacity: 1,
                 refill_rate: 1.0,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
             },
-            HashMap::new(),
             vec![],
         );
         assert!(rl.is_enabled());
         rl.set_enabled(false);
         assert!(!rl.is_enabled());
-        assert!(matches!(rl.check("k", None, None), CheckResult::Disabled));
+        assert!(matches!(rl.check("k", 1, None), CheckResult::Disabled));
     }
 }

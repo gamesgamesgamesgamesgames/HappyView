@@ -37,8 +37,10 @@ async fn test_state_with_pool(pool: sqlx::PgPool) -> AppState {
             happyview::rate_limit::RateLimitConfig {
                 capacity: 100,
                 refill_rate: 2.0,
+                default_query_cost: 1,
+                default_procedure_cost: 1,
+                default_proxy_cost: 1,
             },
-            std::collections::HashMap::new(),
             vec![],
         ),
     }

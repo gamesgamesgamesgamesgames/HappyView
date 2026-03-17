@@ -83,6 +83,8 @@ pub struct ParsedLexicon {
     pub script: Option<String>,
     /// Optional Lua script that runs when a record in this collection is indexed.
     pub index_hook: Option<String>,
+    /// Optional per-NSID token cost for rate limiting.
+    pub token_cost: Option<u32>,
 }
 
 impl ParsedLexicon {
@@ -94,6 +96,7 @@ impl ParsedLexicon {
         action: ProcedureAction,
         script: Option<String>,
         index_hook: Option<String>,
+        token_cost: Option<u32>,
     ) -> Result<Self, String> {
         let id = raw
             .get("id")
@@ -138,6 +141,7 @@ impl ParsedLexicon {
             action,
             script,
             index_hook,
+            token_cost,
         })
     }
 }
@@ -172,8 +176,9 @@ impl LexiconRegistry {
             Option<String>,
             Option<String>,
             Option<String>,
+            Option<i32>,
         )> = sqlx::query_as(
-            "SELECT id, lexicon_json, revision, target_collection, action, script, index_hook FROM lexicons",
+            "SELECT id, lexicon_json, revision, target_collection, action, script, index_hook, token_cost FROM lexicons",
         )
         .fetch_all(db)
         .await
@@ -183,7 +188,9 @@ impl LexiconRegistry {
         inner.clear();
 
         let mut loaded = 0u32;
-        for (id, json, revision, target_collection, action_str, script, index_hook) in rows {
+        for (id, json, revision, target_collection, action_str, script, index_hook, token_cost) in
+            rows
+        {
             let action = match ProcedureAction::from_optional_str(action_str.as_deref()) {
                 Ok(a) => a,
                 Err(e) => {
@@ -198,6 +205,7 @@ impl LexiconRegistry {
                 action,
                 script,
                 index_hook,
+                token_cost.map(|c| c as u32),
             ) {
                 Ok(parsed) => {
                     inner.insert(id, parsed);
@@ -363,6 +371,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(parsed.id, "games.gamesgamesgamesgames.game");
@@ -380,6 +389,7 @@ mod tests {
             2,
             Some("games.gamesgamesgamesgames.game".into()),
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -403,6 +413,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(parsed.lexicon_type, LexiconType::Procedure);
@@ -419,6 +430,7 @@ mod tests {
             ProcedureAction::Delete,
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(parsed.action, ProcedureAction::Delete);
@@ -433,6 +445,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(parsed.lexicon_type, LexiconType::Definitions);
@@ -441,7 +454,7 @@ mod tests {
     #[test]
     fn parse_missing_id_returns_error() {
         let raw = json!({"lexicon": 1, "defs": {}});
-        let result = ParsedLexicon::parse(raw, 1, None, ProcedureAction::Upsert, None, None);
+        let result = ParsedLexicon::parse(raw, 1, None, ProcedureAction::Upsert, None, None, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("id"));
     }
@@ -449,9 +462,16 @@ mod tests {
     #[test]
     fn parse_preserves_raw_json() {
         let raw = record_lexicon_json();
-        let parsed =
-            ParsedLexicon::parse(raw.clone(), 1, None, ProcedureAction::Upsert, None, None)
-                .unwrap();
+        let parsed = ParsedLexicon::parse(
+            raw.clone(),
+            1,
+            None,
+            ProcedureAction::Upsert,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(parsed.raw, raw);
     }
 
@@ -462,6 +482,7 @@ mod tests {
             1,
             Some("custom.collection".into()),
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -489,6 +510,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         reg.upsert(parsed).await;
@@ -508,6 +530,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         reg.upsert(v1).await;
@@ -517,6 +540,7 @@ mod tests {
             5,
             None,
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -541,6 +565,7 @@ mod tests {
             1,
             None,
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -574,6 +599,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         let query = ParsedLexicon::parse(
@@ -581,6 +607,7 @@ mod tests {
             1,
             None,
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -592,6 +619,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             None,
+            None,
         )
         .unwrap();
         let defs = ParsedLexicon::parse(
@@ -599,6 +627,7 @@ mod tests {
             1,
             None,
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -684,6 +713,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             Some("function handle() end".into()),
+            None,
         )
         .unwrap();
         assert_eq!(parsed.index_hook, Some("function handle() end".into()));
@@ -696,6 +726,7 @@ mod tests {
             1,
             None,
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )
@@ -713,6 +744,7 @@ mod tests {
             ProcedureAction::Upsert,
             None,
             Some("function handle() log('hook') end".into()),
+            None,
         )
         .unwrap();
         reg.upsert(parsed).await;
@@ -729,6 +761,7 @@ mod tests {
             1,
             None,
             ProcedureAction::Upsert,
+            None,
             None,
             None,
         )

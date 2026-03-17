@@ -73,7 +73,6 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/rate-limits",
             post(rate_limits::upsert).get(rate_limits::list),
         )
-        .route("/rate-limits/{id}", delete(rate_limits::delete))
         .route("/rate-limits/enabled", put(rate_limits::set_enabled))
         .route("/rate-limits/allowlist", post(rate_limits::add_allowlist))
         .route(

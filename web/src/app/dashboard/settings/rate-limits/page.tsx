@@ -8,12 +8,11 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getRateLimits,
   upsertRateLimit,
-  deleteRateLimit,
   setRateLimitEnabled,
   addAllowlistEntry,
   removeAllowlistEntry,
 } from "@/lib/api";
-import type { RateLimitSummary, AllowlistEntry } from "@/types/rate-limits";
+import type { AllowlistEntry } from "@/types/rate-limits";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,16 +41,37 @@ export default function RateLimitsPage() {
   const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [enabled, setEnabled] = useState(false);
-  const [limits, setLimits] = useState<RateLimitSummary[]>([]);
+  const [capacity, setCapacity] = useState("");
+  const [refillRate, setRefillRate] = useState("");
+  const [defaultQueryCost, setDefaultQueryCost] = useState("");
+  const [defaultProcedureCost, setDefaultProcedureCost] = useState("");
+  const [defaultProxyCost, setDefaultProxyCost] = useState("");
   const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Track original values for dirty detection
+  const [origCapacity, setOrigCapacity] = useState("");
+  const [origRefillRate, setOrigRefillRate] = useState("");
+  const [origQueryCost, setOrigQueryCost] = useState("");
+  const [origProcedureCost, setOrigProcedureCost] = useState("");
+  const [origProxyCost, setOrigProxyCost] = useState("");
 
   const load = useCallback(() => {
     getRateLimits(getToken)
       .then((data) => {
         setEnabled(data.enabled);
-        setLimits(data.limits);
+        setCapacity(String(data.capacity));
+        setRefillRate(String(data.refill_rate));
+        setDefaultQueryCost(String(data.default_query_cost));
+        setDefaultProcedureCost(String(data.default_procedure_cost));
+        setDefaultProxyCost(String(data.default_proxy_cost));
+        setOrigCapacity(String(data.capacity));
+        setOrigRefillRate(String(data.refill_rate));
+        setOrigQueryCost(String(data.default_query_cost));
+        setOrigProcedureCost(String(data.default_procedure_cost));
+        setOrigProxyCost(String(data.default_proxy_cost));
         setAllowlist(data.allowlist);
       })
       .catch((e) => setError(e.message));
@@ -60,6 +80,13 @@ export default function RateLimitsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const isDirty =
+    capacity !== origCapacity ||
+    refillRate !== origRefillRate ||
+    defaultQueryCost !== origQueryCost ||
+    defaultProcedureCost !== origProcedureCost ||
+    defaultProxyCost !== origProxyCost;
 
   async function handleToggleEnabled(checked: boolean) {
     setToggling(true);
@@ -73,12 +100,35 @@ export default function RateLimitsPage() {
     }
   }
 
-  async function handleDeleteLimit(id: number) {
+  async function handleSave() {
+    setError(null);
+    const cap = Number(capacity);
+    const rate = Number(refillRate);
+    const qc = Number(defaultQueryCost);
+    const pc = Number(defaultProcedureCost);
+    const xc = Number(defaultProxyCost);
+    if (!cap || cap <= 0 || !rate || rate <= 0) {
+      setError("Capacity and refill rate must be positive numbers.");
+      return;
+    }
+    if (qc < 0 || pc < 0 || xc < 0) {
+      setError("Default costs must be non-negative.");
+      return;
+    }
+    setSaving(true);
     try {
-      await deleteRateLimit(getToken, id);
+      await upsertRateLimit(getToken, {
+        capacity: cap,
+        refill_rate: rate,
+        default_query_cost: qc || 1,
+        default_procedure_cost: pc || 1,
+        default_proxy_cost: xc || 1,
+      });
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -91,6 +141,8 @@ export default function RateLimitsPage() {
     }
   }
 
+  const canEdit = hasPermission("rate-limits:create");
+
   return (
     <>
       <SiteHeader title="Rate Limits" />
@@ -102,7 +154,7 @@ export default function RateLimitsPage() {
           <Switch
             id="rate-limit-enabled"
             checked={enabled}
-            disabled={toggling || !hasPermission("rate-limits:create")}
+            disabled={toggling || !canEdit}
             onCheckedChange={handleToggleEnabled}
           />
           <Label htmlFor="rate-limit-enabled" className="cursor-pointer">
@@ -110,79 +162,81 @@ export default function RateLimitsPage() {
           </Label>
         </div>
 
-        {/* Rate limit rules */}
+        {/* Global bucket + Default costs */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Rate Limit Rules</h2>
-              <p className="text-muted-foreground text-sm">
-                Configure global defaults and per-method overrides.
-              </p>
-            </div>
-            {hasPermission("rate-limits:create") && (
-              <UpsertRuleDiag getToken={getToken} onSuccess={load} />
-            )}
+          <div>
+            <h2 className="text-lg font-semibold">Global Bucket & Default Costs</h2>
+            <p className="text-muted-foreground text-sm">
+              Configure the shared token bucket and default costs by request type.
+            </p>
           </div>
 
-          <div className="overflow-clip rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Capacity</TableHead>
-                  <TableHead>Refill Rate</TableHead>
-                  <TableHead>Updated</TableHead>
-                  <TableHead className="w-20 sticky right-0 bg-inherit z-[1]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {limits.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-muted-foreground text-center"
-                    >
-                      No rate limit rules yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {limits.map((limit) => (
-                  <TableRow key={limit.id}>
-                    <TableCell className="font-mono text-sm">
-                      {limit.method ?? (
-                        <span className="text-muted-foreground italic">
-                          Global default
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{limit.capacity}</TableCell>
-                    <TableCell>{limit.refill_rate} tokens/sec</TableCell>
-                    <TableCell>
-                      {new Date(limit.updated_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="w-20 sticky right-0 bg-inherit z-[1]">
-                      <div className="flex gap-1">
-                        {hasPermission("rate-limits:create") && (
-                          <UpsertRuleDiag
-                            getToken={getToken}
-                            onSuccess={load}
-                            existing={limit}
-                          />
-                        )}
-                        {hasPermission("rate-limits:delete") && limit.method !== null && (
-                          <DeleteConfirmDialog
-                            title="Delete rule?"
-                            description={`This will remove the rate limit override for "${limit.method}".`}
-                            onConfirm={() => handleDeleteLimit(limit.id)}
-                          />
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="capacity">Capacity</Label>
+              <Input
+                id="capacity"
+                type="number"
+                min={1}
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+                disabled={!canEdit}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="refill-rate">Refill Rate (tokens/sec)</Label>
+              <Input
+                id="refill-rate"
+                type="number"
+                min={0.01}
+                step="any"
+                value={refillRate}
+                onChange={(e) => setRefillRate(e.target.value)}
+                disabled={!canEdit}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="query-cost">Default Query Cost</Label>
+              <Input
+                id="query-cost"
+                type="number"
+                min={0}
+                value={defaultQueryCost}
+                onChange={(e) => setDefaultQueryCost(e.target.value)}
+                disabled={!canEdit}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="procedure-cost">Default Procedure Cost</Label>
+              <Input
+                id="procedure-cost"
+                type="number"
+                min={0}
+                value={defaultProcedureCost}
+                onChange={(e) => setDefaultProcedureCost(e.target.value)}
+                disabled={!canEdit}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="proxy-cost">Default Proxy Cost</Label>
+              <Input
+                id="proxy-cost"
+                type="number"
+                min={0}
+                value={defaultProxyCost}
+                onChange={(e) => setDefaultProxyCost(e.target.value)}
+                disabled={!canEdit}
+              />
+            </div>
           </div>
+
+          {canEdit && (
+            <div>
+              <Button onClick={handleSave} disabled={!isDirty || saving}>
+                {saving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* IP allowlist */}
@@ -194,7 +248,7 @@ export default function RateLimitsPage() {
                 IPs or CIDRs that bypass rate limiting.
               </p>
             </div>
-            {hasPermission("rate-limits:create") && (
+            {canEdit && (
               <AddAllowlistDialog getToken={getToken} onSuccess={load} />
             )}
           </div>
@@ -226,7 +280,7 @@ export default function RateLimitsPage() {
                       {entry.cidr}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {entry.note ?? "—"}
+                      {entry.note ?? "\u2014"}
                     </TableCell>
                     <TableCell>
                       {new Date(entry.created_at).toLocaleString()}
@@ -248,139 +302,6 @@ export default function RateLimitsPage() {
         </div>
       </div>
     </>
-  );
-}
-
-function UpsertRuleDiag({
-  getToken,
-  onSuccess,
-  existing,
-}: {
-  getToken: () => Promise<string | null>;
-  onSuccess: () => void;
-  existing?: RateLimitSummary;
-}) {
-  const [method, setMethod] = useState(existing?.method ?? "");
-  const [capacity, setCapacity] = useState(String(existing?.capacity ?? ""));
-  const [refillRate, setRefillRate] = useState(
-    String(existing?.refill_rate ?? "")
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-
-  const isEdit = !!existing;
-
-  async function handleSubmit() {
-    setError(null);
-    const cap = Number(capacity);
-    const rate = Number(refillRate);
-    if (!cap || cap <= 0 || !rate || rate <= 0) {
-      setError("Capacity and refill rate must be positive numbers.");
-      return;
-    }
-    try {
-      const body: { method?: string; capacity: number; refill_rate: number } = {
-        capacity: cap,
-        refill_rate: rate,
-      };
-      if (isEdit && existing.method !== null) {
-        body.method = existing.method;
-      } else if (!isEdit && method.trim()) {
-        body.method = method.trim();
-      }
-      await upsertRateLimit(getToken, body);
-      setOpen(false);
-      if (!isEdit) {
-        setMethod("");
-        setCapacity("");
-        setRefillRate("");
-      }
-      onSuccess();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  return (
-    <ResponsiveDialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (o) {
-          setMethod(existing?.method ?? "");
-          setCapacity(String(existing?.capacity ?? ""));
-          setRefillRate(String(existing?.refill_rate ?? ""));
-          setError(null);
-        }
-      }}
-    >
-      <ResponsiveDialogTrigger asChild>
-        {isEdit ? (
-          <Button variant="ghost" size="sm">
-            Edit
-          </Button>
-        ) : (
-          <Button>Add Rule</Button>
-        )}
-      </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent>
-        <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>
-            {isEdit ? "Edit Rule" : "Add Rule"}
-          </ResponsiveDialogTitle>
-          <ResponsiveDialogDescription>
-            {isEdit
-              ? `Update rate limit for ${existing.method ?? "global default"}.`
-              : "Add a rate limit rule. Leave method empty for global default."}
-          </ResponsiveDialogDescription>
-        </ResponsiveDialogHeader>
-        <div className="flex flex-col gap-4">
-          {error && <p className="text-destructive text-sm">{error}</p>}
-          {!isEdit && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="rule-method">Method NSID (optional)</Label>
-              <Input
-                id="rule-method"
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                placeholder="com.atproto.sync.getRepo"
-                className="font-mono"
-              />
-            </div>
-          )}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="rule-capacity">Capacity</Label>
-            <Input
-              id="rule-capacity"
-              type="number"
-              min={1}
-              value={capacity}
-              onChange={(e) => setCapacity(e.target.value)}
-              placeholder="100"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="rule-refill-rate">Refill Rate (tokens/sec)</Label>
-            <Input
-              id="rule-refill-rate"
-              type="number"
-              min={1}
-              value={refillRate}
-              onChange={(e) => setRefillRate(e.target.value)}
-              placeholder="10"
-            />
-          </div>
-        </div>
-        <ResponsiveDialogFooter>
-          <ResponsiveDialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </ResponsiveDialogClose>
-          <Button onClick={handleSubmit} disabled={!capacity || !refillRate}>
-            {isEdit ? "Update" : "Add"}
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
   );
 }
 
