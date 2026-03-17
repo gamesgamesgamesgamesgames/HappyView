@@ -5,6 +5,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+use tokio_tungstenite::Connector;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
@@ -101,17 +102,22 @@ pub fn spawn(state: AppState, mut subscriptions_rx: watch::Receiver<()>) {
 // ---------------------------------------------------------------------------
 
 async fn run_subscription(state: AppState, did: String) {
+    let mut backoff_secs: u64 = 2;
+    const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
+
     loop {
         match run_subscription_once(&state, &did).await {
             Ok(()) => {
                 tracing::info!(did = %did, "labeler subscription ended cleanly, reconnecting");
+                backoff_secs = 2; // reset on clean disconnect
             }
             Err(e) => {
-                tracing::warn!(did = %did, "labeler subscription error: {e}");
+                tracing::warn!(did = %did, backoff = backoff_secs, "labeler subscription error: {e}");
             }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
         tracing::info!(did = %did, "reconnecting to labeler");
+        backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
     }
 }
 
@@ -150,12 +156,21 @@ async fn run_subscription_once(
 
     let request = url.into_client_request()?;
 
-    let (ws, _): (
-        tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
-        _,
-    ) = tokio_tungstenite::connect_async(request).await?;
+    // Build a rustls config that only advertises HTTP/1.1 in ALPN.
+    // Without this, rustls negotiates h2 and the WebSocket upgrade fails
+    // ("HTTP version must be 1.1 or higher").
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let mut tls_config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    tls_config.alpn_protocols = vec![b"http/1.1".to_vec()];
+
+    let connector = Connector::Rustls(Arc::new(tls_config));
+
+    let (ws, _) =
+        tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector))
+            .await?;
 
     tracing::info!(did = %did, "connected to labeler");
 
