@@ -68,6 +68,15 @@ impl TestApp {
             lexicons,
             collections_tx,
             labeler_subscriptions_tx,
+            rate_limiter: happyview::rate_limit::RateLimiter::new(
+                false,
+                happyview::rate_limit::RateLimitConfig {
+                    capacity: 100,
+                    refill_rate: 2.0,
+                },
+                std::collections::HashMap::new(),
+                vec![],
+            ),
         };
 
         let router = server::router(state.clone());

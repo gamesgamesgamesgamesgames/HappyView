@@ -6,6 +6,7 @@ mod labelers;
 mod lexicons;
 mod network_lexicons;
 pub(crate) mod permissions;
+mod rate_limits;
 mod records;
 mod script_variables;
 mod stats;
@@ -14,7 +15,7 @@ mod types;
 mod users;
 
 use axum::Router;
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, patch, post, put};
 
 use crate::AppState;
 
@@ -67,5 +68,16 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route(
             "/labelers/{did}",
             patch(labelers::update).delete(labelers::delete),
+        )
+        .route(
+            "/rate-limits",
+            post(rate_limits::upsert).get(rate_limits::list),
+        )
+        .route("/rate-limits/{id}", delete(rate_limits::delete))
+        .route("/rate-limits/enabled", put(rate_limits::set_enabled))
+        .route("/rate-limits/allowlist", post(rate_limits::add_allowlist))
+        .route(
+            "/rate-limits/allowlist/{id}",
+            delete(rate_limits::remove_allowlist),
         )
 }

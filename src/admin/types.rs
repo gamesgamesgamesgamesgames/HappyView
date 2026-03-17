@@ -204,3 +204,50 @@ pub(super) struct LabelerSummary {
 pub(super) struct UpdateLabelerBody {
     pub(super) status: String,
 }
+
+// ---------------------------------------------------------------------------
+// Rate limit types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct UpsertRateLimitBody {
+    pub(super) method: Option<String>,
+    pub(super) capacity: u32,
+    pub(super) refill_rate: f64,
+}
+
+#[derive(Deserialize)]
+pub(super) struct SetEnabledBody {
+    pub(super) enabled: bool,
+}
+
+#[derive(Deserialize)]
+pub(super) struct AddAllowlistBody {
+    pub(super) cidr: String,
+    pub(super) note: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(super) struct RateLimitsResponse {
+    pub(super) enabled: bool,
+    pub(super) limits: Vec<RateLimitSummary>,
+    pub(super) allowlist: Vec<AllowlistEntry>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub(super) struct RateLimitSummary {
+    pub(super) id: i32,
+    pub(super) method: Option<String>,
+    pub(super) capacity: i32,
+    pub(super) refill_rate: f32,
+    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub(super) struct AllowlistEntry {
+    pub(super) id: i32,
+    pub(super) cidr: String,
+    pub(super) note: Option<String>,
+    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+}

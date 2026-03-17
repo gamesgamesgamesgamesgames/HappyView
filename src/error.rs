@@ -56,6 +56,11 @@ pub enum AppError {
     Internal(String),
     NotFound(String),
     PdsError(StatusCode, Bytes),
+    RateLimited {
+        retry_after: u64,
+        limit: u32,
+        reset: u64,
+    },
     ScriptError {
         error_type: ScriptErrorType,
         message: String,
@@ -76,6 +81,9 @@ impl std::fmt::Display for AppError {
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
             AppError::NotFound(msg) => write!(f, "not found: {msg}"),
             AppError::PdsError(status, _) => write!(f, "PDS error: {status}"),
+            AppError::RateLimited { retry_after, .. } => {
+                write!(f, "rate limited: retry after {retry_after}s")
+            }
             AppError::ScriptError {
                 error_type,
                 message,
@@ -139,6 +147,24 @@ impl IntoResponse for AppError {
                 });
                 (StatusCode::FORBIDDEN, axum::Json(body)).into_response()
             }
+            AppError::RateLimited {
+                retry_after,
+                limit,
+                reset,
+            } => {
+                let body = serde_json::json!({
+                    "error": "RateLimited",
+                    "message": "Too many requests",
+                });
+                let mut response =
+                    (StatusCode::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
+                let headers = response.headers_mut();
+                headers.insert("RateLimit-Limit", limit.into());
+                headers.insert("RateLimit-Remaining", 0u32.into());
+                headers.insert("RateLimit-Reset", reset.into());
+                headers.insert("Retry-After", retry_after.into());
+                response
+            }
             other => {
                 let (status, message) = match &other {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
@@ -154,6 +180,7 @@ impl IntoResponse for AppError {
                     AppError::PdsError(..)
                     | AppError::AuthDpopNonce(..)
                     | AppError::InsufficientPermissions(..)
+                    | AppError::RateLimited { .. }
                     | AppError::ScriptError { .. } => unreachable!(),
                 };
 

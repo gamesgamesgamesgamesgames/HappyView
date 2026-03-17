@@ -1,5 +1,6 @@
 use happyview::config::Config;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
+use happyview::rate_limit::RateLimiter;
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 use happyview::{AppState, labeler, server, tap};
 use tokio::sync::watch;
@@ -154,6 +155,16 @@ async fn main() {
         );
     }
 
+    // Initialize rate limiter from DB.
+    let rl_state = RateLimiter::load_from_db(&db).await;
+    let rate_limiter = RateLimiter::new(
+        rl_state.enabled,
+        rl_state.global,
+        rl_state.overrides,
+        rl_state.allowlist,
+    );
+    tokio::spawn(rate_limiter.clone().spawn_cleanup());
+
     let initial_collections = lexicons.get_record_collections().await;
     let initial_collections_for_sync = initial_collections.clone();
     let (collections_tx, collections_rx) = watch::channel(initial_collections);
@@ -166,6 +177,7 @@ async fn main() {
         lexicons,
         collections_tx,
         labeler_subscriptions_tx,
+        rate_limiter,
     };
 
     // Sync initial collections to Tap on startup.
