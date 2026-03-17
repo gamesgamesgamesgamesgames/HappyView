@@ -1,9 +1,12 @@
 use axum::extract::{DefaultBodyLimit, State};
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use http_body_util::Full;
 use std::convert::Infallible;
+use std::net::IpAddr;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -14,6 +17,7 @@ use crate::aip;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::profile;
+use crate::rate_limit::CheckResult;
 use crate::repo;
 use crate::xrpc;
 
@@ -84,11 +88,52 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
     Json(serde_json::json!({ "aip_url": state.config.aip_public_url }))
 }
 
+fn ip_from_forwarded_for(value: Option<&str>) -> Option<IpAddr> {
+    let forwarded = value?;
+    let first = forwarded.split(',').next()?;
+    first.trim().parse::<IpAddr>().ok()
+}
+
 async fn get_profile(
     State(state): State<AppState>,
     claims: Claims,
-) -> Result<Json<profile::Profile>, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    let client_ip =
+        ip_from_forwarded_for(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
+    let rate_key = claims.did().to_string();
+    let check = state
+        .rate_limiter
+        .check(&rate_key, Some("app.bsky.actor.getProfile"), client_ip);
+
+    if let CheckResult::Limited {
+        retry_after,
+        limit,
+        reset,
+    } = check
+    {
+        return Err(AppError::RateLimited {
+            retry_after,
+            limit,
+            reset,
+        });
+    }
+
     let profile =
         profile::resolve_profile(&state.http, &state.config.plc_url, claims.did()).await?;
-    Ok(Json(profile))
+    let mut response = Json(profile).into_response();
+
+    if let CheckResult::Allowed {
+        remaining,
+        limit,
+        reset,
+    } = check
+    {
+        let h = response.headers_mut();
+        h.insert("RateLimit-Limit", limit.into());
+        h.insert("RateLimit-Remaining", remaining.into());
+        h.insert("RateLimit-Reset", reset.into());
+    }
+
+    Ok(response)
 }

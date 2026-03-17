@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arc-swap = "1"
 axum = "0.8"
 base64 = "0.22"
+dashmap = "6"
 dotenvy = "0.15"
 hex = "0.4"
 futures-util = "0.3"
@@ -26,6 +28,7 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 http-body-util = "0.1"
 hickory-resolver = "0.25"
+ipnet = "2"
 mlua = { version = "0.11", features = ["lua54", "async", "serialize", "vendored", "send"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

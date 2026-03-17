@@ -59,6 +59,13 @@ pub enum Permission {
     LabelersRead,
     #[serde(rename = "labelers:delete")]
     LabelersDelete,
+
+    #[serde(rename = "rate-limits:read")]
+    RateLimitsRead,
+    #[serde(rename = "rate-limits:create")]
+    RateLimitsCreate,
+    #[serde(rename = "rate-limits:delete")]
+    RateLimitsDelete,
 }
 
 impl Permission {
@@ -88,10 +95,13 @@ impl Permission {
             Self::LabelersCreate => "labelers:create",
             Self::LabelersRead => "labelers:read",
             Self::LabelersDelete => "labelers:delete",
+            Self::RateLimitsRead => "rate-limits:read",
+            Self::RateLimitsCreate => "rate-limits:create",
+            Self::RateLimitsDelete => "rate-limits:delete",
         }
     }
 
-    /// All 23 permissions.
+    /// All 26 permissions.
     pub fn all() -> HashSet<Permission> {
         HashSet::from([
             Self::LexiconsCreate,
@@ -117,6 +127,9 @@ impl Permission {
             Self::LabelersCreate,
             Self::LabelersRead,
             Self::LabelersDelete,
+            Self::RateLimitsRead,
+            Self::RateLimitsCreate,
+            Self::RateLimitsDelete,
         ])
     }
 }
@@ -161,6 +174,9 @@ impl Template {
                 perms.insert(Permission::LabelersCreate);
                 perms.insert(Permission::LabelersRead);
                 perms.insert(Permission::LabelersDelete);
+                perms.insert(Permission::RateLimitsRead);
+                perms.insert(Permission::RateLimitsCreate);
+                perms.insert(Permission::RateLimitsDelete);
                 perms
             }
             Self::FullAccess => Permission::all(),

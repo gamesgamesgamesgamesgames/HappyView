@@ -927,6 +927,15 @@ mod tests {
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
             labeler_subscriptions_tx: labeler_tx,
+            rate_limiter: crate::rate_limit::RateLimiter::new(
+                false,
+                crate::rate_limit::RateLimitConfig {
+                    capacity: 100,
+                    refill_rate: 2.0,
+                },
+                std::collections::HashMap::new(),
+                vec![],
+            ),
         }
     }
 

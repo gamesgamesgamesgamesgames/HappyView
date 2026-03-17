@@ -35,6 +35,15 @@ async fn test_state_with_pool(pool: sqlx::PgPool) -> AppState {
         lexicons: LexiconRegistry::new(),
         collections_tx: tx,
         labeler_subscriptions_tx: labeler_tx,
+        rate_limiter: happyview::rate_limit::RateLimiter::new(
+            false,
+            happyview::rate_limit::RateLimitConfig {
+                capacity: 100,
+                refill_rate: 2.0,
+            },
+            std::collections::HashMap::new(),
+            vec![],
+        ),
     }
 }
 
