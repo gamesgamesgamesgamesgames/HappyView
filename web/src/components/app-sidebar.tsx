@@ -13,6 +13,7 @@ import {
   IconVariable,
   IconTag,
   IconChevronRight,
+  IconShield,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -53,6 +54,7 @@ const settingsSubItems = [
   { title: "ENV Variables", url: "/dashboard/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
   { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
   { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
+  { title: "Rate Limits", url: "/dashboard/settings/rate-limits", icon: IconShield, requiredPermissions: ["rate-limits:read"] },
 ] as const
 
 export function AppSidebar({

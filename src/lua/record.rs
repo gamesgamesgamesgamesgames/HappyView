@@ -17,6 +17,7 @@ const INTERNAL_FIELDS: &[&str] = &[
     "_schema",
     "_key_type",
     "_rkey",
+    "_repo_override",
 ];
 
 /// Register the `Record` global constructor and static methods.
@@ -42,6 +43,8 @@ pub fn register_record_api(
             async move {
                 let collection: String = this.raw_get("_collection")?;
                 let schema: mlua::Value = this.raw_get("_schema")?;
+                let repo_override: Option<String> = this.raw_get("_repo_override")?;
+                let repo = repo_override.as_deref().unwrap_or_else(|| claims.did());
 
                 // Validate required fields against schema
                 if let mlua::Value::Table(ref schema_table) = schema {
@@ -62,7 +65,7 @@ pub fn register_record_api(
                         .to_string();
 
                     let pds_body = json!({
-                        "repo": claims.did(),
+                        "repo": repo,
                         "collection": collection,
                         "rkey": rkey,
                         "record": data,
@@ -105,7 +108,7 @@ pub fn register_record_api(
                                    indexed_at = NOW()"#,
                     )
                     .bind(uri)
-                    .bind(claims.did())
+                    .bind(repo)
                     .bind(&collection)
                     .bind(&rkey)
                     .bind(&data)
@@ -120,7 +123,7 @@ pub fn register_record_api(
                     // CREATE
                     let rkey: Option<String> = this.raw_get("_rkey")?;
                     let mut pds_body = json!({
-                        "repo": claims.did(),
+                        "repo": repo,
                         "collection": collection,
                         "record": data,
                     });
@@ -165,7 +168,7 @@ pub fn register_record_api(
                                        cid = EXCLUDED.cid"#,
                         )
                         .bind(uri)
-                        .bind(claims.did())
+                        .bind(repo)
                         .bind(&collection)
                         .bind(rkey)
                         .bind(&data)
@@ -207,6 +210,8 @@ pub fn register_record_api(
                     mlua::Error::runtime("cannot delete a Record that has no _uri")
                 })?;
                 let collection: String = this.raw_get("_collection")?;
+                let repo_override: Option<String> = this.raw_get("_repo_override")?;
+                let repo = repo_override.as_deref().unwrap_or_else(|| claims.did());
 
                 let rkey = uri
                     .split('/')
@@ -215,7 +220,7 @@ pub fn register_record_api(
                     .to_string();
 
                 let pds_body = json!({
-                    "repo": claims.did(),
+                    "repo": repo,
                     "collection": collection,
                     "rkey": rkey,
                 });
@@ -282,6 +287,18 @@ pub fn register_record_api(
             Ok(this)
         })?;
         methods.set("set_rkey", set_rkey_fn)?;
+    }
+
+    // :set_repo(did)
+    {
+        let set_repo_fn = lua.create_function(|_lua, (this, did): (mlua::Table, String)| {
+            if did.is_empty() {
+                return Err(mlua::Error::runtime("did must be a non-empty string"));
+            }
+            this.raw_set("_repo_override", did)?;
+            Ok(this)
+        })?;
+        methods.set("set_repo", set_repo_fn)?;
     }
 
     // :generate_rkey()
@@ -384,6 +401,7 @@ pub fn register_record_api(
                     table.raw_set("_uri", mlua::Value::Nil)?;
                     table.raw_set("_cid", mlua::Value::Nil)?;
                     table.raw_set("_schema", schema_value.clone())?;
+                    table.raw_set("_repo_override", mlua::Value::Nil)?;
 
                     // Auto-set _key_type from the lexicon's record_key
                     match lexicon.as_ref().and_then(|l| l.record_key.as_deref()) {
@@ -427,7 +445,7 @@ pub fn register_record_api(
                 let session = session.clone();
                 async move {
                     // Extract save data from each record (sync)
-                    type SaveItem = (mlua::Table, String, Option<String>, Option<String>, Value);
+                    type SaveItem = (mlua::Table, String, Option<String>, Option<String>, Option<String>, Value);
                     let mut save_items: Vec<SaveItem> = Vec::new();
 
                     for pair in records_table.sequence_values::<mlua::Table>() {
@@ -435,6 +453,7 @@ pub fn register_record_api(
                         let collection: String = record_table.raw_get("_collection")?;
                         let existing_uri: Option<String> = record_table.raw_get("_uri")?;
                         let rkey: Option<String> = record_table.raw_get("_rkey")?;
+                        let repo_override: Option<String> = record_table.raw_get("_repo_override")?;
 
                         // Validate
                         let schema: mlua::Value = record_table.raw_get("_schema")?;
@@ -443,19 +462,21 @@ pub fn register_record_api(
                         }
 
                         let data = extract_record_data(&lua, &record_table, &collection)?;
-                        save_items.push((record_table, collection, existing_uri, rkey, data));
+                        save_items.push((record_table, collection, existing_uri, rkey, repo_override, data));
                     }
 
                     // Parallel PDS calls
-                    let futs = save_items.iter().map(|(_, collection, existing_uri, rkey, data)| {
+                    let futs = save_items.iter().map(|(_, collection, existing_uri, rkey, repo_override, data)| {
                         let state = state.clone();
                         let claims = claims.clone();
                         let session = session.clone();
                         let collection = collection.clone();
                         let existing_uri = existing_uri.clone();
                         let rkey = rkey.clone();
+                        let repo_override = repo_override.clone();
                         let data = data.clone();
                         async move {
+                            let repo = repo_override.as_deref().unwrap_or_else(|| claims.did());
                             if let Some(ref uri) = existing_uri {
                                 let rkey = uri
                                     .split('/')
@@ -464,7 +485,7 @@ pub fn register_record_api(
                                     .to_string();
 
                                 let pds_body = json!({
-                                    "repo": claims.did(),
+                                    "repo": repo,
                                     "collection": collection,
                                     "rkey": rkey,
                                     "record": data,
@@ -511,7 +532,7 @@ pub fn register_record_api(
                                                indexed_at = NOW()"#,
                                 )
                                 .bind(uri.as_str())
-                                .bind(claims.did())
+                                .bind(repo)
                                 .bind(&collection)
                                 .bind(&rkey)
                                 .bind(&data)
@@ -524,7 +545,7 @@ pub fn register_record_api(
                                 Ok(result)
                             } else {
                                 let mut pds_body = json!({
-                                    "repo": claims.did(),
+                                    "repo": repo,
                                     "collection": collection,
                                     "record": data,
                                 });
@@ -576,7 +597,7 @@ pub fn register_record_api(
                                                    cid = EXCLUDED.cid"#,
                                     )
                                     .bind(uri)
-                                    .bind(claims.did())
+                                    .bind(repo)
                                     .bind(&collection)
                                     .bind(rkey)
                                     .bind(&data)
@@ -595,7 +616,7 @@ pub fn register_record_api(
                     let results = try_join_all(futs).await?;
 
                     // Write back _uri and _cid (sync)
-                    for (i, (record_table, _, _, _, _)) in save_items.iter().enumerate() {
+                    for (i, (record_table, _, _, _, _, _)) in save_items.iter().enumerate() {
                         if let Some(result) = results.get(i) {
                             if let Some(uri) = result.get("uri").and_then(|v| v.as_str()) {
                                 record_table.raw_set("_uri", uri.to_string())?;
@@ -645,6 +666,7 @@ pub fn register_record_api(
                         table.raw_set("_schema", schema_value)?;
                         table.raw_set("_key_type", mlua::Value::Nil)?;
                         table.raw_set("_rkey", mlua::Value::Nil)?;
+                        table.raw_set("_repo_override", mlua::Value::Nil)?;
 
                         // Copy record fields
                         if let Some(obj) = record.as_object() {
@@ -717,6 +739,7 @@ pub fn register_record_api(
                             table.raw_set("_schema", schema_value)?;
                             table.raw_set("_key_type", mlua::Value::Nil)?;
                             table.raw_set("_rkey", mlua::Value::Nil)?;
+                            table.raw_set("_repo_override", mlua::Value::Nil)?;
 
                             if let Some(obj) = record.as_object() {
                                 for (k, v) in obj {

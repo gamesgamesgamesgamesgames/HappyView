@@ -11,6 +11,7 @@ import type { AdminListRecordsResponse } from "@/types/records"
 import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
 import type { LabelerSummary } from "@/types/labelers"
+import type { RateLimitsResponse } from "@/types/rate-limits"
 
 export type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 export type { CollectionStat, StatsResponse } from "@/types/stats"
@@ -24,6 +25,7 @@ export type { EventLogEntry, EventsListResponse } from "@/types/events"
 export type { ScriptVariableSummary } from "@/types/script-variables"
 export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
+export type { RateLimitSummary, AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
 
 // The DPoP proof for admin API calls must target AIP's userinfo URL,
 // because the backend forwards the proof to AIP for token validation.
@@ -357,6 +359,59 @@ export function deleteLabeler(
   did: string
 ) {
   return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, getToken, {
+    method: "DELETE",
+  })
+}
+
+// Rate Limits
+export function getRateLimits(getToken: () => Promise<string | null>) {
+  return apiFetch<RateLimitsResponse>("/admin/rate-limits", getToken)
+}
+
+export function upsertRateLimit(
+  getToken: () => Promise<string | null>,
+  body: { method?: string; capacity: number; refill_rate: number }
+) {
+  return apiFetch("/admin/rate-limits", getToken, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteRateLimit(
+  getToken: () => Promise<string | null>,
+  id: number
+) {
+  return apiFetch(`/admin/rate-limits/${encodeURIComponent(id)}`, getToken, {
+    method: "DELETE",
+  })
+}
+
+export function setRateLimitEnabled(
+  getToken: () => Promise<string | null>,
+  body: { enabled: boolean }
+) {
+  return apiFetch("/admin/rate-limits/enabled", getToken, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export function addAllowlistEntry(
+  getToken: () => Promise<string | null>,
+  body: { cidr: string; note?: string }
+) {
+  return apiFetch("/admin/rate-limits/allowlist", getToken, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function removeAllowlistEntry(
+  getToken: () => Promise<string | null>,
+  id: number
+) {
+  return apiFetch(`/admin/rate-limits/allowlist/${encodeURIComponent(id)}`, getToken, {
     method: "DELETE",
   })
 }
