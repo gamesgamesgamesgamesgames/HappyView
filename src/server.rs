@@ -13,7 +13,6 @@ use tower_http::trace::TraceLayer;
 
 use crate::AppState;
 use crate::admin;
-use crate::aip;
 use crate::auth::Claims;
 use crate::error::AppError;
 use crate::profile;
@@ -65,6 +64,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/admin", admin::admin_routes(state.clone()))
+        .nest("/auth", crate::auth::routes::routes())
+        .route("/oauth/client-metadata.json", get(client_metadata))
         .route("/xrpc/app.bsky.actor.getProfile", get(get_profile))
         .route(
             "/xrpc/com.atproto.repo.uploadBlob",
@@ -73,7 +74,6 @@ pub fn router(state: AppState) -> Router {
         // Catch-all for dynamically registered lexicons
         .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
         .route("/config", get(config_endpoint))
-        .route("/aip/{*path}", get(aip::aip_proxy).post(aip::aip_proxy))
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
@@ -85,7 +85,12 @@ async fn health() -> &'static str {
 }
 
 async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "aip_url": state.config.aip_public_url }))
+    Json(serde_json::json!({ "public_url": state.config.public_url }))
+}
+
+async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let client_metadata = &state.oauth.client_metadata;
+    Json(serde_json::to_value(client_metadata).unwrap_or_default())
 }
 
 fn ip_from_forwarded_for(value: Option<&str>) -> Option<IpAddr> {

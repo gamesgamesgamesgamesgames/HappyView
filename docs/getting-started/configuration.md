@@ -8,7 +8,8 @@ HappyView is configured via environment variables. A `.env` file in the project 
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | yes | --- | Database connection string. SQLite (`sqlite://path/to/db?mode=rwc`) or Postgres (`postgres://user:pass@host/db`) |
 | `DATABASE_BACKEND` | no | auto-detected | Force `sqlite` or `postgres`. Auto-detected from `DATABASE_URL` scheme if not set |
-| `AIP_URL` | yes | --- | [AIP](https://github.com/graze-social/aip) instance URL for OAuth token validation |
+| `PUBLIC_URL` | yes | --- | Public-facing URL for HappyView (used for OAuth callbacks, e.g. `https://happyview.example.com`) |
+| `SESSION_SECRET` | no | dev default | Secret key for signing session cookies. **Must be set in production** |
 | `HOST` | no | `0.0.0.0` | Bind host |
 | `PORT` | no | `3000` | Bind port |
 | `TAP_URL` | no | `http://localhost:2480` | [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance URL for real-time record streaming and backfill |
@@ -23,7 +24,8 @@ HappyView is configured via environment variables. A `.env` file in the project 
 ```sh
 # SQLite (default — zero setup required)
 DATABASE_URL=sqlite://data/happyview.db?mode=rwc
-AIP_URL=http://localhost:8080
+PUBLIC_URL=http://localhost:3000
+SESSION_SECRET=change-me-in-production
 
 # Or use Postgres instead:
 # DATABASE_URL=postgres://happyview:happyview@localhost/happyview

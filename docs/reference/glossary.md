@@ -32,8 +32,6 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 ## HappyView-specific terms
 
-**AIP** — [Authentication and Identity Provider](https://github.com/graze-social/aip). An external service that handles AT Protocol OAuth for HappyView. Issues Bearer tokens used for authentication.
-
 **Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and delegates record fetching to Tap. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/backfill.md).
 
 **Network lexicon** — A lexicon fetched directly from the AT Protocol network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons).

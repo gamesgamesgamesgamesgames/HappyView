@@ -1,11 +1,22 @@
+use std::sync::Arc;
+
+use happyview::auth::oauth_store::{DbSessionStore, DbStateStore};
 use happyview::config::Config;
 use happyview::db;
+use happyview::dns::NativeDnsResolver;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 use happyview::rate_limit::RateLimiter;
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 use happyview::{AppState, labeler, server, tap};
 use tokio::sync::watch;
 use tracing::{info, warn};
+
+use atrium_identity::did::{CommonDidResolver, CommonDidResolverConfig};
+use atrium_identity::handle::{AtprotoHandleResolver, AtprotoHandleResolverConfig};
+use atrium_oauth::{
+    AtprotoClientMetadata, AtprotoLocalhostClientMetadata, AuthMethod, DefaultHttpClient,
+    GrantType, KnownScope, OAuthClientConfig, OAuthResolverConfig, Scope,
+};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +33,7 @@ async fn main() {
     let db_backend = config.database_backend;
 
     // Connect to database and run migrations.
-    let db = db::connect(&config.database_url, db_backend).await;
+    let db_pool = db::connect(&config.database_url, db_backend).await;
 
     info!(
         backend = ?db_backend,
@@ -31,7 +42,7 @@ async fn main() {
 
     // Backfill record_refs in the background (first run after upgrade)
     {
-        let db_bg = db.clone();
+        let db_bg = db_pool.clone();
         let backend = db_backend;
         tokio::spawn(async move {
             let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM record_refs")
@@ -95,7 +106,7 @@ async fn main() {
 
     let lexicons = LexiconRegistry::new();
     lexicons
-        .load_from_db(&db)
+        .load_from_db(&db_pool)
         .await
         .expect("failed to load lexicons");
 
@@ -104,7 +115,7 @@ async fn main() {
     let network_rows: Vec<(String, Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT id, authority_did, target_collection FROM lexicons WHERE source = 'network'",
     )
-    .fetch_all(&db)
+    .fetch_all(&db_pool)
     .await
     .unwrap_or_default();
 
@@ -135,7 +146,7 @@ async fn main() {
                                     .bind(&now)
                                     .bind(&now)
                                     .bind(nsid)
-                                    .execute(&db)
+                                    .execute(&db_pool)
                                     .await
                                 {
                                     warn!(nsid, "failed to update network lexicon in DB: {e}");
@@ -163,9 +174,94 @@ async fn main() {
     }
 
     // Initialize rate limiter from DB.
-    let rl_state = RateLimiter::load_from_db(&db).await;
+    let rl_state = RateLimiter::load_from_db(&db_pool).await;
     let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global, rl_state.allowlist);
     tokio::spawn(rate_limiter.clone().spawn_cleanup());
+
+    // Build atrium-oauth client
+    let dns = NativeDnsResolver::new();
+    let callback_url = format!("{}/auth/callback", config.public_url.trim_end_matches('/'));
+    let atrium_http = Arc::new(DefaultHttpClient::default());
+
+    let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
+        plc_directory_url: config.plc_url.clone(),
+        http_client: Arc::clone(&atrium_http),
+    });
+
+    let handle_resolver = AtprotoHandleResolver::new(AtprotoHandleResolverConfig {
+        dns_txt_resolver: dns,
+        http_client: Arc::clone(&atrium_http),
+    });
+
+    let is_loopback =
+        config.public_url.contains("127.0.0.1") || config.public_url.contains("[::1]");
+
+    let resolver_config = OAuthResolverConfig {
+        did_resolver,
+        handle_resolver,
+        authorization_server_metadata: Default::default(),
+        protected_resource_metadata: Default::default(),
+    };
+
+    let oauth_client = if is_loopback {
+        info!("Using loopback OAuth client metadata (local development)");
+        atrium_oauth::OAuthClient::new(OAuthClientConfig {
+            client_metadata: AtprotoLocalhostClientMetadata {
+                redirect_uris: Some(vec![callback_url]),
+                scopes: Some(vec![
+                    Scope::Known(KnownScope::Atproto),
+                    Scope::Known(KnownScope::TransitionGeneric),
+                ]),
+            },
+            keys: None,
+            state_store: DbStateStore::new(db_pool.clone(), db_backend),
+            session_store: DbSessionStore::new(db_pool.clone(), db_backend),
+            resolver: resolver_config,
+        })
+        .expect("Failed to create OAuth client")
+    } else {
+        atrium_oauth::OAuthClient::new(OAuthClientConfig {
+            client_metadata: AtprotoClientMetadata {
+                client_id: format!(
+                    "{}/oauth/client-metadata.json",
+                    config.public_url.trim_end_matches('/')
+                ),
+                client_uri: Some(config.public_url.clone()),
+                redirect_uris: vec![callback_url],
+                token_endpoint_auth_method: AuthMethod::None,
+                grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+                scopes: vec![
+                    Scope::Known(KnownScope::Atproto),
+                    Scope::Known(KnownScope::TransitionGeneric),
+                ],
+                jwks_uri: None,
+                token_endpoint_auth_signing_alg: None,
+            },
+            keys: None,
+            state_store: DbStateStore::new(db_pool.clone(), db_backend),
+            session_store: DbSessionStore::new(db_pool.clone(), db_backend),
+            resolver: resolver_config,
+        })
+        .expect("Failed to create OAuth client")
+    };
+
+    if config.session_secret == "change-me-in-production-not-secure" {
+        if db_backend == happyview::db::DatabaseBackend::Postgres {
+            tracing::error!(
+                "INSECURE SESSION SECRET — You are using the default session secret with a \
+                 Postgres backend, which likely indicates a production deployment. \
+                 Set SESSION_SECRET to a random string of at least 64 characters."
+            );
+        } else {
+            warn!(
+                "Using the default session secret. Set SESSION_SECRET to a random \
+                 string in production."
+            );
+        }
+    }
+
+    let cookie_key =
+        axum_extra::extract::cookie::Key::derive_from(config.session_secret.as_bytes());
 
     let initial_collections = lexicons.get_record_collections().await;
     let initial_collections_for_sync = initial_collections.clone();
@@ -175,12 +271,14 @@ async fn main() {
     let state = AppState {
         config: config.clone(),
         http,
-        db,
+        db: db_pool,
         db_backend,
         lexicons,
         collections_tx,
         labeler_subscriptions_tx,
         rate_limiter,
+        oauth: Arc::new(oauth_client),
+        cookie_key,
     };
 
     // Sync initial collections to Tap on startup.

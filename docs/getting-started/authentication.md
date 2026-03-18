@@ -1,6 +1,6 @@
 # Authentication
 
-HappyView uses [AT Protocol OAuth](https://atproto.com/specs/oauth) for authentication, handled by an external [AIP](https://github.com/graze-social/aip) instance. HappyView does not store credentials or issue tokens: all OAuth is delegated to AIP.
+HappyView uses [AT Protocol OAuth](https://atproto.com/specs/oauth) for authentication, handled natively via the `atrium-oauth` library. HappyView manages the full OAuth flow internally — no external auth service is required.
 
 ## Which endpoints require auth?
 
@@ -11,52 +11,38 @@ HappyView uses [AT Protocol OAuth](https://atproto.com/specs/oauth) for authenti
 | Admin API (`/admin/*`) | Yes (must be a user with appropriate [permissions](../guides/permissions.md)) |
 | Health check (`GET /health`) | No |
 
-Authenticated requests must include an `Authorization` header with a token issued by AIP:
+Authentication uses signed session cookies set during the OAuth login flow. For programmatic access, API keys (prefixed `hv_`) are also supported via the `Authorization: Bearer` header.
 
-```
-Authorization: Bearer <token>
-```
+## Logging in via the dashboard
 
-## Getting a token from the dashboard
+1. Open the dashboard and click **Log in**
+2. Enter your AT Protocol handle (e.g. `user.bsky.social`)
+3. You'll be redirected to your identity provider's authorization page
+4. After approving, you're redirected back to HappyView with a session cookie set
 
-The easiest way to get a token for CLI or curl usage is through the [web dashboard](dashboard.md):
+The session cookie is HttpOnly and signed. It persists across browser sessions until you log out or the OAuth session expires.
 
-1. Open the dashboard and log in with your AT Protocol identity
-2. Open your browser's developer tools (F12 or Cmd+Shift+I)
-3. Go to **Application** (Chrome) or **Storage** (Firefox) > **Session Storage**
-4. Find the entry for your dashboard's URL
-5. Copy the value of the `session` key: this contains your access token
+## Programmatic access
 
-You can then use it in curl:
+For scripts or CI/CD pipelines, use [API keys](../guides/api-keys.md) instead of OAuth:
 
 ```sh
-export TOKEN="your-token-here"
+export TOKEN="hv_your-api-key-here"
 curl http://localhost:3000/admin/lexicons \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Tokens expire based on AIP's configuration. When a token expires, log in again through the dashboard to get a new one.
+API keys are created via the dashboard or `POST /admin/api-keys`. See the [API Keys guide](../guides/api-keys.md) for details.
 
-## Programmatic access
+## How authentication works
 
-For scripts or applications that need to authenticate programmatically, you'll need to implement the AT Protocol OAuth flow against your AIP instance. This involves:
+HappyView supports three authentication methods:
 
-1. Registering an OAuth client with AIP
-2. Redirecting the user to AIP's authorization endpoint
-3. Exchanging the authorization code for an access token
-4. Using that token with HappyView
+1. **Session cookie** (web UI) — Set during the OAuth callback flow. The signed cookie contains the user's DID, which HappyView reads on each request.
+2. **API key** (programmatic) — Bearer tokens starting with `hv_`. HappyView looks up the key hash in the database to resolve the caller's DID and permissions.
+3. **Service auth JWT** (AT Protocol inter-service) — Standard AT Protocol service authentication via signed JWTs. HappyView validates the signature by resolving the issuer's DID document.
 
-See the [AIP documentation](https://github.com/graze-social/aip) for endpoint details and the [ATProto OAuth spec](https://atproto.com/specs/oauth) for the full protocol.
-
-## How token validation works
-
-When HappyView receives an authenticated request, it forwards the token to AIP's `/oauth/userinfo` endpoint. AIP responds with the user's DID, which HappyView uses to:
-
-- Identify who is making the request
-- Proxy writes to the correct PDS
-- Check admin permissions (for admin endpoints)
-
-Token validation happens on every request; there is no local token caching.
+For write operations (procedures), HappyView uses the stored OAuth session to proxy writes to the user's PDS. The `atrium-oauth` library handles DPoP proof generation and token refresh automatically.
 
 ## Admin access
 

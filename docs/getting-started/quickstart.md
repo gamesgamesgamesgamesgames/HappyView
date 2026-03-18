@@ -8,7 +8,7 @@ Pick whichever option fits your situation:
 
 | Option                                     | Best for                                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------------------------ |
-| [**Railway**](deployment/railway.md)       | Fastest path — one-click deploy of the full stack (HappyView + AIP + Tap + Postgres) |
+| [**Railway**](deployment/railway.md)       | Fastest path — one-click deploy of the full stack (HappyView + Tap + Postgres) |
 | [**Docker Compose**](deployment/docker.md) | Local development with the full stack in containers                                  |
 | [**From source**](deployment/other.md)     | Running HappyView with `cargo run` and managing dependencies yourself                |
 

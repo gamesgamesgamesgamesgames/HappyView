@@ -23,7 +23,7 @@ For more background on how the app works, see the [ATProto Statusphere guide](ht
 
 First, upload the `xyz.statusphere.status` lexicon to HappyView. This tells HappyView to start indexing Statusphere records from across the network as they're created, updated, or deleted.
 
-The examples below use `$TOKEN` as a placeholder for an AIP-issued access token. See [Authentication](../getting-started/authentication.md) for how to get one.
+The examples below use `$TOKEN` as a placeholder for an API key. See [Authentication](../getting-started/authentication.md) and the [API Keys guide](../guides/api-keys.md) for how to get one.
 
 ```sh
 curl -X POST http://localhost:3000/admin/lexicons \

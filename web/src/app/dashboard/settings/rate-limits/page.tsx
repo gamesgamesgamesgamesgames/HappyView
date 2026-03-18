@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getRateLimits,
@@ -38,7 +37,6 @@ import {
 } from "@/components/ui/table";
 
 export default function RateLimitsPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [enabled, setEnabled] = useState(false);
   const [capacity, setCapacity] = useState("");
@@ -59,7 +57,7 @@ export default function RateLimitsPage() {
   const [origProxyCost, setOrigProxyCost] = useState("");
 
   const load = useCallback(() => {
-    getRateLimits(getToken)
+    getRateLimits()
       .then((data) => {
         setEnabled(data.enabled);
         setCapacity(String(data.capacity));
@@ -75,7 +73,7 @@ export default function RateLimitsPage() {
         setAllowlist(data.allowlist);
       })
       .catch((e) => setError(e.message));
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -91,7 +89,7 @@ export default function RateLimitsPage() {
   async function handleToggleEnabled(checked: boolean) {
     setToggling(true);
     try {
-      await setRateLimitEnabled(getToken, { enabled: checked });
+      await setRateLimitEnabled({ enabled: checked });
       setEnabled(checked);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -117,7 +115,7 @@ export default function RateLimitsPage() {
     }
     setSaving(true);
     try {
-      await upsertRateLimit(getToken, {
+      await upsertRateLimit({
         capacity: cap,
         refill_rate: rate,
         default_query_cost: qc || 1,
@@ -134,7 +132,7 @@ export default function RateLimitsPage() {
 
   async function handleRemoveAllowlistEntry(id: number) {
     try {
-      await removeAllowlistEntry(getToken, id);
+      await removeAllowlistEntry(id);
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -249,7 +247,7 @@ export default function RateLimitsPage() {
               </p>
             </div>
             {canEdit && (
-              <AddAllowlistDialog getToken={getToken} onSuccess={load} />
+              <AddAllowlistDialog onSuccess={load} />
             )}
           </div>
 
@@ -306,10 +304,8 @@ export default function RateLimitsPage() {
 }
 
 function AddAllowlistDialog({
-  getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>;
   onSuccess: () => void;
 }) {
   const [cidr, setCidr] = useState("");
@@ -322,7 +318,7 @@ function AddAllowlistDialog({
     try {
       const body: { cidr: string; note?: string } = { cidr: cidr.trim() };
       if (note.trim()) body.note = note.trim();
-      await addAllowlistEntry(getToken, body);
+      await addAllowlistEntry(body);
       setCidr("");
       setNote("");
       setOpen(false);

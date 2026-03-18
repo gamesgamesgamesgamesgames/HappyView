@@ -1,5 +1,3 @@
-import { createDpopProof, setDpopNonce } from "./dpop"
-
 import type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 import type { StatsResponse } from "@/types/stats"
 import type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
@@ -27,12 +25,6 @@ export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
 export type { AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
 
-// The DPoP proof for admin API calls must target AIP's userinfo URL,
-// because the backend forwards the proof to AIP for token validation.
-// Set at runtime via ConfigProvider.
-let aipUrl = ""
-export function setAipUrl(url: string) { aipUrl = url }
-
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -43,21 +35,9 @@ export class ApiError extends Error {
 
 async function apiFetch<T = unknown>(
   path: string,
-  getToken: () => Promise<string | null>,
   options?: RequestInit,
-  dpopNonce?: string
 ): Promise<T> {
-  const token = await getToken()
-  if (!token) throw new ApiError(401, "Not authenticated")
-
-  // Proof targets AIP's userinfo endpoint (GET) since the backend
-  // forwards it there for token validation.
-  const dpopProof = await createDpopProof("GET", `${aipUrl}/oauth/userinfo`, token, dpopNonce)
-
-  const headers: Record<string, string> = {
-    Authorization: `DPoP ${token}`,
-    DPoP: dpopProof,
-  }
+  const headers: Record<string, string> = {}
   if (
     options?.method === "POST" ||
     options?.method === "PUT" ||
@@ -69,22 +49,8 @@ async function apiFetch<T = unknown>(
   const res = await fetch(path, {
     ...options,
     headers: { ...headers, ...options?.headers },
+    credentials: "same-origin",
   })
-
-  // If AIP requires a DPoP nonce, the backend relays it via both
-  // the dpop-nonce response header and the JSON body. Retry once.
-  if (res.status === 401 && !dpopNonce) {
-    const text = await res.text().catch(() => "")
-    let nonce = res.headers.get("dpop-nonce")
-    if (!nonce) {
-      try { nonce = JSON.parse(text).dpop_nonce } catch { /* not JSON */ }
-    }
-    if (nonce) {
-      setDpopNonce(nonce)
-      return apiFetch<T>(path, getToken, options, nonce)
-    }
-    throw new ApiError(res.status, text)
-  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
@@ -97,24 +63,22 @@ async function apiFetch<T = unknown>(
 }
 
 // Stats
-export function getStats(getToken: () => Promise<string | null>) {
-  return apiFetch<StatsResponse>("/admin/stats", getToken)
+export function getStats() {
+  return apiFetch<StatsResponse>("/admin/stats")
 }
 
 // Lexicons
-export function getLexicons(getToken: () => Promise<string | null>) {
-  return apiFetch<LexiconSummary[]>("/admin/lexicons", getToken)
+export function getLexicons() {
+  return apiFetch<LexiconSummary[]>("/admin/lexicons")
 }
 
-export function getLexicon(getToken: () => Promise<string | null>, id: string) {
+export function getLexicon(id: string) {
   return apiFetch<LexiconDetail>(
     `/admin/lexicons/${encodeURIComponent(id)}`,
-    getToken
   )
 }
 
 export function uploadLexicon(
-  getToken: () => Promise<string | null>,
   body: {
     lexicon_json: unknown
     backfill?: boolean
@@ -125,128 +89,119 @@ export function uploadLexicon(
     token_cost?: number | null
   }
 ) {
-  return apiFetch<{ id: string; revision: number }>("/admin/lexicons", getToken, {
+  return apiFetch<{ id: string; revision: number }>("/admin/lexicons", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function deleteLexicon(getToken: () => Promise<string | null>, id: string) {
-  return apiFetch(`/admin/lexicons/${encodeURIComponent(id)}`, getToken, {
+export function deleteLexicon(id: string) {
+  return apiFetch(`/admin/lexicons/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }
 
 // Network Lexicons
-export function getNetworkLexicons(getToken: () => Promise<string | null>) {
-  return apiFetch<NetworkLexiconSummary[]>("/admin/network-lexicons", getToken)
+export function getNetworkLexicons() {
+  return apiFetch<NetworkLexiconSummary[]>("/admin/network-lexicons")
 }
 
 export function addNetworkLexicon(
-  getToken: () => Promise<string | null>,
   body: { nsid: string; target_collection?: string }
 ) {
   return apiFetch<{ nsid: string; authority_did: string; revision: number }>(
     "/admin/network-lexicons",
-    getToken,
     { method: "POST", body: JSON.stringify(body) }
   )
 }
 
 export function deleteNetworkLexicon(
-  getToken: () => Promise<string | null>,
   nsid: string
 ) {
   return apiFetch(
     `/admin/network-lexicons/${encodeURIComponent(nsid)}`,
-    getToken,
     { method: "DELETE" }
   )
 }
 
 // Tap Stats
-export function getTapStats(getToken: () => Promise<string | null>) {
-  return apiFetch<TapStatsResponse>("/admin/tap/stats", getToken)
+export function getTapStats() {
+  return apiFetch<TapStatsResponse>("/admin/tap/stats")
 }
 
 // Backfill
-export function getBackfillJobs(getToken: () => Promise<string | null>) {
-  return apiFetch<BackfillJob[]>("/admin/backfill/status", getToken)
+export function getBackfillJobs() {
+  return apiFetch<BackfillJob[]>("/admin/backfill/status")
 }
 
 export function createBackfillJob(
-  getToken: () => Promise<string | null>,
   body: { collection?: string; did?: string }
 ) {
-  return apiFetch<{ id: string; status: string }>("/admin/backfill", getToken, {
+  return apiFetch<{ id: string; status: string }>("/admin/backfill", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
 // Users
-export function getUsers(getToken: () => Promise<string | null>) {
-  return apiFetch<UserSummary[]>("/admin/users", getToken)
+export function getUsers() {
+  return apiFetch<UserSummary[]>("/admin/users")
 }
 
-export function getUser(getToken: () => Promise<string | null>, id: string) {
-  return apiFetch<UserSummary>(`/admin/users/${encodeURIComponent(id)}`, getToken)
+export function getUser(id: string) {
+  return apiFetch<UserSummary>(`/admin/users/${encodeURIComponent(id)}`)
 }
 
 export function addUser(
-  getToken: () => Promise<string | null>,
   body: { did: string; template?: string; permissions?: string[] }
 ) {
-  return apiFetch<{ id: string; did: string }>("/admin/users", getToken, {
+  return apiFetch<{ id: string; did: string }>("/admin/users", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function deleteUser(getToken: () => Promise<string | null>, id: string) {
-  return apiFetch(`/admin/users/${encodeURIComponent(id)}`, getToken, {
+export function deleteUser(id: string) {
+  return apiFetch(`/admin/users/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }
 
 export function updateUserPermissions(
-  getToken: () => Promise<string | null>,
   id: string,
   body: { grant?: string[]; revoke?: string[] }
 ) {
-  return apiFetch(`/admin/users/${encodeURIComponent(id)}/permissions`, getToken, {
+  return apiFetch(`/admin/users/${encodeURIComponent(id)}/permissions`, {
     method: "PATCH",
     body: JSON.stringify(body),
   })
 }
 
 export function transferSuper(
-  getToken: () => Promise<string | null>,
   body: { target_user_id: string }
 ) {
-  return apiFetch("/admin/users/transfer-super", getToken, {
+  return apiFetch("/admin/users/transfer-super", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
 // API Keys
-export function getApiKeys(getToken: () => Promise<string | null>) {
-  return apiFetch<ApiKeySummary[]>("/admin/api-keys", getToken)
+export function getApiKeys() {
+  return apiFetch<ApiKeySummary[]>("/admin/api-keys")
 }
 
 export function createApiKey(
-  getToken: () => Promise<string | null>,
   body: { name: string; permissions: string[] }
 ) {
-  return apiFetch<CreateApiKeyResponse>("/admin/api-keys", getToken, {
+  return apiFetch<CreateApiKeyResponse>("/admin/api-keys", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function revokeApiKey(getToken: () => Promise<string | null>, id: string) {
-  return apiFetch(`/admin/api-keys/${encodeURIComponent(id)}`, getToken, {
+export function revokeApiKey(id: string) {
+  return apiFetch(`/admin/api-keys/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }
@@ -267,7 +222,6 @@ export async function xrpcQuery<T = unknown>(
 
 // Admin records browsing
 export function getAdminRecords(
-  getToken: () => Promise<string | null>,
   collection: string,
   limit?: number,
   cursor?: string
@@ -277,100 +231,88 @@ export function getAdminRecords(
   if (cursor) params.set("cursor", cursor)
   return apiFetch<AdminListRecordsResponse>(
     `/admin/records?${params}`,
-    getToken
   )
 }
 
 export function deleteRecord(
-  getToken: () => Promise<string | null>,
   uri: string
 ) {
   return apiFetch(
     `/admin/records?${new URLSearchParams({ uri })}`,
-    getToken,
     { method: "DELETE" }
   )
 }
 
 export function deleteCollectionRecords(
-  getToken: () => Promise<string | null>,
   collection: string,
 ) {
   return apiFetch<{ deleted: number }>(
     `/admin/records/collection?${new URLSearchParams({ collection })}`,
-    getToken,
     { method: "DELETE" },
   )
 }
 
 // Script Variables
-export function getScriptVariables(getToken: () => Promise<string | null>) {
-  return apiFetch<ScriptVariableSummary[]>("/admin/script-variables", getToken)
+export function getScriptVariables() {
+  return apiFetch<ScriptVariableSummary[]>("/admin/script-variables")
 }
 
 export function upsertScriptVariable(
-  getToken: () => Promise<string | null>,
   body: { key: string; value: string }
 ) {
-  return apiFetch("/admin/script-variables", getToken, {
+  return apiFetch("/admin/script-variables", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
 export function deleteScriptVariable(
-  getToken: () => Promise<string | null>,
   key: string
 ) {
   return apiFetch(
     `/admin/script-variables/${encodeURIComponent(key)}`,
-    getToken,
     { method: "DELETE" }
   )
 }
 
 // Labelers
-export function getLabelers(getToken: () => Promise<string | null>) {
-  return apiFetch<LabelerSummary[]>("/admin/labelers", getToken)
+export function getLabelers() {
+  return apiFetch<LabelerSummary[]>("/admin/labelers")
 }
 
 export function addLabeler(
-  getToken: () => Promise<string | null>,
   body: { did: string }
 ) {
-  return apiFetch("/admin/labelers", getToken, {
+  return apiFetch("/admin/labelers", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
 export function updateLabeler(
-  getToken: () => Promise<string | null>,
   did: string,
   body: { status: string }
 ) {
-  return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, getToken, {
+  return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, {
     method: "PATCH",
     body: JSON.stringify(body),
   })
 }
 
 export function deleteLabeler(
-  getToken: () => Promise<string | null>,
   did: string
 ) {
-  return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, getToken, {
+  return apiFetch(`/admin/labelers/${encodeURIComponent(did)}`, {
     method: "DELETE",
   })
 }
 
 // Rate Limits
-export function getRateLimits(getToken: () => Promise<string | null>) {
-  return apiFetch<RateLimitsResponse>("/admin/rate-limits", getToken)
+export function getRateLimits() {
+  return apiFetch<RateLimitsResponse>("/admin/rate-limits")
 }
 
 export function upsertRateLimit(
-  getToken: () => Promise<string | null>,
   body: {
     capacity: number
     refill_rate: number
@@ -379,44 +321,40 @@ export function upsertRateLimit(
     default_proxy_cost: number
   }
 ) {
-  return apiFetch("/admin/rate-limits", getToken, {
+  return apiFetch("/admin/rate-limits", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
 export function setRateLimitEnabled(
-  getToken: () => Promise<string | null>,
   body: { enabled: boolean }
 ) {
-  return apiFetch("/admin/rate-limits/enabled", getToken, {
+  return apiFetch("/admin/rate-limits/enabled", {
     method: "PUT",
     body: JSON.stringify(body),
   })
 }
 
 export function addAllowlistEntry(
-  getToken: () => Promise<string | null>,
   body: { cidr: string; note?: string }
 ) {
-  return apiFetch("/admin/rate-limits/allowlist", getToken, {
+  return apiFetch("/admin/rate-limits/allowlist", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
 export function removeAllowlistEntry(
-  getToken: () => Promise<string | null>,
   id: number
 ) {
-  return apiFetch(`/admin/rate-limits/allowlist/${encodeURIComponent(id)}`, getToken, {
+  return apiFetch(`/admin/rate-limits/allowlist/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }
 
 // Event Logs
 export function getEvents(
-  getToken: () => Promise<string | null>,
   params?: {
     category?: string
     severity?: string
@@ -434,6 +372,5 @@ export function getEvents(
   const qs = searchParams.toString()
   return apiFetch<EventsListResponse>(
     `/admin/events${qs ? `?${qs}` : ""}`,
-    getToken
   )
 }

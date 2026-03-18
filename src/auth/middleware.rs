@@ -1,16 +1,20 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use serde::Deserialize;
+use axum_extra::extract::cookie::{Key, SignedCookieJar};
 
 use crate::AppState;
+use crate::auth::COOKIE_NAME;
 use crate::error::AppError;
 
-/// Authenticated user identity extracted from an AIP-issued access token.
+/// Authenticated user identity.
+///
+/// Tries two auth paths in order:
+/// 1. Signed cookie (web UI sessions via OAuth)
+/// 2. Bearer token starting with `hv_` (API key — handled downstream by UserAuth)
+/// 3. Bearer service auth JWT (AT Protocol inter-service calls)
 #[derive(Debug, Clone)]
 pub struct Claims {
     did: String,
-    token: String,
-    dpop_proof: Option<String>,
 }
 
 impl Claims {
@@ -19,34 +23,13 @@ impl Claims {
         &self.did
     }
 
-    /// The raw access token for forwarding to AIP's XRPC proxy.
-    pub fn token(&self) -> &str {
-        &self.token
-    }
-
-    /// The DPoP proof from the client request, if present.
-    pub fn dpop_proof(&self) -> Option<&str> {
-        self.dpop_proof.as_deref()
-    }
-
     /// Test-only constructor.
     #[cfg(test)]
-    pub fn new_for_test(did: String, token: String) -> Self {
-        Self {
-            did,
-            token,
-            dpop_proof: None,
-        }
+    pub fn new_for_test(did: String) -> Self {
+        Self { did }
     }
 }
 
-#[derive(Deserialize)]
-struct UserinfoResponse {
-    sub: String,
-}
-
-/// Axum extractor that validates the Bearer token by forwarding it to AIP's
-/// `/oauth/userinfo` endpoint. AIP returns the DID in the `sub` field.
 impl FromRequestParts<AppState> for Claims {
     type Rejection = AppError;
 
@@ -54,90 +37,62 @@ impl FromRequestParts<AppState> for Claims {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        // Path 1: Cookie auth (web UI)
+        let jar: SignedCookieJar<Key> = SignedCookieJar::from_request_parts(parts, state)
+            .await
+            .map_err(|_| AppError::Auth("failed to read cookies".into()))?;
+
+        if let Some(cookie) = jar.get(COOKIE_NAME) {
+            let did = cookie.value().to_string();
+            return Ok(Claims { did });
+        }
+
+        // Path 2: Authorization header
         let header = parts
             .headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AppError::Auth("missing Authorization header".into()))?;
+            .ok_or_else(|| {
+                AppError::Auth("missing Authorization header or session cookie".into())
+            })?;
 
-        let (scheme, token) = if let Some(t) = header.strip_prefix("DPoP ") {
-            ("DPoP", t)
-        } else if let Some(t) = header.strip_prefix("Bearer ") {
-            ("Bearer", t)
-        } else {
-            return Err(AppError::Auth("invalid Authorization scheme".into()));
-        };
-
-        let dpop_proof = parts
-            .headers
-            .get("dpop")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string());
-
-        let userinfo_url = format!(
-            "{}/oauth/userinfo",
-            state.config.aip_url.trim_end_matches('/')
-        );
-
-        tracing::debug!(
-            url = %userinfo_url,
-            scheme = %scheme,
-            has_dpop_proof = dpop_proof.is_some(),
-            "forwarding token to AIP userinfo"
-        );
-
-        let mut req = state
-            .http
-            .get(&userinfo_url)
-            .header("authorization", format!("{scheme} {token}"));
-
-        if let Some(ref proof) = dpop_proof {
-            req = req.header("dpop", proof);
-        }
-
-        let resp = req.send().await.map_err(|e| {
-            tracing::error!(url = %userinfo_url, error = %e, "AIP userinfo request failed to send");
-            AppError::Auth(format!("userinfo request failed: {e}"))
-        })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let nonce = resp
-                .headers()
-                .get("dpop-nonce")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from);
-            let body = resp.text().await.unwrap_or_default();
-
-            tracing::warn!(
-                url = %userinfo_url,
-                status = %status,
-                body = %body,
-                dpop_nonce = ?nonce,
-                has_dpop_proof = dpop_proof.is_some(),
-                "AIP userinfo request failed"
-            );
-
-            // Relay the nonce so the client can retry with it.
-            if let Some(ref nonce_str) = nonce {
-                return Err(AppError::AuthDpopNonce(nonce_str.clone()));
+        if let Some(token) = header.strip_prefix("Bearer ") {
+            // API key tokens start with hv_ — let them through with a placeholder DID.
+            // The admin middleware (UserAuth) will resolve the actual DID from the API key.
+            if token.starts_with("hv_") {
+                // API key auth is handled by UserAuth extractor which looks up the key.
+                // We need to extract the DID from the api_keys table.
+                let did = resolve_api_key_did(state, token).await?;
+                return Ok(Claims { did });
             }
 
-            return Err(AppError::Auth(format!(
-                "userinfo returned {}: {}",
-                status, body
-            )));
+            // Otherwise, try service auth JWT
+            let service_auth = super::service_auth::ServiceAuth::from_bearer(token, state).await?;
+            return Ok(Claims {
+                did: service_auth.did,
+            });
         }
 
-        let info: UserinfoResponse = resp
-            .json()
-            .await
-            .map_err(|e| AppError::Auth(format!("invalid userinfo response: {e}")))?;
-
-        Ok(Claims {
-            did: info.sub,
-            token: token.to_string(),
-            dpop_proof,
-        })
+        Err(AppError::Auth("invalid Authorization scheme".into()))
     }
+}
+
+/// Look up the DID associated with an API key.
+async fn resolve_api_key_did(state: &AppState, token: &str) -> Result<String, AppError> {
+    use crate::db::adapt_sql;
+    use sha2::{Digest, Sha256};
+
+    let hash = hex::encode(Sha256::digest(token.as_bytes()));
+    let sql = adapt_sql(
+        "SELECT u.did FROM api_keys k JOIN users u ON k.user_id = u.id WHERE k.key_hash = ? AND k.revoked_at IS NULL",
+        state.db_backend,
+    );
+    let row: Option<(String,)> = sqlx::query_as(&sql)
+        .bind(&hash)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("API key lookup failed: {e}")))?;
+
+    row.map(|(did,)| did)
+        .ok_or_else(|| AppError::Auth("invalid API key".into()))
 }

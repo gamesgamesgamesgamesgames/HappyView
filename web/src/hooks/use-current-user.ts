@@ -5,14 +5,14 @@ import { getUsers } from "@/lib/api";
 import type { UserSummary } from "@/types/users";
 
 export function useCurrentUser() {
-  const { getToken, did } = useAuth();
+  const { did } = useAuth();
   const [currentUser, setCurrentUser] = useState<UserSummary | null>(null);
 
   const load = useCallback(() => {
-    getUsers(getToken)
+    getUsers()
       .then((users) => setCurrentUser(users.find((u) => u.did === did) ?? null))
       .catch(() => setCurrentUser(null));
-  }, [getToken, did]);
+  }, [did]);
 
   useEffect(() => {
     load();

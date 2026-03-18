@@ -104,8 +104,3 @@ pub fn profile_record() -> Value {
         }
     })
 }
-
-/// A fake AIP userinfo response.
-pub fn userinfo_response(did: &str) -> Value {
-    json!({ "sub": did })
-}

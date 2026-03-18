@@ -7,7 +7,7 @@ If a query or procedure lexicon has a [Lua script](../guides/scripting.md) attac
 ## Auth
 
 - **Queries** (`GET /xrpc/{method}`): unauthenticated
-- **Procedures** (`POST /xrpc/{method}`): require an AIP-issued `Authorization: Bearer <token>` header
+- **Procedures** (`POST /xrpc/{method}`): require authentication (session cookie, API key, or service auth JWT)
 - **getProfile**: requires auth
 - **uploadBlob**: requires auth
 
@@ -184,7 +184,7 @@ All error responses return JSON with an `error` field:
 | Status | Meaning | Common causes |
 |--------|---------|---------------|
 | `400 Bad Request` | Invalid input | Missing required fields, malformed JSON, invalid AT URI |
-| `401 Unauthorized` | Authentication failed | Missing or invalid Bearer token. See [AIP documentation](https://github.com/graze-social/aip) for token issues |
+| `401 Unauthorized` | Authentication failed | Missing or invalid session cookie, API key, or service auth JWT |
 | `404 Not Found` | Method or record not found | XRPC method has no matching lexicon, or the requested record doesn't exist |
 | `500 Internal Server Error` | Server-side failure | Lua script error, database error, or upstream PDS failure |
 

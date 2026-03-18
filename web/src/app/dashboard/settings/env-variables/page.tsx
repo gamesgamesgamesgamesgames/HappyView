@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Trash2, Pencil } from "lucide-react";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getScriptVariables,
@@ -36,16 +35,15 @@ import {
 } from "@/components/ui/table";
 
 export default function EnvVariablesPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [vars, setVars] = useState<ScriptVariableSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getScriptVariables(getToken)
+    getScriptVariables()
       .then(setVars)
       .catch((e) => setError(e.message));
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -53,7 +51,7 @@ export default function EnvVariablesPage() {
 
   async function handleDeleteVar(key: string) {
     try {
-      await deleteScriptVariable(getToken, key);
+      await deleteScriptVariable(key);
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -75,7 +73,7 @@ export default function EnvVariablesPage() {
             </p>
           </div>
           {hasPermission("script-variables:create") && (
-            <UpsertVariableDialog getToken={getToken} onSuccess={load} />
+            <UpsertVariableDialog onSuccess={load} />
           )}
         </div>
 
@@ -114,7 +112,6 @@ export default function EnvVariablesPage() {
                   <TableCell className="w-20 sticky right-0 bg-inherit z-[1]">
                     <div className="flex gap-1">
                       <UpsertVariableDialog
-                        getToken={getToken}
                         onSuccess={load}
                         editKey={v.key}
                       />
@@ -143,11 +140,9 @@ export default function EnvVariablesPage() {
 }
 
 function UpsertVariableDialog({
-  getToken,
   onSuccess,
   editKey,
 }: {
-  getToken: () => Promise<string | null>;
   onSuccess: () => void;
   editKey?: string;
 }) {
@@ -161,7 +156,7 @@ function UpsertVariableDialog({
   async function handleSave() {
     setError(null);
     try {
-      await upsertScriptVariable(getToken, {
+      await upsertScriptVariable({
         key: isEdit ? editKey : key,
         value,
       });

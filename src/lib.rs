@@ -1,8 +1,8 @@
 pub mod admin;
-pub mod aip;
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod dns;
 pub mod error;
 pub mod event_log;
 pub mod labeler;
@@ -17,12 +17,32 @@ pub mod server;
 pub mod tap;
 pub mod xrpc;
 
+use auth::oauth_store::{DbSessionStore, DbStateStore};
 use config::Config;
 use db::DatabaseBackend;
+use dns::NativeDnsResolver;
 use lexicon::LexiconRegistry;
 use rate_limit::RateLimiter;
 use std::sync::Arc;
 use tokio::sync::watch;
+
+use atrium_identity::did::CommonDidResolver;
+use atrium_identity::handle::AtprotoHandleResolver;
+use atrium_oauth::DefaultHttpClient;
+
+pub type HappyViewOAuthClient = atrium_oauth::OAuthClient<
+    DbStateStore,
+    DbSessionStore,
+    CommonDidResolver<DefaultHttpClient>,
+    AtprotoHandleResolver<NativeDnsResolver, DefaultHttpClient>,
+>;
+
+pub type HappyViewOAuthSession = atrium_oauth::OAuthSession<
+    DefaultHttpClient,
+    CommonDidResolver<DefaultHttpClient>,
+    AtprotoHandleResolver<NativeDnsResolver, DefaultHttpClient>,
+    DbSessionStore,
+>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,4 +54,12 @@ pub struct AppState {
     pub collections_tx: watch::Sender<Vec<String>>,
     pub labeler_subscriptions_tx: watch::Sender<()>,
     pub rate_limiter: Arc<RateLimiter>,
+    pub oauth: Arc<HappyViewOAuthClient>,
+    pub cookie_key: axum_extra::extract::cookie::Key,
+}
+
+impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {
+    fn from_ref(state: &AppState) -> Self {
+        state.cookie_key.clone()
+    }
 }

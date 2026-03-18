@@ -1,13 +1,12 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
-import { setAipUrl } from "./api"
 
 interface ConfigContextType {
-  aip_url: string
+  public_url: string
 }
 
-const ConfigContext = createContext<ConfigContextType>({ aip_url: "" })
+const ConfigContext = createContext<ConfigContextType>({ public_url: "" })
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<ConfigContextType | null>(null)
@@ -20,8 +19,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         return res.json()
       })
       .then((data) => {
-        setAipUrl(data.aip_url)
-        setConfig({ aip_url: data.aip_url })
+        setConfig({ public_url: data.public_url })
       })
       .catch((e) => setError(e.message))
   }, [])

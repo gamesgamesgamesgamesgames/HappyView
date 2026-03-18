@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Check } from "lucide-react";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getApiKeys,
@@ -54,16 +53,15 @@ const PERMISSION_CATEGORIES: Record<string, string[]> = {
 const ALL_PERMISSIONS = Object.values(PERMISSION_CATEGORIES).flat();
 
 export default function ApiKeysPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [keys, setKeys] = useState<ApiKeySummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getApiKeys(getToken)
+    getApiKeys()
       .then(setKeys)
       .catch((e) => setError(e.message));
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -71,7 +69,7 @@ export default function ApiKeysPage() {
 
   async function handleRevoke(id: string) {
     try {
-      await revokeApiKey(getToken, id);
+      await revokeApiKey(id);
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -87,7 +85,7 @@ export default function ApiKeysPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">API Keys</h2>
           {hasPermission("api-keys:create") && (
-            <CreateApiKeyDialog getToken={getToken} onSuccess={load} />
+            <CreateApiKeyDialog onSuccess={load} />
           )}
         </div>
 
@@ -187,10 +185,8 @@ export default function ApiKeysPage() {
 }
 
 function CreateApiKeyDialog({
-  getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>;
   onSuccess: () => void;
 }) {
   const [name, setName] = useState("");
@@ -237,7 +233,7 @@ function CreateApiKeyDialog({
   async function handleCreate() {
     setError(null);
     try {
-      const result = await createApiKey(getToken, {
+      const result = await createApiKey({
         name,
         permissions: selectedPermissions,
       });

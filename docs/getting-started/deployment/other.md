@@ -1,11 +1,10 @@
 # Local Development from Source
 
-This guide runs HappyView directly with `cargo run`, with you managing AIP and Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker.md).
+This guide runs HappyView directly with `cargo run`, with you managing Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker.md).
 
 ## Prerequisites
 
 - Rust (stable)
-- A running [AIP](https://github.com/graze-social/aip) instance (handles OAuth). See the [AIP documentation](https://github.com/graze-social/aip) for setup.
 - A running [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance (delivers real-time records and handles backfill). See the [Tap documentation](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) for setup.
 - (Optional) PostgreSQL 17+ if you prefer Postgres over the default SQLite
 
@@ -22,7 +21,8 @@ Edit `.env` to point at your running services:
 ```sh
 # SQLite (default — no setup needed, file created automatically)
 DATABASE_URL=sqlite://data/happyview.db?mode=rwc
-AIP_URL=http://localhost:8080
+PUBLIC_URL=http://localhost:3000
+SESSION_SECRET=change-me-in-production
 TAP_URL=http://localhost:2480
 TAP_ADMIN_PASSWORD=your-secret-here
 ```

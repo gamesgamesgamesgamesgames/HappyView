@@ -10,7 +10,7 @@ use crate::error::AppError;
 use crate::rate_limit::CheckResult;
 
 use super::pds::pds_post_blob;
-use super::session::get_atp_session;
+use super::session::get_oauth_session;
 
 pub async fn upload_blob(
     State(state): State<AppState>,
@@ -44,7 +44,7 @@ pub async fn upload_blob(
         });
     }
 
-    let session = get_atp_session(&state, claims.token()).await?;
+    let session = get_oauth_session(&state, claims.did()).await?;
 
     let content_type = headers
         .get("content-type")

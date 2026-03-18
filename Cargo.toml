@@ -2,20 +2,30 @@
 name = "happyview"
 version = "0.1.0"
 edition = "2024"
+default-run = "happyview"
 
 [dependencies]
 arc-swap = "1"
+atrium-oauth = { version = "0.1", features = ["default-client"] }
+atrium-identity = "0.1"
+atrium-common = "0.1"
+atrium-api = { version = "0.25", features = ["agent"] }
+atrium-xrpc = "0.12"
 axum = "0.8"
+axum-extra = { version = "0.10", features = ["cookie", "cookie-signed", "cookie-key-expansion", "query"] }
 base64 = "0.22"
 dashmap = "6"
 dotenvy = "0.15"
 hex = "0.4"
 futures-util = "0.3"
+jose-jwk = { version = "0.1", default-features = false, features = ["p256"] }
 jsonwebtoken = "9"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 ciborium = "0.2"
-p256 = { version = "0.13", features = ["pkcs8"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+multibase = "0.9"
+p256 = { version = "0.13", features = ["pkcs8", "ecdsa"] }
 uuid = { version = "1", features = ["v4"] }
 rand = "0.9"
 reqwest = { version = "0.12", features = ["json"] }

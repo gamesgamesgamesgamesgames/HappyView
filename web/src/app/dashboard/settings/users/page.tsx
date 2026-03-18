@@ -76,7 +76,7 @@ const TEMPLATE_PERMISSIONS: Record<string, string[]> = {
 };
 
 export default function UsersPage() {
-  const { getToken, did: currentDid } = useAuth();
+  const { did: currentDid } = useAuth();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [handles, setHandles] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -86,10 +86,10 @@ export default function UsersPage() {
   const isCurrentUserSuper = currentUser?.is_super ?? false;
 
   const load = useCallback(() => {
-    getUsers(getToken)
+    getUsers()
       .then(setUsers)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [getToken]);
+  }, [did]);
 
   useEffect(() => {
     load();
@@ -117,7 +117,7 @@ export default function UsersPage() {
 
   async function handleDelete(id: string) {
     try {
-      await deleteUser(getToken, id);
+      await deleteUser(id);
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -167,7 +167,7 @@ export default function UsersPage() {
       const body: { grant?: string[]; revoke?: string[] } = {};
       if (grant.length > 0) body.grant = grant;
       if (revoke.length > 0) body.revoke = revoke;
-      await updateUserPermissions(getToken, user.id, body);
+      await updateUserPermissions(user.id, body);
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -176,7 +176,7 @@ export default function UsersPage() {
 
   async function handleTransferSuper(targetUserId: string) {
     try {
-      await transferSuper(getToken, { target_user_id: targetUserId });
+      await transferSuper({ target_user_id: targetUserId });
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -192,7 +192,7 @@ export default function UsersPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Users</h2>
           {(isCurrentUserSuper || currentUser?.permissions.includes("users:create")) && (
-            <AddUserDialog getToken={getToken} onSuccess={load} />
+            <AddUserDialog onSuccess={load} />
           )}
         </div>
 
@@ -455,10 +455,8 @@ function TransferOwnershipDialog({
 }
 
 function AddUserDialog({
-  getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>;
   onSuccess: () => void;
 }) {
   const [did, setDid] = useState("");
@@ -471,7 +469,7 @@ function AddUserDialog({
     try {
       const body: { did: string; template?: string } = { did };
       if (template) body.template = template;
-      await addUser(getToken, body);
+      await addUser(body);
       setDid("");
       setTemplate("");
       setOpen(false);

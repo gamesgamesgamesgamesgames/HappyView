@@ -1,13 +1,12 @@
+use atrium_xrpc::{HttpClient, XrpcClient};
 use axum::body::Bytes;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
 
 use crate::AppState;
+use crate::HappyViewOAuthSession;
 use crate::error::AppError;
-
-use super::dpop::generate_dpop_proof;
-use super::session::AtpSession;
 
 /// Forward a PDS response back to the client, preserving status and body.
 pub(crate) async fn forward_pds_response(resp: reqwest::Response) -> Result<Response, AppError> {
@@ -33,120 +32,78 @@ pub(crate) async fn forward_pds_response(resp: reqwest::Response) -> Result<Resp
     }
 }
 
-/// POST JSON to a PDS XRPC endpoint with DPoP auth and nonce retry.
-/// Returns the raw reqwest::Response so callers can inspect the body.
+/// POST JSON to a PDS XRPC endpoint using the OAuth session.
+/// The OAuthSession handles DPoP proof generation and nonce retry internally.
 pub(crate) async fn pds_post_json_raw(
-    state: &AppState,
-    session: &AtpSession,
+    _state: &AppState,
+    session: &HappyViewOAuthSession,
     xrpc_method: &str,
     body: &Value,
 ) -> Result<reqwest::Response, AppError> {
-    let url = format!(
-        "{}/xrpc/{xrpc_method}",
-        session.pds_endpoint.trim_end_matches('/')
-    );
+    let pds_endpoint = session.base_uri();
+    let url = format!("{}/xrpc/{xrpc_method}", pds_endpoint.trim_end_matches('/'));
 
-    let dpop = generate_dpop_proof("POST", &url, &session.dpop_jwk, &session.access_token, None)?;
+    let body_bytes = serde_json::to_vec(body)
+        .map_err(|e| AppError::Internal(format!("failed to serialize body: {e}")))?;
 
-    let resp = state
-        .http
-        .post(&url)
-        .header("authorization", format!("DPoP {}", session.access_token))
-        .header("dpop", &dpop)
-        .json(body)
-        .send()
+    let request = atrium_xrpc::http::Request::builder()
+        .method("POST")
+        .uri(&url)
+        .header("content-type", "application/json")
+        .body(body_bytes)
+        .map_err(|e| AppError::Internal(format!("failed to build request: {e}")))?;
+
+    let response = session
+        .send_http(request)
         .await
         .map_err(|e| AppError::Internal(format!("PDS request failed: {e}")))?;
 
-    // Retry with nonce if PDS requires it
-    if resp.status() == reqwest::StatusCode::UNAUTHORIZED
-        && let Some(nonce) = resp
-            .headers()
-            .get("dpop-nonce")
-            .and_then(|v| v.to_str().ok())
-    {
-        let nonce = nonce.to_string();
-        tracing::debug!("retrying with DPoP nonce");
+    // Convert atrium http::Response to reqwest::Response
+    let (parts, body) = response.into_parts();
+    let http_resp = atrium_xrpc::http::Response::from_parts(parts, body);
+    let reqwest_resp = reqwest::Response::from(http_resp);
 
-        let dpop = generate_dpop_proof(
-            "POST",
-            &url,
-            &session.dpop_jwk,
-            &session.access_token,
-            Some(&nonce),
-        )?;
-
-        let resp = state
-            .http
-            .post(&url)
-            .header("authorization", format!("DPoP {}", session.access_token))
-            .header("dpop", &dpop)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("PDS request retry failed: {e}")))?;
-
-        return Ok(resp);
-    }
-
-    Ok(resp)
+    Ok(reqwest_resp)
 }
 
-/// POST a binary blob to the PDS with DPoP auth and nonce retry.
+/// POST a binary blob to the PDS with OAuth session auth.
 pub(super) async fn pds_post_blob(
-    state: &AppState,
-    session: &AtpSession,
+    _state: &AppState,
+    session: &HappyViewOAuthSession,
     content_type: &str,
     blob: Bytes,
 ) -> Result<Response, AppError> {
+    let pds_endpoint = session.base_uri();
     let url = format!(
         "{}/xrpc/com.atproto.repo.uploadBlob",
-        session.pds_endpoint.trim_end_matches('/')
+        pds_endpoint.trim_end_matches('/')
     );
 
-    let dpop = generate_dpop_proof("POST", &url, &session.dpop_jwk, &session.access_token, None)?;
-
-    let resp = state
-        .http
-        .post(&url)
-        .header("authorization", format!("DPoP {}", session.access_token))
-        .header("dpop", &dpop)
+    let request = atrium_xrpc::http::Request::builder()
+        .method("POST")
+        .uri(&url)
         .header("content-type", content_type)
-        .body(blob.clone())
-        .send()
+        .body(blob.to_vec())
+        .map_err(|e| AppError::Internal(format!("failed to build request: {e}")))?;
+
+    let response = session
+        .send_http(request)
         .await
         .map_err(|e| AppError::Internal(format!("PDS uploadBlob failed: {e}")))?;
 
-    if resp.status() == reqwest::StatusCode::UNAUTHORIZED
-        && let Some(nonce) = resp
-            .headers()
-            .get("dpop-nonce")
-            .and_then(|v| v.to_str().ok())
-    {
-        let nonce = nonce.to_string();
-        tracing::debug!("retrying uploadBlob with DPoP nonce");
+    let status = StatusCode::from_u16(response.status().as_u16()).unwrap();
+    let body_bytes = response.into_body();
 
-        let dpop = generate_dpop_proof(
-            "POST",
-            &url,
-            &session.dpop_jwk,
-            &session.access_token,
-            Some(&nonce),
-        )?;
-
-        let resp = state
-            .http
-            .post(&url)
-            .header("authorization", format!("DPoP {}", session.access_token))
-            .header("dpop", &dpop)
-            .header("content-type", content_type)
-            .body(blob)
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("PDS uploadBlob retry failed: {e}")))?;
-
-        return forward_pds_response(resp).await;
+    if status.is_success() {
+        Ok((
+            status,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            Bytes::from(body_bytes),
+        )
+            .into_response())
+    } else {
+        let body_str = String::from_utf8_lossy(&body_bytes);
+        tracing::warn!(status = %status, body = %body_str, "PDS uploadBlob returned error");
+        Err(AppError::PdsError(status, Bytes::from(body_bytes)))
     }
-
-    forward_pds_response(resp).await
 }

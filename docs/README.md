@@ -8,7 +8,7 @@ Building an AppView from scratch means wiring up firehose connections, record st
 
 - 📜 **Lexicon-Driven**: Upload your lexicon schemas and HappyView generates fully functional XRPC query and procedure endpoints automatically, no code required
 - 🔄 **Real-Time Sync**: Records stream in from the AT Protocol network in real-time via [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), with cryptographic verification and backfill via the admin API
-- 🔐 **OAuth Built In**: [AIP](https://github.com/graze-social/aip) handles authentication, and writes are proxied back to the user's PDS, so there's no session management needed
+- 🔐 **OAuth Built In**: AT Protocol OAuth is handled natively via `atrium-oauth`, and writes are proxied back to the user's PDS with automatic DPoP and token refresh
 - 🌙 **Lua Scripting**: Add custom query and procedure logic with Lua scripts that have full access to the record database
 - 🗄️ **Automatic Indexing**: HappyView indexes relevant records into PostgreSQL as they arrive, ready to query
 - 🪝 **Index Hooks**: Attach Lua scripts to record collections that fire on every create, update, or delete — sync to search engines, trigger webhooks, or build materialized views in real time

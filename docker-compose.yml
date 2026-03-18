@@ -49,7 +49,8 @@ services:
       - cargo-target:/app/target
     environment:
       DATABASE_URL: ${DATABASE_URL}/happyview
-      AIP_URL: ${AIP_URL}
+      PUBLIC_URL: ${PUBLIC_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
       TAP_URL: ${TAP_URL}
       TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
       RELAY_URL: ${RELAY_URL}
@@ -73,7 +74,6 @@ services:
     environment:
       HOSTNAME: ${WEB_HOSTNAME}
       API_URL: ${API_URL}
-      AIP_PROXY_URL: ${AIP_PROXY_URL}
 
 volumes:
   # Uncomment if using Postgres:

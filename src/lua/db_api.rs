@@ -618,8 +618,8 @@ mod tests {
             port: 3000,
             database_url: String::new(),
             database_backend: crate::db::DatabaseBackend::Sqlite,
-            aip_url: String::new(),
-            aip_public_url: String::new(),
+            public_url: String::new(),
+            session_secret: "test-secret".into(),
             tap_url: String::new(),
             tap_admin_password: None,
             relay_url: String::new(),
@@ -630,10 +630,48 @@ mod tests {
         let (tx, _) = watch::channel(vec![]);
         let (labeler_tx, _) = watch::channel(());
         sqlx::any::install_default_drivers();
+        let test_db = sqlx::AnyPool::connect_lazy("sqlite::memory:").unwrap();
+        let atrium_http = std::sync::Arc::new(atrium_oauth::DefaultHttpClient::default());
+        let did_resolver = atrium_identity::did::CommonDidResolver::new(
+            atrium_identity::did::CommonDidResolverConfig {
+                plc_directory_url: "https://plc.directory".into(),
+                http_client: std::sync::Arc::clone(&atrium_http),
+            },
+        );
+        let handle_resolver = atrium_identity::handle::AtprotoHandleResolver::new(
+            atrium_identity::handle::AtprotoHandleResolverConfig {
+                dns_txt_resolver: crate::dns::NativeDnsResolver::new(),
+                http_client: atrium_http,
+            },
+        );
+        let oauth = atrium_oauth::OAuthClient::new(atrium_oauth::OAuthClientConfig {
+            client_metadata: atrium_oauth::AtprotoLocalhostClientMetadata {
+                redirect_uris: Some(vec!["http://127.0.0.1:0/auth/callback".into()]),
+                scopes: Some(vec![atrium_oauth::Scope::Known(
+                    atrium_oauth::KnownScope::Atproto,
+                )]),
+            },
+            keys: None,
+            state_store: crate::auth::oauth_store::DbStateStore::new(
+                test_db.clone(),
+                crate::db::DatabaseBackend::Sqlite,
+            ),
+            session_store: crate::auth::oauth_store::DbSessionStore::new(
+                test_db.clone(),
+                crate::db::DatabaseBackend::Sqlite,
+            ),
+            resolver: atrium_oauth::OAuthResolverConfig {
+                did_resolver,
+                handle_resolver,
+                authorization_server_metadata: Default::default(),
+                protected_resource_metadata: Default::default(),
+            },
+        })
+        .expect("Failed to create test OAuth client");
         AppState {
             config,
             http: reqwest::Client::new(),
-            db: sqlx::AnyPool::connect_lazy("sqlite::memory:").unwrap(),
+            db: test_db,
             db_backend: DatabaseBackend::Sqlite,
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
@@ -648,6 +686,10 @@ mod tests {
                     default_proxy_cost: 1,
                 },
                 vec![],
+            ),
+            oauth: std::sync::Arc::new(oauth),
+            cookie_key: axum_extra::extract::cookie::Key::derive_from(
+                b"test-secret-for-tests-only-not-production",
             ),
         }
     }

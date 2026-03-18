@@ -1,45 +1,20 @@
-use serde::Deserialize;
+use atrium_api::types::string::Did;
 
 use crate::AppState;
+use crate::HappyViewOAuthSession;
 use crate::error::AppError;
 
-#[derive(Deserialize)]
-pub(crate) struct AtpSession {
-    pub(crate) access_token: String,
-    pub(crate) pds_endpoint: String,
-    pub(crate) dpop_jwk: DpopJwk,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct DpopJwk {
-    pub(crate) x: String,
-    pub(crate) y: String,
-    pub(crate) d: String,
-}
-
-/// Fetch the user's AT Protocol session (PDS credentials) from AIP.
-pub(crate) async fn get_atp_session(state: &AppState, token: &str) -> Result<AtpSession, AppError> {
-    let url = format!(
-        "{}/api/atprotocol/session",
-        state.config.aip_url.trim_end_matches('/')
-    );
-
-    let resp = state
-        .http
-        .get(&url)
-        .header("authorization", format!("Bearer {token}"))
-        .send()
+/// Resume an OAuth session for the given DID via atrium.
+/// The returned `OAuthSession` handles DPoP and token refresh internally.
+pub(crate) async fn get_oauth_session(
+    state: &AppState,
+    did: &str,
+) -> Result<HappyViewOAuthSession, AppError> {
+    let did =
+        Did::new(did.to_string()).map_err(|_| AppError::Auth(format!("invalid DID: {did}")))?;
+    state
+        .oauth
+        .restore(&did)
         .await
-        .map_err(|e| AppError::Internal(format!("AIP session request failed: {e}")))?;
-
-    if !resp.status().is_success() {
-        return Err(AppError::Auth(format!(
-            "AIP session returned {}",
-            resp.status()
-        )));
-    }
-
-    resp.json()
-        .await
-        .map_err(|e| AppError::Internal(format!("invalid AIP session response: {e}")))
+        .map_err(|e| AppError::Auth(format!("no OAuth session for {}: {e}", did.as_ref())))
 }

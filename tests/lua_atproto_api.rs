@@ -1,5 +1,11 @@
 mod common;
 
+use atrium_identity::did::{CommonDidResolver, CommonDidResolverConfig};
+use atrium_identity::handle::{AtprotoHandleResolver, AtprotoHandleResolverConfig};
+use atrium_oauth::{
+    AtprotoLocalhostClientMetadata, DefaultHttpClient, KnownScope, OAuthClientConfig,
+    OAuthResolverConfig, Scope,
+};
 use happyview::AppState;
 use happyview::config::Config;
 use happyview::db::{DatabaseBackend, adapt_sql, now_rfc3339};
@@ -15,8 +21,8 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
         port: 3000,
         database_url: String::new(),
         database_backend: backend,
-        aip_url: String::new(),
-        aip_public_url: String::new(),
+        public_url: String::new(),
+        session_secret: "test-secret".into(),
         tap_url: String::new(),
         tap_admin_password: None,
         relay_url: String::new(),
@@ -26,6 +32,32 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
     };
     let (tx, _) = watch::channel(vec![]);
     let (labeler_tx, _) = watch::channel(());
+    let atrium_http = std::sync::Arc::new(DefaultHttpClient::default());
+    let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
+        plc_directory_url: "https://plc.directory".into(),
+        http_client: std::sync::Arc::clone(&atrium_http),
+    });
+    let handle_resolver = AtprotoHandleResolver::new(AtprotoHandleResolverConfig {
+        dns_txt_resolver: happyview::dns::NativeDnsResolver::new(),
+        http_client: atrium_http,
+    });
+    let oauth_pool = db::test_pool().await;
+    let oauth = atrium_oauth::OAuthClient::new(OAuthClientConfig {
+        client_metadata: AtprotoLocalhostClientMetadata {
+            redirect_uris: Some(vec!["http://127.0.0.1:0/auth/callback".into()]),
+            scopes: Some(vec![Scope::Known(KnownScope::Atproto)]),
+        },
+        keys: None,
+        state_store: happyview::auth::oauth_store::DbStateStore::new(oauth_pool.clone(), backend),
+        session_store: happyview::auth::oauth_store::DbSessionStore::new(oauth_pool, backend),
+        resolver: OAuthResolverConfig {
+            did_resolver,
+            handle_resolver,
+            authorization_server_metadata: Default::default(),
+            protected_resource_metadata: Default::default(),
+        },
+    })
+    .expect("Failed to create test OAuth client");
     AppState {
         config,
         http: reqwest::Client::new(),
@@ -45,6 +77,8 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
             },
             vec![],
         ),
+        oauth: std::sync::Arc::new(oauth),
+        cookie_key: axum_extra::extract::cookie::Key::derive_from(b"test-secret"),
     }
 }
 
