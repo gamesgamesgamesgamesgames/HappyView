@@ -1,13 +1,13 @@
 # Local Development from Source
 
-This guide runs HappyView directly with `cargo run`, with you managing Postgres, AIP, and Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker.md).
+This guide runs HappyView directly with `cargo run`, with you managing AIP and Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker.md).
 
 ## Prerequisites
 
 - Rust (stable)
-- PostgreSQL 17+
 - A running [AIP](https://github.com/graze-social/aip) instance (handles OAuth). See the [AIP documentation](https://github.com/graze-social/aip) for setup.
 - A running [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance (delivers real-time records and handles backfill). See the [Tap documentation](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) for setup.
+- (Optional) PostgreSQL 17+ if you prefer Postgres over the default SQLite
 
 ## 1. Clone and configure
 
@@ -20,15 +20,26 @@ cp .env.example .env
 Edit `.env` to point at your running services:
 
 ```sh
-DATABASE_URL=postgres://happyview:happyview@localhost/happyview
+# SQLite (default — no setup needed, file created automatically)
+DATABASE_URL=sqlite://data/happyview.db?mode=rwc
 AIP_URL=http://localhost:8080
 TAP_URL=http://localhost:2480
 TAP_ADMIN_PASSWORD=your-secret-here
 ```
 
-See [Configuration](../configuration.md) for all available variables.
+Or if you prefer Postgres:
 
-## 2. Create the database
+```sh
+DATABASE_URL=postgres://happyview:happyview@localhost/happyview
+```
+
+See [Configuration](../configuration.md) for all available variables and the [database setup guide](../../guides/database-setup.md) for details on both backends.
+
+## 2. Create the database (Postgres only)
+
+If using SQLite, skip this step — HappyView creates the database file automatically.
+
+If using Postgres:
 
 ```sh
 createdb happyview

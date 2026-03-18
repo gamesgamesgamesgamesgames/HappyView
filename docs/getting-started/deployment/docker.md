@@ -1,6 +1,6 @@
 # Local Development with Docker
 
-This guide runs the full HappyView stack locally using Docker Compose: Postgres, [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), HappyView, and the web dashboard.
+This guide runs the full HappyView stack locally using Docker Compose: [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), HappyView, and the web dashboard.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ Set `TAP_ADMIN_PASSWORD` in your `.env`. This shared secret is used by both Tap 
 TAP_ADMIN_PASSWORD=your-secret-here
 ```
 
-The `docker-compose.yml` configures everything else (database URLs, service connections) automatically.
+The `docker-compose.yml` configures everything else (service connections) automatically. See the [database setup guide](../../guides/database-setup.md) if you want to use Postgres instead.
 
 ## 2. Start the stack
 
@@ -35,14 +35,17 @@ docker compose up
 
 This starts:
 
-| Service       | Port | Description                                          |
-| ------------- | ---- | ---------------------------------------------------- |
-| **postgres**  | 5432 | PostgreSQL 17 (databases for both HappyView and Tap) |
-| **tap**       | 2480 | Firehose consumer, backfill worker                   |
-| **happyview** | 3000 | HappyView API server                                 |
-| **web**       | 3001 | Next.js dashboard                                    |
+| Service       | Port | Description                        |
+| ------------- | ---- | ---------------------------------- |
+| **tap**       | 2480 | Firehose consumer, backfill worker |
+| **happyview** | 3000 | HappyView API server               |
+| **web**       | 3001 | Next.js dashboard                  |
 
 HappyView runs migrations automatically on startup. The first build will take a few minutes while Rust compiles.
+
+:::tip
+To use Postgres instead of SQLite, uncomment the `postgres` service in `docker-compose.yml` and update `DATABASE_URL` in `.env`. See the [database setup guide](../../guides/database-setup.md).
+:::
 
 ## Next steps
 

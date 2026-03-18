@@ -57,13 +57,14 @@ pub(super) async fn add(
     let sql = adapt_sql(
         r#"
         INSERT INTO labeler_subscriptions (did, created_at)
-        VALUES ($1, $2)
-        ON CONFLICT (did) DO UPDATE SET status = 'active', updated_at = $2
+        VALUES (?, ?)
+        ON CONFLICT (did) DO UPDATE SET status = 'active', updated_at = ?
         "#,
         backend,
     );
     sqlx::query(&sql)
         .bind(&body.did)
+        .bind(&now)
         .bind(&now)
         .execute(&state.db)
         .await
@@ -100,7 +101,7 @@ pub(super) async fn update(
     let backend = state.db_backend;
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "UPDATE labeler_subscriptions SET status = $1, updated_at = $2 WHERE did = $3",
+        "UPDATE labeler_subscriptions SET status = ?, updated_at = ? WHERE did = ?",
         backend,
     );
     let result = sqlx::query(&sql)
@@ -144,7 +145,7 @@ pub(super) async fn delete(
     auth.require(Permission::LabelersDelete).await?;
 
     let backend = state.db_backend;
-    let delete_sql = adapt_sql("DELETE FROM labeler_subscriptions WHERE did = $1", backend);
+    let delete_sql = adapt_sql("DELETE FROM labeler_subscriptions WHERE did = ?", backend);
     let result = sqlx::query(&delete_sql)
         .bind(&did)
         .execute(&state.db)
@@ -158,7 +159,7 @@ pub(super) async fn delete(
     }
 
     // Also remove all labels from this labeler.
-    let delete_labels_sql = adapt_sql("DELETE FROM labels WHERE src = $1", backend);
+    let delete_labels_sql = adapt_sql("DELETE FROM labels WHERE src = ?", backend);
     let _ = sqlx::query(&delete_labels_sql)
         .bind(&did)
         .execute(&state.db)

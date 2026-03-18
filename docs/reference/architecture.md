@@ -21,13 +21,13 @@ graph LR
 
   Procedure -->|proxy write| PDS["User PDS"]
 
-  DB[("PostgreSQL<br/><small>records · lexicons</small>")]
+  DB[("SQLite / PostgreSQL<br/><small>records · lexicons</small>")]
 
   Tap["Tap<br/><small>WebSocket</small>"] -->|record events| DB
   Relay["Relay<br/><small>Firehose</small>"] --> Tap
 ```
 
-Reads flow top-down through the query handler to Postgres. Writes flow through the procedure handler to the user's PDS, then HappyView indexes the record locally. All record data enters the system through Tap, which handles both real-time firehose events and historical backfill. HappyView syncs collection filters to Tap and discovers repos via the relay for backfill, but Tap performs all record fetching.
+Reads flow top-down through the query handler to the database (SQLite by default, or Postgres). Writes flow through the procedure handler to the user's PDS, then HappyView indexes the record locally. All record data enters the system through Tap, which handles both real-time firehose events and historical backfill. HappyView syncs collection filters to Tap and discovers repos via the relay for backfill, but Tap performs all record fetching.
 
 ## Module overview
 
@@ -250,10 +250,13 @@ POST /admin/backfill
 # Unit tests (no database needed)
 cargo test --lib
 
-# All tests including end-to-end (requires Postgres)
+# All tests including end-to-end (SQLite by default)
+cargo test
+
+# Or run against Postgres
 docker compose -f docker-compose.test.yml up -d
 TEST_DATABASE_URL=postgres://happyview:happyview@localhost:5433/happyview_test cargo test
 docker compose -f docker-compose.test.yml down
 ```
 
-End-to-end tests use `wiremock` to mock external services (AIP, PLC directory, PDSes) and a real Postgres database for full integration coverage.
+End-to-end tests use `wiremock` to mock external services (AIP, PLC directory, PDSes) and a real database for full integration coverage. By default tests use SQLite; set `TEST_DATABASE_URL` to a Postgres connection string to test against Postgres.

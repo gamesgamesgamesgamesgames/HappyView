@@ -56,7 +56,7 @@ async fn seed_record(
     record: serde_json::Value,
 ) {
     let sql = adapt_sql(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)
@@ -82,7 +82,7 @@ async fn seed_label(
 ) {
     if let Some(exp) = exp {
         let sql = adapt_sql(
-            "INSERT INTO labels (src, uri, val, cts, exp) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO labels (src, uri, val, cts, exp) VALUES (?, ?, ?, ?, ?)",
             backend,
         );
         sqlx::query(&sql)
@@ -96,7 +96,7 @@ async fn seed_label(
             .expect("failed to seed label");
     } else {
         let sql = adapt_sql(
-            "INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO labels (src, uri, val, cts) VALUES (?, ?, ?, ?)",
             backend,
         );
         sqlx::query(&sql)
@@ -146,7 +146,7 @@ async fn get_labels_returns_external_labels() {
 
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+        "SELECT src, uri, val FROM labels WHERE uri = ? AND (exp IS NULL OR exp > ?)",
         backend,
     );
     let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
@@ -196,7 +196,7 @@ async fn get_labels_filters_expired() {
 
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+        "SELECT src, uri, val FROM labels WHERE uri = ? AND (exp IS NULL OR exp > ?)",
         backend,
     );
     let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
@@ -230,7 +230,7 @@ async fn get_labels_includes_self_labels() {
     });
     seed_record(&pool, backend, uri, "did:plc:author", record.clone()).await;
 
-    let sql = adapt_sql("SELECT did, record FROM records WHERE uri = $1", backend);
+    let sql = adapt_sql("SELECT did, record FROM records WHERE uri = ?", backend);
     let fetched: Option<(String, String)> = sqlx::query_as(&sql)
         .bind(uri)
         .fetch_optional(&pool)
@@ -273,7 +273,7 @@ async fn get_labels_empty_for_unlabeled_record() {
 
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+        "SELECT src, uri, val FROM labels WHERE uri = ? AND (exp IS NULL OR exp > ?)",
         backend,
     );
     let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
@@ -311,7 +311,7 @@ async fn get_labels_batch_returns_labels_per_uri() {
     .await;
 
     let sql = adapt_sql(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)
@@ -332,7 +332,7 @@ async fn get_labels_batch_returns_labels_per_uri() {
 
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "SELECT src, uri, val FROM labels WHERE uri IN ($1, $2) AND (exp IS NULL OR exp > $3)",
+        "SELECT src, uri, val FROM labels WHERE uri IN (?, ?) AND (exp IS NULL OR exp > ?)",
         backend,
     );
     let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
@@ -365,7 +365,7 @@ async fn get_labels_batch_empty_for_no_labels() {
 
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "SELECT src, uri, val FROM labels WHERE uri IN ($1, $2) AND (exp IS NULL OR exp > $3)",
+        "SELECT src, uri, val FROM labels WHERE uri IN (?, ?) AND (exp IS NULL OR exp > ?)",
         backend,
     );
     let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
@@ -398,7 +398,7 @@ async fn label_negation_removes_row() {
 
     // Verify it exists
     let sql = adapt_sql(
-        "SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        "SELECT COUNT(*) FROM labels WHERE src = ? AND uri = ? AND val = ?",
         backend,
     );
     let count: (i64,) = sqlx::query_as(&sql)
@@ -412,7 +412,7 @@ async fn label_negation_removes_row() {
 
     // Simulate negation (same logic as labeler.rs)
     let sql = adapt_sql(
-        "DELETE FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        "DELETE FROM labels WHERE src = ? AND uri = ? AND val = ?",
         backend,
     );
     sqlx::query(&sql)
@@ -425,7 +425,7 @@ async fn label_negation_removes_row() {
 
     // Verify it's gone
     let sql = adapt_sql(
-        "SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        "SELECT COUNT(*) FROM labels WHERE src = ? AND uri = ? AND val = ?",
         backend,
     );
     let count: (i64,) = sqlx::query_as(&sql)
@@ -474,7 +474,7 @@ async fn label_upsert_is_idempotent() {
     }
 
     let sql = adapt_sql(
-        "SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        "SELECT COUNT(*) FROM labels WHERE src = ? AND uri = ? AND val = ?",
         backend,
     );
     let count: (i64,) = sqlx::query_as(&sql)

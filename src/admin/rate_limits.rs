@@ -87,14 +87,14 @@ pub(super) async fn upsert(
     let sql = adapt_sql(
         r#"
         INSERT INTO rate_limits (method, capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost, created_at)
-        VALUES (NULL, $1, $2, $3, $4, $5, $6)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (method) DO UPDATE SET
             capacity = EXCLUDED.capacity,
             refill_rate = EXCLUDED.refill_rate,
             default_query_cost = EXCLUDED.default_query_cost,
             default_procedure_cost = EXCLUDED.default_procedure_cost,
             default_proxy_cost = EXCLUDED.default_proxy_cost,
-            updated_at = $6
+            updated_at = ?
         "#,
         backend,
     );
@@ -104,6 +104,7 @@ pub(super) async fn upsert(
         .bind(body.default_query_cost as i32)
         .bind(body.default_procedure_cost as i32)
         .bind(body.default_proxy_cost as i32)
+        .bind(&now)
         .bind(&now)
         .execute(&state.db)
         .await
@@ -148,8 +149,8 @@ pub(super) async fn set_enabled(
     let sql = adapt_sql(
         r#"
         INSERT INTO rate_limit_settings (key, value)
-        VALUES ('enabled', $1)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = $2
+        VALUES ('enabled', ?)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = ?
         "#,
         backend,
     );
@@ -209,7 +210,7 @@ pub(super) async fn add_allowlist(
     let backend = state.db_backend;
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "INSERT INTO rate_limit_allowlist (cidr, note, created_at) VALUES ($1, $2, $3)",
+        "INSERT INTO rate_limit_allowlist (cidr, note, created_at) VALUES (?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)
@@ -247,7 +248,7 @@ pub(super) async fn remove_allowlist(
     auth.require(Permission::RateLimitsDelete).await?;
 
     let backend = state.db_backend;
-    let sql = adapt_sql("DELETE FROM rate_limit_allowlist WHERE id = $1", backend);
+    let sql = adapt_sql("DELETE FROM rate_limit_allowlist WHERE id = ?", backend);
     let result = sqlx::query(&sql)
         .bind(id)
         .execute(&state.db)

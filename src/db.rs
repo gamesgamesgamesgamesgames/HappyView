@@ -35,130 +35,128 @@ impl DatabaseBackend {
     }
 }
 
-/// Regex matching a JSON operator chain: `identifier->'key1'->'key2'->>'leaf'`
-/// Also matches if `::jsonb` cast is already present.
-/// Captures: (1) column name (may include `::jsonb`), (2) the full chain of `->` / `->>` and quoted keys.
-static JSON_CHAIN_RE: LazyLock<Regex> = LazyLock::new(|| {
-    // Match: word_or_dotted_name (optionally with ::jsonb) followed by ->/'key' or ->>'key' segments
-    // e.g.  record->>'title'  or  lexicon_json::jsonb->'defs'->'main'->>'type'
-    Regex::new(r"(\w+(?:\.\w+)*(?:::jsonb)?)((?:\s*->>?\s*'[^']*')+)").unwrap()
-});
+/// Regex matching `json_extract(col, '$.path.to.leaf')`
+/// Captures: (1) column name, (2) the JSON path after `$.`
+static JSON_EXTRACT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"json_extract\((\w+(?:\.\w+)*),\s*'\$\.([^']+)'\)").unwrap());
 
-/// Regex matching ILIKE: `expr ILIKE pattern`
-static ILIKE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\bILIKE\b").unwrap());
+/// Regex matching `datetime('now', '±N unit')`
+/// Captures: (1) sign (+/-), (2) the interval value e.g. "7 days"
+static DATETIME_INTERVAL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"datetime\('now',\s*'([+-])(\d+\s+[^']+)'\)").unwrap());
 
-/// Convert SQL written in PostgreSQL dialect to work on the target backend.
+/// Regex matching bare `datetime('now')`
+static DATETIME_NOW_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"datetime\('now'\)").unwrap());
+
+/// Convert SQL written in SQLite dialect to work on the target backend.
 ///
-/// Handles:
-/// - **Placeholders**: `$1, $2, ...` → `?` (SQLite)
-/// - **JSON operators**: `col->>'key'` chains →
-///   - Postgres: `col::jsonb->>'key'` (adds cast since columns are TEXT)
-///   - SQLite: `json_extract(col, '$.key1.key2')`
-/// - **ILIKE**: → SQLite `LIKE` (SQLite LIKE is case-insensitive for ASCII by default)
-/// - **NOW()**: → SQLite `datetime('now')`
-/// - **Boolean literals**: `true`/`false` → `1`/`0` (both backends store as INTEGER)
+/// Source SQL uses SQLite syntax:
+/// - `?` placeholders
+/// - `json_extract(col, '$.path')` for JSON access
+/// - `datetime('now')` / `datetime('now', '±N unit')` for timestamps
+/// - `LIKE` for case-insensitive matching
+/// - `0`/`1` for booleans
+///
+/// For Postgres, converts to:
+/// - `$1, $2, $3...` numbered placeholders
+/// - `col::jsonb->'seg1'->'seg2'->>'leaf'` JSON chains
+/// - `NOW()` / `NOW() ± INTERVAL 'N unit'`
+/// - `LIKE` stays as-is (works on both)
+/// - `0`/`1` stays as-is (works on both)
 pub fn adapt_sql(sql: &str, backend: DatabaseBackend) -> String {
-    let mut result = sql.to_string();
+    match backend {
+        DatabaseBackend::Sqlite => {
+            // Source is already SQLite — no-op
+            sql.to_string()
+        }
+        DatabaseBackend::Postgres => {
+            let mut result = sql.to_string();
 
-    // 1. JSON operator chains
-    result = adapt_json_operators(&result, backend);
+            // 1. json_extract → Postgres JSON chain
+            result = adapt_json_extract_to_postgres(&result);
 
-    // 2. ILIKE → LIKE (SQLite)
-    if backend == DatabaseBackend::Sqlite {
-        result = ILIKE_RE.replace_all(&result, "LIKE").to_string();
-    }
+            // 2. datetime('now', '±N unit') → NOW() ± INTERVAL 'N unit'
+            //    Must run before bare datetime('now') replacement.
+            result = DATETIME_INTERVAL_RE
+                .replace_all(&result, |caps: &regex::Captures| {
+                    let sign = &caps[1];
+                    let interval = &caps[2];
+                    format!("NOW() {sign} INTERVAL '{interval}'")
+                })
+                .to_string();
 
-    // 3. NOW() → datetime('now') (SQLite)
-    if backend == DatabaseBackend::Sqlite {
-        result = result.replace("NOW()", "datetime('now')");
-    }
+            // 3. datetime('now') → NOW()
+            result = DATETIME_NOW_RE.replace_all(&result, "NOW()").to_string();
 
-    // 4. Boolean literals → integers (both backends, columns are INTEGER)
-    result = adapt_booleans(&result);
+            // 4. ? → $1, $2, $3... (quote-aware)
+            result = adapt_placeholders_to_postgres(&result);
 
-    // 5. Placeholders: $1, $2, ... → ? (SQLite)
-    if backend == DatabaseBackend::Sqlite {
-        for i in (1..=50).rev() {
-            result = result.replace(&format!("${i}"), "?");
+            result
         }
     }
-
-    result
 }
 
-/// Rewrite JSON operator chains for the target backend.
-fn adapt_json_operators(sql: &str, backend: DatabaseBackend) -> String {
-    JSON_CHAIN_RE
+/// Convert `json_extract(col, '$.seg1.seg2.leaf')` to Postgres `col::jsonb->'seg1'->'seg2'->>'leaf'`.
+fn adapt_json_extract_to_postgres(sql: &str) -> String {
+    JSON_EXTRACT_RE
         .replace_all(sql, |caps: &regex::Captures| {
             let col = &caps[1];
-            let chain = &caps[2];
+            let path = &caps[2]; // e.g. "defs.main.type" or "title"
 
-            match backend {
-                DatabaseBackend::Postgres => {
-                    // Add ::jsonb cast if not already present
-                    if col.ends_with("::jsonb") {
-                        format!("{col}{chain}")
-                    } else {
-                        format!("{col}::jsonb{chain}")
-                    }
-                }
-                DatabaseBackend::Sqlite => {
-                    // Parse the chain into path segments and determine final operator
-                    let mut path_parts = Vec::new();
-                    let mut is_text_extract = false;
+            let segments: Vec<&str> = path.split('.').collect();
+            let mut chain = format!("{col}::jsonb");
 
-                    // Split chain into individual segments: ->'key' or ->>'key'
-                    let mut remaining = chain.trim();
-                    while !remaining.is_empty() {
-                        if let Some(rest) = remaining.strip_prefix("->>") {
-                            is_text_extract = true;
-                            let rest = rest.trim().strip_prefix('\'').unwrap_or(rest.trim());
-                            if let Some((key, after)) = rest.split_once('\'') {
-                                path_parts.push(key.to_string());
-                                remaining = after.trim();
-                            } else {
-                                break;
-                            }
-                        } else if let Some(rest) = remaining.strip_prefix("->") {
-                            is_text_extract = false;
-                            let rest = rest.trim().strip_prefix('\'').unwrap_or(rest.trim());
-                            if let Some((key, after)) = rest.split_once('\'') {
-                                path_parts.push(key.to_string());
-                                remaining = after.trim();
-                            } else {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-
-                    let json_path = format!("$.{}", path_parts.join("."));
-
-                    if is_text_extract {
-                        // ->> extracts as text (most common)
-                        format!("json_extract({col}, '{json_path}')")
-                    } else {
-                        // -> extracts as JSON (returns JSON string)
-                        format!("json_extract({col}, '{json_path}')")
-                    }
+            for (i, seg) in segments.iter().enumerate() {
+                if i == segments.len() - 1 {
+                    // Last segment uses ->> (text extraction)
+                    chain.push_str(&format!("->>'{seg}'"));
+                } else {
+                    // Intermediate segments use -> (JSON traversal)
+                    chain.push_str(&format!("->'{seg}'"));
                 }
             }
+
+            chain
         })
         .to_string()
 }
 
-/// Replace SQL boolean literals with integers.
-/// Matches standalone `true` and `false` as SQL keywords (not inside strings).
-fn adapt_booleans(sql: &str) -> String {
-    // Simple word-boundary replacement for boolean literals outside of strings.
-    // We do a basic approach: replace ` true` / ` false` / `=true` / `=false` etc.
-    // Using regex for word boundaries.
-    static BOOL_TRUE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\btrue\b").unwrap());
-    static BOOL_FALSE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bfalse\b").unwrap());
+/// Convert `?` placeholders to `$1, $2, $3...` for Postgres, skipping `?` inside single-quoted strings.
+fn adapt_placeholders_to_postgres(sql: &str) -> String {
+    let mut result = String::with_capacity(sql.len());
+    let mut counter = 0u32;
+    let mut in_string = false;
 
-    let result = BOOL_TRUE.replace_all(sql, "1");
-    BOOL_FALSE.replace_all(&result, "0").to_string()
+    let chars: Vec<char> = sql.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '\'' {
+            if in_string {
+                // Check for escaped quote ''
+                if i + 1 < chars.len() && chars[i + 1] == '\'' {
+                    result.push('\'');
+                    result.push('\'');
+                    i += 2;
+                    continue;
+                }
+                in_string = false;
+            } else {
+                in_string = true;
+            }
+            result.push(c);
+        } else if c == '?' && !in_string {
+            counter += 1;
+            result.push('$');
+            result.push_str(&counter.to_string());
+        } else {
+            result.push(c);
+        }
+        i += 1;
+    }
+
+    result
 }
 
 /// Parse a database timestamp string to DateTime<Utc>.
@@ -296,17 +294,8 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn adapt_sql_postgres_keeps_placeholders() {
-        let sql = "SELECT * FROM foo WHERE id = $1 AND name = $2";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Postgres),
-            "SELECT * FROM foo WHERE id = $1 AND name = $2"
-        );
-    }
-
-    #[test]
-    fn adapt_sql_sqlite_converts_placeholders() {
-        let sql = "SELECT * FROM foo WHERE id = $1 AND name = $2";
+    fn adapt_sql_sqlite_keeps_placeholders() {
+        let sql = "SELECT * FROM foo WHERE id = ? AND name = ?";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Sqlite),
             "SELECT * FROM foo WHERE id = ? AND name = ?"
@@ -314,12 +303,30 @@ mod tests {
     }
 
     #[test]
-    fn adapt_sql_sqlite_handles_double_digit_placeholders() {
-        let sql = "INSERT INTO t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
-        let result = adapt_sql(sql, DatabaseBackend::Sqlite);
+    fn adapt_sql_postgres_converts_placeholders() {
+        let sql = "SELECT * FROM foo WHERE id = ? AND name = ?";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "SELECT * FROM foo WHERE id = $1 AND name = $2"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_postgres_handles_many_placeholders() {
+        let sql = "INSERT INTO t VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        let result = adapt_sql(sql, DatabaseBackend::Postgres);
         assert_eq!(
             result,
-            "INSERT INTO t VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_postgres_skips_question_marks_in_strings() {
+        let sql = "SELECT * FROM foo WHERE name = ? AND note LIKE '??%'";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "SELECT * FROM foo WHERE name = $1 AND note LIKE '??%'"
         );
     }
 
@@ -328,26 +335,26 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn adapt_sql_postgres_adds_jsonb_cast() {
-        let sql = "SELECT record->>'title' FROM records";
+    fn adapt_sql_sqlite_keeps_json_extract() {
+        let sql = "SELECT json_extract(record, '$.title') FROM records";
         assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Postgres),
-            "SELECT record::jsonb->>'title' FROM records"
+            adapt_sql(sql, DatabaseBackend::Sqlite),
+            "SELECT json_extract(record, '$.title') FROM records"
         );
     }
 
     #[test]
-    fn adapt_sql_postgres_no_double_cast() {
-        let sql = "SELECT record::jsonb->>'title' FROM records";
+    fn adapt_sql_postgres_converts_simple_json_extract() {
+        let sql = "SELECT json_extract(record, '$.title') FROM records WHERE collection = ?";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
-            "SELECT record::jsonb->>'title' FROM records"
+            "SELECT record::jsonb->>'title' FROM records WHERE collection = $1"
         );
     }
 
     #[test]
-    fn adapt_sql_postgres_chained_json_operators() {
-        let sql = "WHERE lexicon_json->'defs'->'main'->>'type' = 'record'";
+    fn adapt_sql_postgres_converts_chained_json_extract() {
+        let sql = "WHERE json_extract(lexicon_json, '$.defs.main.type') = 'record'";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
             "WHERE lexicon_json::jsonb->'defs'->'main'->>'type' = 'record'"
@@ -355,36 +362,9 @@ mod tests {
     }
 
     #[test]
-    fn adapt_sql_sqlite_simple_json_extract() {
-        let sql = "SELECT record->>'title' FROM records WHERE collection = $1";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Sqlite),
-            "SELECT json_extract(record, '$.title') FROM records WHERE collection = ?"
-        );
-    }
-
-    #[test]
-    fn adapt_sql_sqlite_chained_json_extract() {
-        let sql = "WHERE lexicon_json->'defs'->'main'->>'type' = 'record'";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Sqlite),
-            "WHERE json_extract(lexicon_json, '$.defs.main.type') = 'record'"
-        );
-    }
-
-    #[test]
-    fn adapt_sql_sqlite_json_arrow_only() {
-        // Single -> (not ->>) extracts as JSON
-        let sql = "SELECT record->'value' FROM records";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Sqlite),
-            "SELECT json_extract(record, '$.value') FROM records"
-        );
-    }
-
-    #[test]
     fn adapt_sql_multiple_json_expressions() {
-        let sql = "SELECT record->>'title', record->>'year' FROM records";
+        let sql =
+            "SELECT json_extract(record, '$.title'), json_extract(record, '$.year') FROM records";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
             "SELECT record::jsonb->>'title', record::jsonb->>'year' FROM records"
@@ -396,53 +376,93 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // adapt_sql: ILIKE conversion
+    // adapt_sql: LIKE stays as-is
     // -----------------------------------------------------------------------
 
     #[test]
-    fn adapt_sql_postgres_keeps_ilike() {
-        let sql = "WHERE name ILIKE $1";
+    fn adapt_sql_postgres_keeps_like() {
+        let sql = "WHERE name LIKE ?";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
-            "WHERE name ILIKE $1"
+            "WHERE name LIKE $1"
         );
     }
 
     #[test]
-    fn adapt_sql_sqlite_converts_ilike_to_like() {
-        let sql = "WHERE name ILIKE $1";
+    fn adapt_sql_sqlite_keeps_like() {
+        let sql = "WHERE name LIKE ?";
         assert_eq!(adapt_sql(sql, DatabaseBackend::Sqlite), "WHERE name LIKE ?");
     }
 
     // -----------------------------------------------------------------------
-    // adapt_sql: NOW() conversion
+    // adapt_sql: datetime('now') conversion
     // -----------------------------------------------------------------------
 
     #[test]
-    fn adapt_sql_postgres_keeps_now() {
-        let sql = "INSERT INTO t (created_at) VALUES (NOW())";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Postgres),
-            "INSERT INTO t (created_at) VALUES (NOW())"
-        );
-    }
-
-    #[test]
-    fn adapt_sql_sqlite_converts_now() {
-        let sql = "INSERT INTO t (created_at) VALUES (NOW())";
+    fn adapt_sql_sqlite_keeps_datetime_now() {
+        let sql = "INSERT INTO t (created_at) VALUES (datetime('now'))";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Sqlite),
             "INSERT INTO t (created_at) VALUES (datetime('now'))"
         );
     }
 
+    #[test]
+    fn adapt_sql_postgres_converts_datetime_now() {
+        let sql = "INSERT INTO t (created_at) VALUES (datetime('now'))";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "INSERT INTO t (created_at) VALUES (NOW())"
+        );
+    }
+
     // -----------------------------------------------------------------------
-    // adapt_sql: boolean literal conversion
+    // adapt_sql: datetime('now', '±N unit') conversion
     // -----------------------------------------------------------------------
 
     #[test]
-    fn adapt_sql_converts_boolean_true() {
-        let sql = "UPDATE t SET active = true WHERE id = $1";
+    fn adapt_sql_sqlite_keeps_datetime_interval() {
+        let sql = "WHERE indexed_at > datetime('now', '-7 days')";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Sqlite),
+            "WHERE indexed_at > datetime('now', '-7 days')"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_postgres_converts_datetime_minus_interval() {
+        let sql = "WHERE indexed_at > datetime('now', '-7 days')";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "WHERE indexed_at > NOW() - INTERVAL '7 days'"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_postgres_converts_datetime_plus_interval() {
+        let sql = "WHERE expires_at < datetime('now', '+30 minutes')";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "WHERE expires_at < NOW() + INTERVAL '30 minutes'"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_postgres_interval_with_json_and_placeholders() {
+        let sql = "SELECT json_extract(record, '$.subject') FROM records WHERE collection = ? AND indexed_at > datetime('now', '-7 days') LIMIT ?";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "SELECT record::jsonb->>'subject' FROM records WHERE collection = $1 AND indexed_at > NOW() - INTERVAL '7 days' LIMIT $2"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // adapt_sql: boolean literals stay as 0/1
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn adapt_sql_keeps_integer_booleans() {
+        let sql = "UPDATE t SET active = 1 WHERE id = ?";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
             "UPDATE t SET active = 1 WHERE id = $1"
@@ -453,38 +473,16 @@ mod tests {
         );
     }
 
-    #[test]
-    fn adapt_sql_converts_boolean_false() {
-        let sql = "INSERT INTO t (backfill) VALUES (false)";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Postgres),
-            "INSERT INTO t (backfill) VALUES (0)"
-        );
-    }
-
-    #[test]
-    fn adapt_sql_boolean_does_not_replace_inside_strings() {
-        // The word "true" in a string value like 'attribute' should not be replaced
-        // Note: our simple regex WILL match inside SQL string literals. This is
-        // acceptable because column names won't contain 'true'/'false' as substrings
-        // in practice, and the Lua db.raw() API uses bind parameters for values.
-        let sql = "SELECT * FROM t WHERE status = $1";
-        assert_eq!(
-            adapt_sql(sql, DatabaseBackend::Postgres),
-            "SELECT * FROM t WHERE status = $1"
-        );
-    }
-
     // -----------------------------------------------------------------------
     // adapt_sql: combined conversions
     // -----------------------------------------------------------------------
 
     #[test]
-    fn adapt_sql_combined_json_ilike_placeholders() {
-        let sql = "SELECT * FROM records WHERE record->>'title' ILIKE $1 LIMIT $2";
+    fn adapt_sql_combined_json_like_placeholders() {
+        let sql = "SELECT * FROM records WHERE json_extract(record, '$.title') LIKE ? LIMIT ?";
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
-            "SELECT * FROM records WHERE record::jsonb->>'title' ILIKE $1 LIMIT $2"
+            "SELECT * FROM records WHERE record::jsonb->>'title' LIKE $1 LIMIT $2"
         );
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Sqlite),
@@ -494,8 +492,11 @@ mod tests {
 
     #[test]
     fn adapt_sql_no_json_operators_unchanged() {
-        let sql = "SELECT COUNT(*) FROM records WHERE collection = $1";
-        assert_eq!(adapt_sql(sql, DatabaseBackend::Postgres), sql);
+        let sql = "SELECT COUNT(*) FROM records WHERE collection = ?";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "SELECT COUNT(*) FROM records WHERE collection = $1"
+        );
     }
 
     // -----------------------------------------------------------------------
