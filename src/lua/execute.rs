@@ -38,6 +38,7 @@ pub async fn execute_procedure_script(
     method: &str,
     claims: &Claims,
     input: &Value,
+    params: &std::collections::HashMap<String, Value>,
     lexicon: &ParsedLexicon,
     script: &str,
 ) -> Result<Response, AppError> {
@@ -210,7 +211,9 @@ pub async fn execute_procedure_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = context::set_procedure_context(&lua, method, input, claims.did(), collection) {
+    if let Err(e) =
+        context::set_procedure_context(&lua, method, input, params, claims.did(), collection)
+    {
         let error_message = format!("failed to set context: {e}");
         log_event(
             &state.db,
