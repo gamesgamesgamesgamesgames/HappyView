@@ -63,7 +63,7 @@ pub(super) async fn list_records(
         .unwrap_or(0);
 
     let sql = adapt_sql(
-        "SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY indexed_at DESC LIMIT $2 OFFSET $3",
+        "SELECT uri, did, record FROM records WHERE collection = ? ORDER BY indexed_at DESC LIMIT ? OFFSET ?",
         backend,
     );
     let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
@@ -88,11 +88,9 @@ pub(super) async fn list_records(
         Vec::new()
     } else {
         let now = now_rfc3339();
-        let placeholders: Vec<String> = (1..=uris.len()).map(|i| format!("${i}")).collect();
-        let ph_str = placeholders.join(", ");
-        let next_idx = uris.len() + 1;
+        let ph_str = (0..uris.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
         let raw_sql = format!(
-            "SELECT uri, src, val, cts FROM labels WHERE uri IN ({ph_str}) AND (exp IS NULL OR exp > ${next_idx})"
+            "SELECT uri, src, val, cts FROM labels WHERE uri IN ({ph_str}) AND (exp IS NULL OR exp > ?)"
         );
         let sql = adapt_sql(&raw_sql, backend);
         let mut q = sqlx::query_as(&sql);
@@ -169,7 +167,7 @@ pub(super) async fn delete_collection_records(
     auth.require(Permission::RecordsDeleteCollection).await?;
     auth.require(Permission::RecordsDelete).await?;
     let backend = state.db_backend;
-    let sql = adapt_sql("DELETE FROM records WHERE collection = $1", backend);
+    let sql = adapt_sql("DELETE FROM records WHERE collection = ?", backend);
     let result = sqlx::query(&sql)
         .bind(&params.collection)
         .execute(&state.db)
@@ -189,7 +187,7 @@ pub(super) async fn delete_record(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::RecordsDelete).await?;
     let backend = state.db_backend;
-    let sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+    let sql = adapt_sql("DELETE FROM records WHERE uri = ?", backend);
     let result = sqlx::query(&sql)
         .bind(&params.uri)
         .execute(&state.db)

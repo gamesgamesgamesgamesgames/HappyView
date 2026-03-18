@@ -33,11 +33,10 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let backend = state.db_backend;
             let now = now_rfc3339();
             let sql = adapt_sql(
-                "SELECT src, uri, val, cts FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+                "SELECT src, uri, val, cts FROM labels WHERE uri = ? AND (exp IS NULL OR exp > ?)",
                 backend,
             );
-            let rows: Vec<(String, String, String, String)> =
-                sqlx::query_as(&sql)
+            let rows: Vec<(String, String, String, String)> = sqlx::query_as(&sql)
                 .bind(&uri)
                 .bind(&now)
                 .fetch_all(&state.db)
@@ -58,18 +57,16 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             }
 
             // Check for self-labels in the record itself.
-            let record_sql = adapt_sql(
-                "SELECT did, record FROM records WHERE uri = $1",
-                backend,
-            );
+            let record_sql = adapt_sql("SELECT did, record FROM records WHERE uri = ?", backend);
             let record: Option<(String, String)> = sqlx::query_as(&record_sql)
-            .bind(&uri)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|e| mlua::Error::runtime(format!("record query failed: {e}")))?;
+                .bind(&uri)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| mlua::Error::runtime(format!("record query failed: {e}")))?;
 
             if let Some((did, record_str)) = record {
-                let record_val: serde_json::Value = serde_json::from_str(&record_str).unwrap_or(serde_json::json!({}));
+                let record_val: serde_json::Value =
+                    serde_json::from_str(&record_str).unwrap_or(serde_json::json!({}));
                 if let Some(labels) = record_val.get("labels")
                     && let Some(values) = labels.get("values")
                     && let Some(arr) = values.as_array()
@@ -108,23 +105,26 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
 
             // Query labels for all URIs (one query per URI since AnyPool doesn't support array binding).
             let label_sql = adapt_sql(
-                "SELECT src, uri, val, cts FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+                "SELECT src, uri, val, cts FROM labels WHERE uri = ? AND (exp IS NULL OR exp > ?)",
                 backend,
             );
             let mut rows: Vec<(String, String, String, String)> = Vec::new();
             for uri in &uri_list {
-                let mut uri_rows: Vec<(String, String, String, String)> = sqlx::query_as(&label_sql)
-                    .bind(uri)
-                    .bind(&now)
-                    .fetch_all(&state.db)
-                    .await
-                    .map_err(|e| mlua::Error::runtime(format!("label batch query failed: {e}")))?;
+                let mut uri_rows: Vec<(String, String, String, String)> =
+                    sqlx::query_as(&label_sql)
+                        .bind(uri)
+                        .bind(&now)
+                        .fetch_all(&state.db)
+                        .await
+                        .map_err(|e| {
+                            mlua::Error::runtime(format!("label batch query failed: {e}"))
+                        })?;
                 rows.append(&mut uri_rows);
             }
 
             // Query records for self-labels.
             let record_sql = adapt_sql(
-                "SELECT uri, did, record FROM records WHERE uri = $1",
+                "SELECT uri, did, record FROM records WHERE uri = ?",
                 backend,
             );
             let mut records: Vec<(String, String, String)> = Vec::new();
@@ -141,7 +141,8 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let result = lua.create_table()?;
 
             // Initialize empty arrays for each URI.
-            let mut counters: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+            let mut counters: std::collections::HashMap<String, i32> =
+                std::collections::HashMap::new();
             for uri in &uri_list {
                 result.set(uri.as_str(), lua.create_table()?)?;
                 counters.insert(uri.clone(), 1);
@@ -163,7 +164,8 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
 
             // Add self-labels from records.
             for (uri, did, record_str) in &records {
-                let record_val: serde_json::Value = serde_json::from_str(record_str).unwrap_or(serde_json::json!({}));
+                let record_val: serde_json::Value =
+                    serde_json::from_str(record_str).unwrap_or(serde_json::json!({}));
                 if let Some(labels) = record_val.get("labels")
                     && let Some(values) = labels.get("values")
                     && let Some(arr) = values.as_array()

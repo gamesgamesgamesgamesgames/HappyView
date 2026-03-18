@@ -149,7 +149,7 @@ async fn run_subscription_once(
 
     // Read cursor from database.
     let cursor_sql = adapt_sql(
-        "SELECT cursor FROM labeler_subscriptions WHERE did = $1",
+        "SELECT cursor FROM labeler_subscriptions WHERE did = ?",
         state.db_backend,
     );
     let cursor: Option<(Option<i64>,)> = sqlx::query_as(&cursor_sql)
@@ -327,7 +327,7 @@ async fn apply_label(db: &sqlx::AnyPool, label: &Label, backend: DatabaseBackend
     if label.neg {
         // Negation label — remove it.
         let delete_sql = adapt_sql(
-            "DELETE FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+            "DELETE FROM labels WHERE src = ? AND uri = ? AND val = ?",
             backend,
         );
         if let Err(e) = sqlx::query(&delete_sql)
@@ -347,7 +347,7 @@ async fn apply_label(db: &sqlx::AnyPool, label: &Label, backend: DatabaseBackend
         let insert_sql = adapt_sql(
             r#"
             INSERT INTO labels (src, uri, val, cts, exp)
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (src, uri, val) DO UPDATE
                 SET cts = EXCLUDED.cts,
                     exp = EXCLUDED.exp
@@ -375,7 +375,7 @@ async fn apply_label(db: &sqlx::AnyPool, label: &Label, backend: DatabaseBackend
 async fn persist_cursor(db: &sqlx::AnyPool, did: &str, seq: i64, backend: DatabaseBackend) {
     let now = now_rfc3339();
     let update_sql = adapt_sql(
-        "UPDATE labeler_subscriptions SET cursor = $1, updated_at = $2 WHERE did = $3",
+        "UPDATE labeler_subscriptions SET cursor = ?, updated_at = ? WHERE did = ?",
         backend,
     );
     if let Err(e) = sqlx::query(&update_sql)
@@ -469,18 +469,16 @@ pub async fn spawn_label_gc(db: sqlx::AnyPool, backend: DatabaseBackend) {
     let interval = tokio::time::Duration::from_secs(3600); // 1 hour
 
     // Build database-specific cleanup query for expired labels
-    let expired_sql = match backend {
-        DatabaseBackend::Postgres => "DELETE FROM labels WHERE exp IS NOT NULL AND exp < NOW()",
-        DatabaseBackend::Sqlite => {
-            "DELETE FROM labels WHERE exp IS NOT NULL AND exp < datetime('now')"
-        }
-    };
+    let expired_sql = adapt_sql(
+        "DELETE FROM labels WHERE exp IS NOT NULL AND exp < datetime('now')",
+        backend,
+    );
 
     loop {
         tokio::time::sleep(interval).await;
 
         // Delete expired labels.
-        let expired = sqlx::query(expired_sql).execute(&db).await;
+        let expired = sqlx::query(&expired_sql).execute(&db).await;
 
         let expired_count = match expired {
             Ok(r) => r.rows_affected(),

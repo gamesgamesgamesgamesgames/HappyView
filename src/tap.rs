@@ -529,11 +529,11 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
             let insert_sql = adapt_sql(
                 r#"
                 INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (uri) DO UPDATE
                     SET record = EXCLUDED.record,
                         cid = EXCLUDED.cid,
-                        indexed_at = $7
+                        indexed_at = ?
                 "#,
                 backend,
             );
@@ -544,6 +544,8 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                 .bind(&record.rkey)
                 .bind(serde_json::to_string(&rec_to_store).unwrap_or_default())
                 .bind(cid)
+                .bind(&now)
+                .bind(&now)
                 .bind(&now)
                 .execute(db)
                 .await
@@ -640,7 +642,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                 }
             }
 
-            let delete_sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+            let delete_sql = adapt_sql("DELETE FROM records WHERE uri = ?", backend);
             match sqlx::query(&delete_sql).bind(&uri).execute(db).await {
                 Ok(_) => {
                     log_event(
@@ -701,7 +703,7 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
 
     // Check if this NSID is one we're tracking and the DID matches the authority.
     let select_sql = adapt_sql(
-        "SELECT target_collection FROM lexicons WHERE id = $1 AND source = 'network' AND authority_did = $2",
+        "SELECT target_collection FROM lexicons WHERE id = ? AND source = 'network' AND authority_did = ?",
         backend,
     );
     let tracked: Option<(Option<String>,)> = sqlx::query_as(&select_sql)
@@ -746,13 +748,13 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
             let upsert_sql = adapt_sql(
                 r#"
                 INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at, created_at)
-                VALUES ($1, $2, 0, $3, 'network', $4, $5, $5)
+                VALUES (?, ?, 0, ?, 'network', ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     lexicon_json = EXCLUDED.lexicon_json,
                     target_collection = EXCLUDED.target_collection,
-                    last_fetched_at = $5,
+                    last_fetched_at = ?,
                     revision = lexicons.revision + 1,
-                    updated_at = $5
+                    updated_at = ?
                 "#,
                 backend,
             );
@@ -761,6 +763,9 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
                 .bind(serde_json::to_string(rec).unwrap_or_default())
                 .bind(&target_collection)
                 .bind(did)
+                .bind(&now)
+                .bind(&now)
+                .bind(&now)
                 .bind(&now)
                 .execute(db)
                 .await
@@ -779,7 +784,7 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
         }
         "delete" => {
             // Remove from lexicons table and registry.
-            let delete_sql = adapt_sql("DELETE FROM lexicons WHERE id = $1", backend);
+            let delete_sql = adapt_sql("DELETE FROM lexicons WHERE id = ?", backend);
             let _ = sqlx::query(&delete_sql).bind(nsid).execute(db).await;
 
             let was_present = lexicons.remove(nsid).await;

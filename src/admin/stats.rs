@@ -2,7 +2,7 @@ use axum::Json;
 use axum::extract::State;
 
 use crate::AppState;
-use crate::db::DatabaseBackend;
+use crate::db::adapt_sql;
 use crate::error::AppError;
 
 use super::auth::UserAuth;
@@ -20,36 +20,22 @@ pub(super) async fn stats(
         .await
         .map_err(|e| AppError::Internal(format!("failed to count records: {e}")))?;
 
-    let collection_sql = match state.db_backend {
-        DatabaseBackend::Postgres => {
-            r#"
-            SELECT c.collection, COALESCE(r.cnt, 0) AS count
-            FROM (
-                SELECT id AS collection FROM lexicons
-                WHERE lexicon_json::jsonb->'defs'->'main'->>'type' = 'record'
-            ) c
-            LEFT JOIN (
-                SELECT collection, COUNT(*) AS cnt FROM records GROUP BY collection
-            ) r ON r.collection = c.collection
-            ORDER BY c.collection
-            "#
-        }
-        DatabaseBackend::Sqlite => {
-            r#"
-            SELECT c.collection, COALESCE(r.cnt, 0) AS count
-            FROM (
-                SELECT id AS collection FROM lexicons
-                WHERE json_extract(lexicon_json, '$.defs.main.type') = 'record'
-            ) c
-            LEFT JOIN (
-                SELECT collection, COUNT(*) AS cnt FROM records GROUP BY collection
-            ) r ON r.collection = c.collection
-            ORDER BY c.collection
-            "#
-        }
-    };
+    let collection_sql = adapt_sql(
+        r#"
+        SELECT c.collection, COALESCE(r.cnt, 0) AS count
+        FROM (
+            SELECT id AS collection FROM lexicons
+            WHERE json_extract(lexicon_json, '$.defs.main.type') = 'record'
+        ) c
+        LEFT JOIN (
+            SELECT collection, COUNT(*) AS cnt FROM records GROUP BY collection
+        ) r ON r.collection = c.collection
+        ORDER BY c.collection
+        "#,
+        state.db_backend,
+    );
 
-    let collections: Vec<(String, i64)> = sqlx::query_as(collection_sql)
+    let collections: Vec<(String, i64)> = sqlx::query_as(&collection_sql)
         .fetch_all(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to count by collection: {e}")))?;

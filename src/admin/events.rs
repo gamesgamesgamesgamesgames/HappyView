@@ -53,31 +53,24 @@ pub(super) async fn list_events(
         "SELECT id, event_type, severity, actor_did, subject, detail, created_at
          FROM event_logs WHERE 1=1",
     );
-    let mut param_count = 0u32;
 
     if query.event_type.is_some() {
-        param_count += 1;
-        sql.push_str(&format!(" AND event_type = ${param_count}"));
+        sql.push_str(" AND event_type = ?");
     }
     if query.category.is_some() {
-        param_count += 1;
-        sql.push_str(&format!(" AND event_type LIKE ${param_count}"));
+        sql.push_str(" AND event_type LIKE ?");
     }
     if query.severity.is_some() {
-        param_count += 1;
-        sql.push_str(&format!(" AND severity = ${param_count}"));
+        sql.push_str(" AND severity = ?");
     }
     if query.subject.is_some() {
-        param_count += 1;
-        sql.push_str(&format!(" AND subject = ${param_count}"));
+        sql.push_str(" AND subject = ?");
     }
     if query.cursor.is_some() {
-        param_count += 1;
-        sql.push_str(&format!(" AND created_at < ${param_count}"));
+        sql.push_str(" AND created_at < ?");
     }
 
-    param_count += 1;
-    sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ${param_count}"));
+    sql.push_str(" ORDER BY created_at DESC LIMIT ?");
 
     let sql = adapt_sql(&sql, backend);
 

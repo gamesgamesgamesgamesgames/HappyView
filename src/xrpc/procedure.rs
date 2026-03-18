@@ -93,7 +93,7 @@ async fn handle_create_record(
             let sql = adapt_sql(
                 r#"
                 INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (uri) DO UPDATE
                     SET record = EXCLUDED.record,
                         cid = EXCLUDED.cid
@@ -181,11 +181,11 @@ async fn handle_put_record(
         let sql = adapt_sql(
             r#"
             INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (uri) DO UPDATE
                 SET record = EXCLUDED.record,
                     cid = EXCLUDED.cid,
-                    indexed_at = $7
+                    indexed_at = ?
             "#,
             backend,
         );
@@ -196,6 +196,7 @@ async fn handle_put_record(
             .bind(rkey)
             .bind(&record_str)
             .bind(cid)
+            .bind(&now)
             .bind(&now)
             .execute(&state.db)
             .await;
@@ -246,7 +247,7 @@ async fn handle_delete_record(
             .map_err(|e| AppError::Internal(format!("failed to read PDS response: {e}")))?;
 
         let backend = state.db_backend;
-        let sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+        let sql = adapt_sql("DELETE FROM records WHERE uri = ?", backend);
         let _ = sqlx::query(&sql).bind(uri).execute(&state.db).await;
 
         Ok((
