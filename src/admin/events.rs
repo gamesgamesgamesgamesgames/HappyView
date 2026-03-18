@@ -8,6 +8,7 @@ use serde_json::Value;
 use super::auth::UserAuth;
 use super::permissions::Permission;
 use crate::AppState;
+use crate::db::{adapt_sql, parse_dt};
 use crate::error::AppError;
 
 #[derive(Deserialize)]
@@ -45,10 +46,11 @@ pub(super) async fn list_events(
     Query(query): Query<EventsQuery>,
 ) -> Result<Json<EventsListResponse>, AppError> {
     auth.require(Permission::EventsRead).await?;
+    let backend = state.db_backend;
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
 
     let mut sql = String::from(
-        "SELECT id::text, event_type, severity, actor_did, subject, detail, created_at
+        "SELECT id, event_type, severity, actor_did, subject, detail, created_at
          FROM event_logs WHERE 1=1",
     );
     let mut param_count = 0u32;
@@ -77,6 +79,8 @@ pub(super) async fn list_events(
     param_count += 1;
     sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ${param_count}"));
 
+    let sql = adapt_sql(&sql, backend);
+
     #[allow(clippy::type_complexity)]
     let mut q = sqlx::query_as::<
         _,
@@ -86,8 +90,8 @@ pub(super) async fn list_events(
             String,
             Option<String>,
             Option<String>,
-            Value,
-            chrono::DateTime<chrono::Utc>,
+            String,
+            String,
         ),
     >(&sql);
 
@@ -104,10 +108,7 @@ pub(super) async fn list_events(
         q = q.bind(subject);
     }
     if let Some(ref cursor) = query.cursor {
-        let ts = cursor
-            .parse::<chrono::DateTime<chrono::Utc>>()
-            .map_err(|_| AppError::BadRequest("invalid cursor format".to_string()))?;
-        q = q.bind(ts);
+        q = q.bind(cursor);
     }
     q = q.bind(limit);
 
@@ -124,8 +125,8 @@ pub(super) async fn list_events(
             severity: row.2,
             actor_did: row.3,
             subject: row.4,
-            detail: row.5,
-            created_at: row.6,
+            detail: serde_json::from_str(&row.5).unwrap_or(Value::Object(Default::default())),
+            created_at: parse_dt(&row.6),
         })
         .collect();
 

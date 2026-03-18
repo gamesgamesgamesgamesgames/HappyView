@@ -17,9 +17,9 @@ pub(super) struct LexiconSummary {
     pub(super) has_index_hook: bool,
     pub(super) source: String,
     pub(super) authority_did: Option<String>,
-    pub(super) last_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
-    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+    pub(super) last_fetched_at: Option<String>,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
     /// For record-type lexicons: the `properties` object from `defs.main.record`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) record_schema: Option<Value>,
@@ -78,9 +78,9 @@ pub(super) struct BackfillJob {
     pub(super) processed_repos: Option<i32>,
     pub(super) total_records: Option<i32>,
     pub(super) error: Option<String>,
-    pub(super) started_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub(super) completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) started_at: Option<String>,
+    pub(super) completed_at: Option<String>,
+    pub(super) created_at: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +98,8 @@ pub(super) struct NetworkLexiconSummary {
     pub(super) nsid: String,
     pub(super) authority_did: String,
     pub(super) target_collection: Option<String>,
-    pub(super) last_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) last_fetched_at: Option<String>,
+    pub(super) created_at: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -119,21 +119,8 @@ pub(super) struct UserSummary {
     pub(super) did: String,
     pub(super) is_super: bool,
     pub(super) permissions: Vec<String>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
-    pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct UpdatePermissionsBody {
-    #[serde(default)]
-    pub(super) grant: Vec<String>,
-    #[serde(default)]
-    pub(super) revoke: Vec<String>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct TransferSuperBody {
-    pub(super) target_user_id: String,
+    pub(super) created_at: String,
+    pub(super) last_used_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -152,9 +139,9 @@ pub(super) struct ApiKeySummary {
     pub(super) name: String,
     pub(super) key_prefix: String,
     pub(super) permissions: Vec<String>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
-    pub(super) last_used_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub(super) revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(super) created_at: String,
+    pub(super) last_used_at: Option<String>,
+    pub(super) revoked_at: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -174,8 +161,8 @@ pub(super) struct CreateApiKeyResponse {
 pub(super) struct ScriptVariableSummary {
     pub(super) key: String,
     pub(super) preview: String,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
-    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
 }
 
 #[derive(Deserialize)]
@@ -193,18 +180,35 @@ pub(super) struct AddLabelerBody {
     pub(super) did: String,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub(super) struct LabelerSummary {
     pub(super) did: String,
     pub(super) status: String,
     pub(super) cursor: Option<i64>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
-    pub(super) updated_at: chrono::DateTime<chrono::Utc>,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
 }
 
 #[derive(Deserialize)]
 pub(super) struct UpdateLabelerBody {
     pub(super) status: String,
+}
+
+// ---------------------------------------------------------------------------
+// User permission / transfer types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct UpdatePermissionsBody {
+    #[serde(default)]
+    pub(super) grant: Vec<String>,
+    #[serde(default)]
+    pub(super) revoke: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TransferSuperBody {
+    pub(super) target_user_id: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -242,10 +246,10 @@ pub(super) struct RateLimitsResponse {
     pub(super) allowlist: Vec<AllowlistEntry>,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub(super) struct AllowlistEntry {
     pub(super) id: i32,
     pub(super) cidr: String,
     pub(super) note: Option<String>,
-    pub(super) created_at: chrono::DateTime<chrono::Utc>,
+    pub(super) created_at: String,
 }

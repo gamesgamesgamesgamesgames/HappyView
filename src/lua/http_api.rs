@@ -91,6 +91,7 @@ mod tests {
             host: "127.0.0.1".into(),
             port: 3000,
             database_url: String::new(),
+            database_backend: crate::db::DatabaseBackend::Sqlite,
             aip_url: String::new(),
             aip_public_url: String::new(),
             tap_url: String::new(),
@@ -102,10 +103,12 @@ mod tests {
         };
         let (tx, _) = watch::channel(vec![]);
         let (labeler_tx, _) = watch::channel(());
+        sqlx::any::install_default_drivers();
         AppState {
             config,
             http: reqwest::Client::new(),
-            db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
+            db: sqlx::AnyPool::connect_lazy("sqlite::memory:").unwrap(),
+            db_backend: crate::db::DatabaseBackend::Sqlite,
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
             labeler_subscriptions_tx: labeler_tx,

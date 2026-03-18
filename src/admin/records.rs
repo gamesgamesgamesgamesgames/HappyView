@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 
 use super::auth::UserAuth;
@@ -54,6 +54,7 @@ pub(super) async fn list_records(
     Query(params): Query<ListRecordsParams>,
 ) -> Result<Json<ListRecordsResponse>, AppError> {
     auth.require(Permission::RecordsRead).await?;
+    let backend = state.db_backend;
     let limit = params.limit.unwrap_or(20).min(100);
     let offset: i64 = params
         .cursor
@@ -61,18 +62,20 @@ pub(super) async fn list_records(
         .and_then(|c| c.parse().ok())
         .unwrap_or(0);
 
-    let rows: Vec<(String, String, Value)> = sqlx::query_as(
+    let sql = adapt_sql(
         "SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY indexed_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(&params.collection)
-    .bind(limit + 1)
-    .bind(offset)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to list records: {e}")))?;
+        backend,
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+        .bind(&params.collection)
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list records: {e}")))?;
 
     let has_more = rows.len() as i64 > limit;
-    let visible_rows: Vec<(String, String, Value)> =
+    let visible_rows: Vec<(String, String, String)> =
         rows.into_iter().take(limit as usize).collect();
 
     // Batch-query external labels for all visible URIs
@@ -80,27 +83,41 @@ pub(super) async fn list_records(
         .iter()
         .map(|(uri, _, _)| uri.as_str())
         .collect();
-    let label_rows: Vec<(String, String, String, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT uri, src, val, cts FROM labels WHERE uri = ANY($1) AND (exp IS NULL OR exp > NOW())",
-    )
-    .bind(&uris)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to fetch labels: {e}")))?;
+
+    let label_rows: Vec<(String, String, String, String)> = if uris.is_empty() {
+        Vec::new()
+    } else {
+        let now = now_rfc3339();
+        let placeholders: Vec<String> = (1..=uris.len()).map(|i| format!("${i}")).collect();
+        let ph_str = placeholders.join(", ");
+        let next_idx = uris.len() + 1;
+        let raw_sql = format!(
+            "SELECT uri, src, val, cts FROM labels WHERE uri IN ({ph_str}) AND (exp IS NULL OR exp > ${next_idx})"
+        );
+        let sql = adapt_sql(&raw_sql, backend);
+        let mut q = sqlx::query_as(&sql);
+        for uri in &uris {
+            q = q.bind(*uri);
+        }
+        q = q.bind(&now);
+        q.fetch_all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to fetch labels: {e}")))?
+    };
 
     // Group external labels by URI
     let mut labels_by_uri: HashMap<String, Vec<RecordLabel>> = HashMap::new();
     for (uri, src, val, cts) in label_rows {
-        labels_by_uri.entry(uri).or_default().push(RecordLabel {
-            src,
-            val,
-            cts: cts.to_rfc3339(),
-        });
+        labels_by_uri
+            .entry(uri)
+            .or_default()
+            .push(RecordLabel { src, val, cts });
     }
 
     let records: Vec<RecordEntry> = visible_rows
         .into_iter()
-        .map(|(uri, did, record)| {
+        .map(|(uri, did, record_str)| {
+            let record: Value = serde_json::from_str(&record_str).unwrap_or_default();
             let mut labels = labels_by_uri.remove(&uri).unwrap_or_default();
 
             // Extract self-labels from record JSONB
@@ -151,7 +168,9 @@ pub(super) async fn delete_collection_records(
 ) -> Result<Json<serde_json::Value>, AppError> {
     auth.require(Permission::RecordsDeleteCollection).await?;
     auth.require(Permission::RecordsDelete).await?;
-    let result = sqlx::query("DELETE FROM records WHERE collection = $1")
+    let backend = state.db_backend;
+    let sql = adapt_sql("DELETE FROM records WHERE collection = $1", backend);
+    let result = sqlx::query(&sql)
         .bind(&params.collection)
         .execute(&state.db)
         .await
@@ -169,7 +188,9 @@ pub(super) async fn delete_record(
     Query(params): Query<DeleteRecordParams>,
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::RecordsDelete).await?;
-    let result = sqlx::query("DELETE FROM records WHERE uri = $1")
+    let backend = state.db_backend;
+    let sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+    let result = sqlx::query(&sql)
         .bind(&params.uri)
         .execute(&state.db)
         .await

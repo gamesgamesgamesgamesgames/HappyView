@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 
 use crate::AppState;
 use crate::auth::Claims;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::lexicon::ProcedureAction;
 use crate::record_refs::sync_refs;
@@ -86,26 +87,32 @@ async fn handle_create_record(
             pds_result.get("uri").and_then(|v| v.as_str()),
             pds_result.get("cid").and_then(|v| v.as_str()),
         ) {
+            let backend = state.db_backend;
             let rkey = uri.split('/').next_back().unwrap_or_default();
-            let _ = sqlx::query(
+            let record_str = serde_json::to_string(&record).unwrap_or_default();
+            let sql = adapt_sql(
                 r#"
-                INSERT INTO records (uri, did, collection, rkey, record, cid)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (uri) DO UPDATE
                     SET record = EXCLUDED.record,
                         cid = EXCLUDED.cid
                 "#,
-            )
-            .bind(uri)
-            .bind(claims.did())
-            .bind(collection)
-            .bind(rkey)
-            .bind(&record)
-            .bind(cid)
-            .execute(&state.db)
-            .await;
+                backend,
+            );
+            let now = now_rfc3339();
+            let _ = sqlx::query(&sql)
+                .bind(uri)
+                .bind(claims.did())
+                .bind(collection)
+                .bind(rkey)
+                .bind(&record_str)
+                .bind(cid)
+                .bind(&now)
+                .execute(&state.db)
+                .await;
 
-            let _ = sync_refs(&state.db, uri, collection, &record).await;
+            let _ = sync_refs(&state.db, uri, collection, &record, backend).await;
         }
 
         Ok((
@@ -168,26 +175,32 @@ async fn handle_put_record(
             .and_then(|v| v.as_str())
             .unwrap_or_default();
 
-        let _ = sqlx::query(
+        let backend = state.db_backend;
+        let record_str = serde_json::to_string(&record).unwrap_or_default();
+        let now = now_rfc3339();
+        let sql = adapt_sql(
             r#"
-            INSERT INTO records (uri, did, collection, rkey, record, cid)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (uri) DO UPDATE
                 SET record = EXCLUDED.record,
                     cid = EXCLUDED.cid,
-                    indexed_at = NOW()
+                    indexed_at = $7
             "#,
-        )
-        .bind(uri)
-        .bind(claims.did())
-        .bind(collection)
-        .bind(rkey)
-        .bind(&record)
-        .bind(cid)
-        .execute(&state.db)
-        .await;
+            backend,
+        );
+        let _ = sqlx::query(&sql)
+            .bind(uri)
+            .bind(claims.did())
+            .bind(collection)
+            .bind(rkey)
+            .bind(&record_str)
+            .bind(cid)
+            .bind(&now)
+            .execute(&state.db)
+            .await;
 
-        let _ = sync_refs(&state.db, uri, collection, &record).await;
+        let _ = sync_refs(&state.db, uri, collection, &record, backend).await;
 
         Ok((
             StatusCode::OK,
@@ -232,11 +245,9 @@ async fn handle_delete_record(
             .await
             .map_err(|e| AppError::Internal(format!("failed to read PDS response: {e}")))?;
 
-        // Remove from local records table.
-        let _ = sqlx::query("DELETE FROM records WHERE uri = $1")
-            .bind(uri)
-            .execute(&state.db)
-            .await;
+        let backend = state.db_backend;
+        let sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+        let _ = sqlx::query(&sql).bind(uri).execute(&state.db).await;
 
         Ok((
             StatusCode::OK,

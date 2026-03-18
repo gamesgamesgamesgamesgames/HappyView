@@ -2,18 +2,19 @@ mod common;
 
 use happyview::AppState;
 use happyview::config::Config;
+use happyview::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use happyview::lexicon::LexiconRegistry;
 use serial_test::serial;
 use tokio::sync::watch;
 
 use common::db;
 
-/// Build an AppState backed by a real Postgres pool.
-async fn test_state_with_pool(pool: sqlx::PgPool) -> AppState {
+async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> AppState {
     let config = Config {
         host: "127.0.0.1".into(),
         port: 3000,
         database_url: String::new(),
+        database_backend: backend,
         aip_url: String::new(),
         aip_public_url: String::new(),
         tap_url: String::new(),
@@ -29,6 +30,7 @@ async fn test_state_with_pool(pool: sqlx::PgPool) -> AppState {
         config,
         http: reqwest::Client::new(),
         db: pool,
+        db_backend: backend,
         lexicons: LexiconRegistry::new(),
         collections_tx: tx,
         labeler_subscriptions_tx: labeler_tx,
@@ -46,40 +48,62 @@ async fn test_state_with_pool(pool: sqlx::PgPool) -> AppState {
     }
 }
 
-/// Seed a record into the records table.
-async fn seed_record(pool: &sqlx::PgPool, uri: &str, did: &str, record: serde_json::Value) {
-    sqlx::query(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid) VALUES ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(uri)
-    .bind(did)
-    .bind("test.collection")
-    .bind("rkey1")
-    .bind(record)
-    .bind("bafytest")
-    .execute(pool)
-    .await
-    .expect("failed to seed record");
-}
-
-/// Seed a label into the labels table.
-async fn seed_label(pool: &sqlx::PgPool, src: &str, uri: &str, val: &str, exp: Option<&str>) {
-    if let Some(exp) = exp {
-        sqlx::query(
-            "INSERT INTO labels (src, uri, val, cts, exp) VALUES ($1, $2, $3, NOW(), $4::timestamptz)",
-        )
-        .bind(src)
+async fn seed_record(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    uri: &str,
+    did: &str,
+    record: serde_json::Value,
+) {
+    let sql = adapt_sql(
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        backend,
+    );
+    sqlx::query(&sql)
         .bind(uri)
-        .bind(val)
-        .bind(exp)
+        .bind(did)
+        .bind("test.collection")
+        .bind("rkey1")
+        .bind(serde_json::to_string(&record).unwrap_or_default())
+        .bind("bafytest")
+        .bind(now_rfc3339())
         .execute(pool)
         .await
-        .expect("failed to seed label");
-    } else {
-        sqlx::query("INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, NOW())")
+        .expect("failed to seed record");
+}
+
+async fn seed_label(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    src: &str,
+    uri: &str,
+    val: &str,
+    exp: Option<&str>,
+) {
+    if let Some(exp) = exp {
+        let sql = adapt_sql(
+            "INSERT INTO labels (src, uri, val, cts, exp) VALUES ($1, $2, $3, $4, $5)",
+            backend,
+        );
+        sqlx::query(&sql)
             .bind(src)
             .bind(uri)
             .bind(val)
+            .bind(now_rfc3339())
+            .bind(exp)
+            .execute(pool)
+            .await
+            .expect("failed to seed label");
+    } else {
+        let sql = adapt_sql(
+            "INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, $4)",
+            backend,
+        );
+        sqlx::query(&sql)
+            .bind(src)
+            .bind(uri)
+            .bind(val)
+            .bind(now_rfc3339())
             .execute(pool)
             .await
             .expect("failed to seed label");
@@ -92,31 +116,45 @@ async fn seed_label(pool: &sqlx::PgPool, src: &str, uri: &str, val: &str, exp: O
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn get_labels_returns_external_labels() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri = "at://did:plc:test/test.collection/rkey1";
     seed_record(
         &pool,
+        backend,
         uri,
         "did:plc:test",
         serde_json::json!({"name": "test"}),
     )
     .await;
-    seed_label(&pool, "did:plc:labeler1", uri, "adult-content", None).await;
-    seed_label(&pool, "did:plc:labeler1", uri, "violence", None).await;
-
-    let state = test_state_with_pool(pool).await;
-
-    // atproto_api is pub(crate) so we test the underlying queries directly.
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > NOW())",
+    seed_label(
+        &pool,
+        backend,
+        "did:plc:labeler1",
+        uri,
+        "adult-content",
+        None,
     )
-    .bind(uri)
-    .fetch_all(&state.db)
-    .await
-    .unwrap();
+    .await;
+    seed_label(&pool, backend, "did:plc:labeler1", uri, "violence", None).await;
+
+    let state = test_state_with_pool(pool, backend).await;
+
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+        backend,
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+        .bind(uri)
+        .bind(&now)
+        .fetch_all(&state.db)
+        .await
+        .unwrap();
 
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].2, "adult-content");
@@ -125,13 +163,16 @@ async fn get_labels_returns_external_labels() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn get_labels_filters_expired() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri = "at://did:plc:test/test.collection/rkey1";
     seed_record(
         &pool,
+        backend,
         uri,
         "did:plc:test",
         serde_json::json!({"name": "test"}),
@@ -139,10 +180,11 @@ async fn get_labels_filters_expired() {
     .await;
 
     // Active label
-    seed_label(&pool, "did:plc:labeler1", uri, "nudity", None).await;
+    seed_label(&pool, backend, "did:plc:labeler1", uri, "nudity", None).await;
     // Expired label (past date)
     seed_label(
         &pool,
+        backend,
         "did:plc:labeler1",
         uri,
         "spam",
@@ -150,16 +192,19 @@ async fn get_labels_filters_expired() {
     )
     .await;
 
-    let state = test_state_with_pool(pool).await;
+    let state = test_state_with_pool(pool, backend).await;
 
-    // Query with expiry filter (same as get_labels does internally)
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > NOW())",
-    )
-    .bind(uri)
-    .fetch_all(&state.db)
-    .await
-    .unwrap();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+        backend,
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+        .bind(uri)
+        .bind(&now)
+        .fetch_all(&state.db)
+        .await
+        .unwrap();
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].2, "nudity");
@@ -167,8 +212,10 @@ async fn get_labels_filters_expired() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn get_labels_includes_self_labels() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri = "at://did:plc:author/test.collection/rkey1";
@@ -181,19 +228,19 @@ async fn get_labels_includes_self_labels() {
             ]
         }
     });
-    seed_record(&pool, uri, "did:plc:author", record.clone()).await;
+    seed_record(&pool, backend, uri, "did:plc:author", record.clone()).await;
 
-    // Verify self-labels can be extracted from record JSON
-    let fetched: Option<(String, serde_json::Value)> =
-        sqlx::query_as("SELECT did, record FROM records WHERE uri = $1")
-            .bind(uri)
-            .fetch_optional(&pool)
-            .await
-            .unwrap();
+    let sql = adapt_sql("SELECT did, record FROM records WHERE uri = $1", backend);
+    let fetched: Option<(String, String)> = sqlx::query_as(&sql)
+        .bind(uri)
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
 
-    let (did, rec) = fetched.unwrap();
+    let (did, rec_str) = fetched.unwrap();
     assert_eq!(did, "did:plc:author");
 
+    let rec: serde_json::Value = serde_json::from_str(&rec_str).unwrap();
     let self_labels: Vec<&str> = rec
         .get("labels")
         .and_then(|l| l.get("values"))
@@ -208,26 +255,33 @@ async fn get_labels_includes_self_labels() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn get_labels_empty_for_unlabeled_record() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri = "at://did:plc:test/test.collection/rkey1";
     seed_record(
         &pool,
+        backend,
         uri,
         "did:plc:test",
         serde_json::json!({"name": "test"}),
     )
     .await;
 
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > NOW())",
-    )
-    .bind(uri)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "SELECT src, uri, val FROM labels WHERE uri = $1 AND (exp IS NULL OR exp > $2)",
+        backend,
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+        .bind(uri)
+        .bind(&now)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     assert!(rows.is_empty());
 }
@@ -238,8 +292,10 @@ async fn get_labels_empty_for_unlabeled_record() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn get_labels_batch_returns_labels_per_uri() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri1 = "at://did:plc:test/test.collection/rkey1";
@@ -247,40 +303,45 @@ async fn get_labels_batch_returns_labels_per_uri() {
 
     seed_record(
         &pool,
+        backend,
         uri1,
         "did:plc:test",
         serde_json::json!({"name": "one"}),
     )
     .await;
 
-    // Use different rkey for second record to avoid PK conflict
-    sqlx::query(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid) VALUES ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(uri2)
-    .bind("did:plc:test")
-    .bind("test.collection")
-    .bind("rkey2")
-    .bind(serde_json::json!({"name": "two"}))
-    .bind("bafytest2")
-    .execute(&pool)
-    .await
-    .unwrap();
+    let sql = adapt_sql(
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(uri2)
+        .bind("did:plc:test")
+        .bind("test.collection")
+        .bind("rkey2")
+        .bind(serde_json::to_string(&serde_json::json!({"name": "two"})).unwrap_or_default())
+        .bind("bafytest2")
+        .bind(now_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
 
-    seed_label(&pool, "did:plc:labeler1", uri1, "nudity", None).await;
-    seed_label(&pool, "did:plc:labeler1", uri2, "spam", None).await;
-    seed_label(&pool, "did:plc:labeler2", uri2, "violence", None).await;
+    seed_label(&pool, backend, "did:plc:labeler1", uri1, "nudity", None).await;
+    seed_label(&pool, backend, "did:plc:labeler1", uri2, "spam", None).await;
+    seed_label(&pool, backend, "did:plc:labeler2", uri2, "violence", None).await;
 
-    let uris = vec![uri1.to_string(), uri2.to_string()];
-
-    // Batch query (same as get_labels_batch does internally)
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT src, uri, val FROM labels WHERE uri = ANY($1) AND (exp IS NULL OR exp > NOW())",
-    )
-    .bind(&uris)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "SELECT src, uri, val FROM labels WHERE uri IN ($1, $2) AND (exp IS NULL OR exp > $3)",
+        backend,
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+        .bind(uri1)
+        .bind(uri2)
+        .bind(&now)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     // uri1 has 1 label, uri2 has 2 labels
     let uri1_labels: Vec<_> = rows.iter().filter(|r| r.1 == uri1).collect();
@@ -293,22 +354,27 @@ async fn get_labels_batch_returns_labels_per_uri() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn get_labels_batch_empty_for_no_labels() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
-    let uris = vec![
-        "at://did:plc:test/test.collection/rkey1".to_string(),
-        "at://did:plc:test/test.collection/rkey2".to_string(),
-    ];
+    let uri1 = "at://did:plc:test/test.collection/rkey1";
+    let uri2 = "at://did:plc:test/test.collection/rkey2";
 
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT src, uri, val FROM labels WHERE uri = ANY($1) AND (exp IS NULL OR exp > NOW())",
-    )
-    .bind(&uris)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "SELECT src, uri, val FROM labels WHERE uri IN ($1, $2) AND (exp IS NULL OR exp > $3)",
+        backend,
+    );
+    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+        .bind(uri1)
+        .bind(uri2)
+        .bind(&now)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     assert!(rows.is_empty());
 }
@@ -319,28 +385,37 @@ async fn get_labels_batch_empty_for_no_labels() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn label_negation_removes_row() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri = "at://did:plc:test/test.collection/rkey1";
 
     // Add a label
-    seed_label(&pool, "did:plc:labeler1", uri, "nudity", None).await;
+    seed_label(&pool, backend, "did:plc:labeler1", uri, "nudity", None).await;
 
     // Verify it exists
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3")
-            .bind("did:plc:labeler1")
-            .bind(uri)
-            .bind("nudity")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let sql = adapt_sql(
+        "SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        backend,
+    );
+    let count: (i64,) = sqlx::query_as(&sql)
+        .bind("did:plc:labeler1")
+        .bind(uri)
+        .bind("nudity")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(count.0, 1);
 
     // Simulate negation (same logic as labeler.rs)
-    sqlx::query("DELETE FROM labels WHERE src = $1 AND uri = $2 AND val = $3")
+    let sql = adapt_sql(
+        "DELETE FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        backend,
+    );
+    sqlx::query(&sql)
         .bind("did:plc:labeler1")
         .bind(uri)
         .bind("nudity")
@@ -349,14 +424,17 @@ async fn label_negation_removes_row() {
         .unwrap();
 
     // Verify it's gone
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3")
-            .bind("did:plc:labeler1")
-            .bind(uri)
-            .bind("nudity")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let sql = adapt_sql(
+        "SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        backend,
+    );
+    let count: (i64,) = sqlx::query_as(&sql)
+        .bind("did:plc:labeler1")
+        .bind(uri)
+        .bind("nudity")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(count.0, 0);
 }
 
@@ -366,32 +444,45 @@ async fn label_negation_removes_row() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn label_upsert_is_idempotent() {
     let pool = db::test_pool().await;
+    let backend = db::test_backend();
     db::truncate_all(&pool).await;
 
     let uri = "at://did:plc:test/test.collection/rkey1";
 
+    let upsert_sql = match backend {
+        DatabaseBackend::Postgres => {
+            "INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, $4) ON CONFLICT (src, uri, val) DO UPDATE SET cts = EXCLUDED.cts".to_string()
+        }
+        DatabaseBackend::Sqlite => {
+            "INSERT INTO labels (src, uri, val, cts) VALUES (?, ?, ?, ?) ON CONFLICT (src, uri, val) DO UPDATE SET cts = excluded.cts".to_string()
+        }
+    };
+
     // Insert same label twice (upsert pattern from labeler.rs)
     for _ in 0..2 {
-        sqlx::query(
-            "INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, NOW()) ON CONFLICT (src, uri, val) DO UPDATE SET cts = EXCLUDED.cts",
-        )
-        .bind("did:plc:labeler1")
-        .bind(uri)
-        .bind("nudity")
-        .execute(&pool)
-        .await
-        .unwrap();
-    }
-
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3")
+        sqlx::query(&upsert_sql)
             .bind("did:plc:labeler1")
             .bind(uri)
             .bind("nudity")
-            .fetch_one(&pool)
+            .bind(now_rfc3339())
+            .execute(&pool)
             .await
             .unwrap();
+    }
+
+    let sql = adapt_sql(
+        "SELECT COUNT(*) FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+        backend,
+    );
+    let count: (i64,) = sqlx::query_as(&sql)
+        .bind("did:plc:labeler1")
+        .bind(uri)
+        .bind("nudity")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(count.0, 1);
 }

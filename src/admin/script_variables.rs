@@ -3,6 +3,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
@@ -16,17 +17,16 @@ pub(super) async fn list(
     auth: UserAuth,
 ) -> Result<Json<Vec<ScriptVariableSummary>>, AppError> {
     auth.require(Permission::ScriptVariablesRead).await?;
-    let rows: Vec<(
-        String,
-        String,
-        chrono::DateTime<chrono::Utc>,
-        chrono::DateTime<chrono::Utc>,
-    )> = sqlx::query_as(
+
+    let backend = state.db_backend;
+    let sql = adapt_sql(
         "SELECT key, value, created_at, updated_at FROM script_variables ORDER BY key",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to list script variables: {e}")))?;
+        backend,
+    );
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(&sql)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list script variables: {e}")))?;
 
     let vars: Vec<ScriptVariableSummary> = rows
         .into_iter()
@@ -51,18 +51,24 @@ pub(super) async fn upsert(
     Json(body): Json<UpsertScriptVariableBody>,
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::ScriptVariablesCreate).await?;
-    sqlx::query(
+
+    let backend = state.db_backend;
+    let now = now_rfc3339();
+    let sql = adapt_sql(
         r#"
-        INSERT INTO script_variables (key, value)
-        VALUES ($1, $2)
-        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+        INSERT INTO script_variables (key, value, created_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = $3
         "#,
-    )
-    .bind(&body.key)
-    .bind(&body.value)
-    .execute(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to upsert script variable: {e}")))?;
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(&body.key)
+        .bind(&body.value)
+        .bind(&now)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to upsert script variable: {e}")))?;
 
     log_event(
         &state.db,
@@ -73,6 +79,7 @@ pub(super) async fn upsert(
             subject: Some(body.key.clone()),
             detail: serde_json::json!({}),
         },
+        state.db_backend,
     )
     .await;
 
@@ -86,7 +93,10 @@ pub(super) async fn delete(
     Path(key): Path<String>,
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::ScriptVariablesDelete).await?;
-    let result = sqlx::query("DELETE FROM script_variables WHERE key = $1")
+
+    let backend = state.db_backend;
+    let sql = adapt_sql("DELETE FROM script_variables WHERE key = $1", backend);
+    let result = sqlx::query(&sql)
         .bind(&key)
         .execute(&state.db)
         .await
@@ -107,6 +117,7 @@ pub(super) async fn delete(
             subject: Some(key),
             detail: serde_json::json!({}),
         },
+        state.db_backend,
     )
     .await;
 

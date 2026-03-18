@@ -2,8 +2,10 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
@@ -53,37 +55,39 @@ pub(super) async fn create_user(
         }
     }
 
-    let mut tx = state
-        .db
-        .begin()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction start failed: {e}")))?;
+    let user_id = Uuid::new_v4().to_string();
+    let now = now_rfc3339();
+    let backend = state.db_backend;
 
-    let row: (String,) = sqlx::query_as("INSERT INTO users (did) VALUES ($1) RETURNING id::text")
+    let insert_sql = adapt_sql(
+        "INSERT INTO users (id, did, is_super, created_at) VALUES ($1, $2, $3, $4)",
+        backend,
+    );
+
+    sqlx::query(&insert_sql)
+        .bind(&user_id)
         .bind(&body.did)
-        .fetch_one(&mut *tx)
+        .bind(0_i32)
+        .bind(&now)
+        .execute(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to create user: {e}")))?;
 
-    let user_id = &row.0;
+    let perm_sql = adapt_sql(
+        "INSERT INTO user_permissions (user_id, permission, granted_by, granted_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        backend,
+    );
 
     for perm_str in &perms_to_grant {
-        sqlx::query(
-            "INSERT INTO user_permissions (user_id, permission, granted_by)
-             VALUES ($1::uuid, $2, $3::uuid)
-             ON CONFLICT DO NOTHING",
-        )
-        .bind(user_id)
-        .bind(perm_str)
-        .bind(&auth.user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to grant permission: {e}")))?;
+        sqlx::query(&perm_sql)
+            .bind(&user_id)
+            .bind(perm_str)
+            .bind(&auth.user_id)
+            .bind(&now)
+            .execute(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to grant permission: {e}")))?;
     }
-
-    tx.commit()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction commit failed: {e}")))?;
 
     let template_name = body
         .template
@@ -102,6 +106,7 @@ pub(super) async fn create_user(
                 "permissions": perms_to_grant,
             }),
         },
+        backend,
     )
     .await;
 
@@ -121,35 +126,35 @@ pub(super) async fn list_users(
 ) -> Result<Json<Vec<UserSummary>>, AppError> {
     auth.require(Permission::UsersRead).await?;
 
-    #[allow(clippy::type_complexity)]
-    let rows: Vec<(
-        String,
-        String,
-        bool,
-        chrono::DateTime<chrono::Utc>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    )> = sqlx::query_as(
-        "SELECT id::text, did, is_super, created_at, last_used_at
-         FROM users ORDER BY created_at",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to list users: {e}")))?;
+    let backend = state.db_backend;
 
-    let mut users = Vec::new();
-    for (id, did, is_super, created_at, last_used_at) in rows {
-        let perm_rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT permission FROM user_permissions WHERE user_id = $1::uuid ORDER BY permission",
-        )
-        .bind(&id)
+    let select_sql = adapt_sql(
+        "SELECT id, did, is_super, created_at, last_used_at FROM users ORDER BY created_at",
+        backend,
+    );
+
+    let rows: Vec<(String, String, i32, String, Option<String>)> = sqlx::query_as(&select_sql)
         .fetch_all(&state.db)
         .await
-        .map_err(|e| AppError::Internal(format!("failed to load permissions: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("failed to list users: {e}")))?;
+
+    let perm_sql = adapt_sql(
+        "SELECT permission FROM user_permissions WHERE user_id = $1 ORDER BY permission",
+        backend,
+    );
+
+    let mut users = Vec::new();
+    for (id, did, is_super_int, created_at, last_used_at) in rows {
+        let perm_rows: Vec<(String,)> = sqlx::query_as(&perm_sql)
+            .bind(&id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to load permissions: {e}")))?;
 
         users.push(UserSummary {
             id,
             did,
-            is_super,
+            is_super: is_super_int != 0,
             permissions: perm_rows.into_iter().map(|(p,)| p).collect(),
             created_at,
             last_used_at,
@@ -167,38 +172,38 @@ pub(super) async fn get_user(
 ) -> Result<Json<UserSummary>, AppError> {
     auth.require(Permission::UsersRead).await?;
 
-    #[allow(clippy::type_complexity)]
-    let found: Option<(
-        String,
-        String,
-        bool,
-        chrono::DateTime<chrono::Utc>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    )> = sqlx::query_as(
-        "SELECT id::text, did, is_super, created_at, last_used_at
-         FROM users WHERE id::text = $1",
-    )
-    .bind(&id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to get user: {e}")))?;
+    let backend = state.db_backend;
 
-    let Some((uid, did, is_super, created_at, last_used_at)) = found else {
+    let select_sql = adapt_sql(
+        "SELECT id, did, is_super, created_at, last_used_at FROM users WHERE id = $1",
+        backend,
+    );
+
+    let found: Option<(String, String, i32, String, Option<String>)> = sqlx::query_as(&select_sql)
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to get user: {e}")))?;
+
+    let Some((uid, did, is_super_int, created_at, last_used_at)) = found else {
         return Err(AppError::NotFound(format!("user '{id}' not found")));
     };
 
-    let perm_rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT permission FROM user_permissions WHERE user_id = $1::uuid ORDER BY permission",
-    )
-    .bind(&uid)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to load permissions: {e}")))?;
+    let perm_sql = adapt_sql(
+        "SELECT permission FROM user_permissions WHERE user_id = $1 ORDER BY permission",
+        backend,
+    );
+
+    let perm_rows: Vec<(String,)> = sqlx::query_as(&perm_sql)
+        .bind(&uid)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to load permissions: {e}")))?;
 
     Ok(Json(UserSummary {
         id: uid,
         did,
-        is_super,
+        is_super: is_super_int != 0,
         permissions: perm_rows.into_iter().map(|(p,)| p).collect(),
         created_at,
         last_used_at,
@@ -214,6 +219,8 @@ pub(super) async fn update_permissions(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::UsersUpdate).await?;
 
+    let backend = state.db_backend;
+
     // Self-modification guard
     if auth.user_id == id {
         return Err(AppError::Forbidden(
@@ -222,7 +229,8 @@ pub(super) async fn update_permissions(
     }
 
     // Cannot modify super user's permissions
-    let target: Option<(bool,)> = sqlx::query_as("SELECT is_super FROM users WHERE id::text = $1")
+    let select_sql = adapt_sql("SELECT is_super FROM users WHERE id = $1", backend);
+    let target: Option<(i32,)> = sqlx::query_as(&select_sql)
         .bind(&id)
         .fetch_optional(&state.db)
         .await
@@ -232,7 +240,7 @@ pub(super) async fn update_permissions(
         return Err(AppError::NotFound(format!("user '{id}' not found")));
     };
 
-    if target_is_super {
+    if target_is_super != 0 {
         return Err(AppError::Forbidden(
             "Cannot modify super user's permissions".into(),
         ));
@@ -265,41 +273,37 @@ pub(super) async fn update_permissions(
         }
     }
 
-    let mut tx = state
-        .db
-        .begin()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction start failed: {e}")))?;
+    let now = now_rfc3339();
+
+    let grant_sql = adapt_sql(
+        "INSERT INTO user_permissions (user_id, permission, granted_by, granted_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        backend,
+    );
 
     for perm_str in &body.grant {
-        sqlx::query(
-            "INSERT INTO user_permissions (user_id, permission, granted_by)
-             VALUES ($1::uuid, $2, $3::uuid)
-             ON CONFLICT DO NOTHING",
-        )
-        .bind(&id)
-        .bind(perm_str)
-        .bind(&auth.user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to grant permission: {e}")))?;
+        sqlx::query(&grant_sql)
+            .bind(&id)
+            .bind(perm_str)
+            .bind(&auth.user_id)
+            .bind(&now)
+            .execute(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to grant permission: {e}")))?;
     }
+
+    let revoke_sql = adapt_sql(
+        "DELETE FROM user_permissions WHERE user_id = $1 AND permission = $2",
+        backend,
+    );
 
     for perm_str in &body.revoke {
-        sqlx::query(
-            "DELETE FROM user_permissions
-             WHERE user_id = $1::uuid AND permission = $2",
-        )
-        .bind(&id)
-        .bind(perm_str)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to revoke permission: {e}")))?;
+        sqlx::query(&revoke_sql)
+            .bind(&id)
+            .bind(perm_str)
+            .execute(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to revoke permission: {e}")))?;
     }
-
-    tx.commit()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction commit failed: {e}")))?;
 
     log_event(
         &state.db,
@@ -313,6 +317,7 @@ pub(super) async fn update_permissions(
                 "revoked": body.revoke,
             }),
         },
+        backend,
     )
     .await;
 
@@ -327,13 +332,16 @@ pub(super) async fn delete_user(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::UsersDelete).await?;
 
+    let backend = state.db_backend;
+
     // Self-deletion guard
     if auth.user_id == id {
         return Err(AppError::Forbidden("Cannot delete yourself".into()));
     }
 
     // Cannot delete super user
-    let target: Option<(bool,)> = sqlx::query_as("SELECT is_super FROM users WHERE id::text = $1")
+    let select_sql = adapt_sql("SELECT is_super FROM users WHERE id = $1", backend);
+    let target: Option<(i32,)> = sqlx::query_as(&select_sql)
         .bind(&id)
         .fetch_optional(&state.db)
         .await
@@ -343,39 +351,36 @@ pub(super) async fn delete_user(
         return Err(AppError::NotFound(format!("user '{id}' not found")));
     };
 
-    if is_super {
+    if is_super != 0 {
         return Err(AppError::Forbidden("Cannot delete the super user".into()));
     }
 
-    // Delete cascades to user_permissions; also revoke their API keys.
-    // Use a transaction for atomicity.
-    let mut tx = state
-        .db
-        .begin()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction start failed: {e}")))?;
+    // Revoke API keys and delete user
+    let now = now_rfc3339();
 
-    sqlx::query(
-        "UPDATE api_keys SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL",
-    )
-    .bind(&id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to revoke api keys: {e}")))?;
+    let revoke_keys_sql = adapt_sql(
+        "UPDATE api_keys SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL",
+        backend,
+    );
 
-    let result = sqlx::query("DELETE FROM users WHERE id::text = $1")
+    sqlx::query(&revoke_keys_sql)
+        .bind(&now)
         .bind(&id)
-        .execute(&mut *tx)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to revoke api keys: {e}")))?;
+
+    let delete_sql = adapt_sql("DELETE FROM users WHERE id = $1", backend);
+
+    let result = sqlx::query(&delete_sql)
+        .bind(&id)
+        .execute(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to delete user: {e}")))?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("user '{id}' not found")));
     }
-
-    tx.commit()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction commit failed: {e}")))?;
 
     log_event(
         &state.db,
@@ -386,6 +391,7 @@ pub(super) async fn delete_user(
             subject: Some(id),
             detail: serde_json::json!({}),
         },
+        backend,
     )
     .await;
 
@@ -404,28 +410,35 @@ pub(super) async fn transfer_super(
         ));
     }
 
-    let mut tx = state
-        .db
-        .begin()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction start failed: {e}")))?;
+    let backend = state.db_backend;
+    let now = now_rfc3339();
 
     // Remove super from current user
-    sqlx::query("UPDATE users SET is_super = FALSE WHERE id::text = $1")
+    let update1_sql = adapt_sql("UPDATE users SET is_super = $1 WHERE id = $2", backend);
+    sqlx::query(&update1_sql)
+        .bind(0_i32)
         .bind(&auth.user_id)
-        .execute(&mut *tx)
+        .execute(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to remove super: {e}")))?;
 
     // Set super on target user
-    let result = sqlx::query("UPDATE users SET is_super = TRUE WHERE id::text = $1")
+    let update2_sql = adapt_sql("UPDATE users SET is_super = $1 WHERE id = $2", backend);
+    let result = sqlx::query(&update2_sql)
+        .bind(1_i32)
         .bind(&body.target_user_id)
-        .execute(&mut *tx)
+        .execute(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to set super: {e}")))?;
 
     if result.rows_affected() == 0 {
-        // Rollback by not committing
+        // Restore super on current user
+        let restore_sql = adapt_sql("UPDATE users SET is_super = $1 WHERE id = $2", backend);
+        let _ = sqlx::query(&restore_sql)
+            .bind(1_i32)
+            .bind(&auth.user_id)
+            .execute(&state.db)
+            .await;
         return Err(AppError::NotFound(format!(
             "user '{}' not found",
             body.target_user_id
@@ -433,23 +446,21 @@ pub(super) async fn transfer_super(
     }
 
     // Ensure target has all permissions
-    for perm in Permission::all() {
-        sqlx::query(
-            "INSERT INTO user_permissions (user_id, permission, granted_by)
-             VALUES ($1::uuid, $2, $3::uuid)
-             ON CONFLICT DO NOTHING",
-        )
-        .bind(&body.target_user_id)
-        .bind(perm.as_str())
-        .bind(&auth.user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to grant permission: {e}")))?;
-    }
+    let perm_sql = adapt_sql(
+        "INSERT INTO user_permissions (user_id, permission, granted_by, granted_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        backend,
+    );
 
-    tx.commit()
-        .await
-        .map_err(|e| AppError::Internal(format!("transaction commit failed: {e}")))?;
+    for perm in Permission::all() {
+        sqlx::query(&perm_sql)
+            .bind(&body.target_user_id)
+            .bind(perm.as_str())
+            .bind(&auth.user_id)
+            .bind(&now)
+            .execute(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to grant permission: {e}")))?;
+    }
 
     log_event(
         &state.db,
@@ -463,6 +474,7 @@ pub(super) async fn transfer_super(
                 "to_user_id": body.target_user_id,
             }),
         },
+        backend,
     )
     .await;
 

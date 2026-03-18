@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 
 use crate::AppState;
 use crate::auth::middleware::Claims;
+use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
@@ -16,7 +17,8 @@ pub struct UserAuth {
     pub user_id: String,
     pub is_super: bool,
     pub permissions: HashSet<Permission>,
-    pub db: sqlx::PgPool,
+    pub db: sqlx::AnyPool,
+    pub db_backend: DatabaseBackend,
 }
 
 impl UserAuth {
@@ -36,6 +38,7 @@ impl UserAuth {
                         "required_permission": permission.as_str(),
                     }),
                 },
+                self.db_backend,
             )
             .await;
 
@@ -46,15 +49,19 @@ impl UserAuth {
     }
 
     async fn load_permissions(
-        db: &sqlx::PgPool,
+        db: &sqlx::AnyPool,
         user_id: &str,
+        backend: DatabaseBackend,
     ) -> Result<HashSet<Permission>, AppError> {
-        let rows: Vec<(String,)> =
-            sqlx::query_as("SELECT permission FROM user_permissions WHERE user_id = $1::uuid")
-                .bind(user_id)
-                .fetch_all(db)
-                .await
-                .map_err(|e| AppError::Internal(format!("permission query failed: {e}")))?;
+        let sql = adapt_sql(
+            "SELECT permission FROM user_permissions WHERE user_id = $1",
+            backend,
+        );
+        let rows: Vec<(String,)> = sqlx::query_as(&sql)
+            .bind(user_id)
+            .fetch_all(db)
+            .await
+            .map_err(|e| AppError::Internal(format!("permission query failed: {e}")))?;
 
         let mut perms = HashSet::new();
         for (perm_str,) in rows {
@@ -67,11 +74,12 @@ impl UserAuth {
     }
 
     async fn load_api_key_permissions(
-        db: &sqlx::PgPool,
+        db: &sqlx::AnyPool,
         user_id: &str,
         key_permissions: &[String],
+        backend: DatabaseBackend,
     ) -> Result<HashSet<Permission>, AppError> {
-        let user_perms = Self::load_permissions(db, user_id).await?;
+        let user_perms = Self::load_permissions(db, user_id, backend).await?;
         let mut effective = HashSet::new();
         for perm_str in key_permissions {
             #[allow(clippy::collapsible_if)]
@@ -100,6 +108,7 @@ impl FromRequestParts<AppState> for UserAuth {
 
         let claims = Claims::from_request_parts(parts, state).await?;
         let did = claims.did().to_string();
+        let backend = state.db_backend;
 
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
             .fetch_one(&state.db)
@@ -107,46 +116,36 @@ impl FromRequestParts<AppState> for UserAuth {
             .map_err(|e| AppError::Internal(format!("user count query failed: {e}")))?;
 
         if count.0 == 0 {
-            let mut tx = state
-                .db
-                .begin()
-                .await
-                .map_err(|e| AppError::Internal(format!("transaction start failed: {e}")))?;
+            // Bootstrap first user
+            let id = uuid::Uuid::new_v4().to_string();
+            let now = now_rfc3339();
 
-            sqlx::query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| AppError::Internal(format!("set isolation failed: {e}")))?;
+            let insert_sql = adapt_sql(
+                "INSERT INTO users (id, did, is_super, created_at) VALUES ($1, $2, $3, $4)",
+                backend,
+            );
 
-            let row: Option<(String,)> = sqlx::query_as(
-                "INSERT INTO users (did, is_super) VALUES ($1, TRUE)
-                 ON CONFLICT (did) DO NOTHING
-                 RETURNING id::text",
-            )
-            .bind(&did)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|e| AppError::Internal(format!("auto-bootstrap user failed: {e}")))?;
+            let result = sqlx::query(&insert_sql)
+                .bind(&id)
+                .bind(&did)
+                .bind(1_i32)
+                .bind(&now)
+                .execute(&state.db)
+                .await;
 
-            if let Some((user_id,)) = row {
+            if result.is_ok() {
+                let perm_sql = adapt_sql(
+                    "INSERT INTO user_permissions (user_id, permission, granted_at) VALUES ($1, $2, $3)",
+                    backend,
+                );
                 for perm in Permission::all() {
-                    sqlx::query(
-                        "INSERT INTO user_permissions (user_id, permission)
-                         VALUES ($1::uuid, $2)
-                         ON CONFLICT DO NOTHING",
-                    )
-                    .bind(&user_id)
-                    .bind(perm.as_str())
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|e| {
-                        AppError::Internal(format!("bootstrap permissions failed: {e}"))
-                    })?;
+                    let _ = sqlx::query(&perm_sql)
+                        .bind(&id)
+                        .bind(perm.as_str())
+                        .bind(&now)
+                        .execute(&state.db)
+                        .await;
                 }
-
-                tx.commit()
-                    .await
-                    .map_err(|e| AppError::Internal(format!("transaction commit failed: {e}")))?;
 
                 tracing::info!(did = %did, "auto-bootstrapped first super user");
 
@@ -159,36 +158,37 @@ impl FromRequestParts<AppState> for UserAuth {
                         subject: Some(did.clone()),
                         detail: serde_json::json!({}),
                     },
+                    backend,
                 )
                 .await;
-            } else {
-                tx.commit()
-                    .await
-                    .map_err(|e| AppError::Internal(format!("transaction commit failed: {e}")))?;
             }
         }
 
-        let found: Option<(String, bool)> =
-            sqlx::query_as("SELECT id::text, is_super FROM users WHERE did = $1")
-                .bind(&did)
-                .fetch_optional(&state.db)
-                .await
-                .map_err(|e| AppError::Internal(format!("user auth query failed: {e}")))?;
+        let select_sql = adapt_sql("SELECT id, is_super FROM users WHERE did = $1", backend);
+        let found: Option<(String, i32)> = sqlx::query_as(&select_sql)
+            .bind(&did)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("user auth query failed: {e}")))?;
 
-        let Some((user_id, is_super)) = found else {
+        let Some((user_id, is_super_int)) = found else {
             return Err(AppError::Forbidden("not a user".into()));
         };
+        let is_super = is_super_int != 0;
 
         let permissions = if is_super {
             HashSet::new()
         } else {
-            Self::load_permissions(&state.db, &user_id).await?
+            Self::load_permissions(&state.db, &user_id, backend).await?
         };
 
         let db = state.db.clone();
         let uid = user_id.clone();
+        let now = now_rfc3339();
+        let update_sql = adapt_sql("UPDATE users SET last_used_at = $1 WHERE id = $2", backend);
         tokio::spawn(async move {
-            let _ = sqlx::query("UPDATE users SET last_used_at = NOW() WHERE id::text = $1")
+            let _ = sqlx::query(&update_sql)
+                .bind(&now)
                 .bind(&uid)
                 .execute(&db)
                 .await;
@@ -200,6 +200,7 @@ impl FromRequestParts<AppState> for UserAuth {
             is_super,
             permissions,
             db: state.db.clone(),
+            db_backend: backend,
         })
     }
 }
@@ -225,31 +226,43 @@ impl UserAuth {
         };
 
         let hash = hex::encode(Sha256::digest(token.as_bytes()));
+        let backend = state.db_backend;
 
-        let row: Option<(String, String, String, bool, Vec<String>)> = sqlx::query_as(
-            "SELECT k.id::text, u.id::text, u.did, u.is_super, k.permissions
-             FROM api_keys k
-             JOIN users u ON u.id = k.user_id
-             WHERE k.key_hash = $1 AND k.revoked_at IS NULL",
-        )
-        .bind(&hash)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("api key lookup failed: {e}")))?;
+        let select_sql = adapt_sql(
+            "SELECT k.id, u.id, u.did, u.is_super, k.permissions FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.key_hash = $1 AND k.revoked_at IS NULL",
+            backend,
+        );
 
-        let Some((key_id, user_id, did, is_super, key_permissions)) = row else {
+        let row: Option<(String, String, String, i32, String)> = sqlx::query_as(&select_sql)
+            .bind(&hash)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("api key lookup failed: {e}")))?;
+
+        let Some((key_id, user_id, did, is_super_int, permissions_json)) = row else {
             return Err(AppError::Auth("invalid or revoked API key".into()));
         };
+        let is_super = is_super_int != 0;
+
+        // Parse permissions from JSON string (stored as JSON array)
+        let key_permissions: Vec<String> =
+            serde_json::from_str(&permissions_json).unwrap_or_default();
 
         let permissions = if is_super {
             HashSet::new()
         } else {
-            Self::load_api_key_permissions(&state.db, &user_id, &key_permissions).await?
+            Self::load_api_key_permissions(&state.db, &user_id, &key_permissions, backend).await?
         };
 
         let db = state.db.clone();
+        let now = now_rfc3339();
+        let update_sql = adapt_sql(
+            "UPDATE api_keys SET last_used_at = $1 WHERE id = $2",
+            backend,
+        );
         tokio::spawn(async move {
-            let _ = sqlx::query("UPDATE api_keys SET last_used_at = NOW() WHERE id::text = $1")
+            let _ = sqlx::query(&update_sql)
+                .bind(&now)
                 .bind(&key_id)
                 .execute(&db)
                 .await;
@@ -261,6 +274,7 @@ impl UserAuth {
             is_super,
             permissions,
             db: state.db.clone(),
+            db_backend: backend,
         }))
     }
 }

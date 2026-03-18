@@ -1,28 +1,52 @@
-use sqlx::PgPool;
+use happyview::db::{self, DatabaseBackend};
+use sqlx::AnyPool;
 
-/// Connect to the test database using `TEST_DATABASE_URL`.
-pub async fn test_pool() -> PgPool {
+pub async fn test_pool() -> AnyPool {
     let url =
         std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for e2e tests");
 
-    let pool = PgPool::connect(&url)
-        .await
-        .expect("failed to connect to test database");
-
-    sqlx::migrate!()
-        .run(&pool)
-        .await
-        .expect("failed to run migrations on test database");
-
-    pool
+    let backend = DatabaseBackend::from_url(&url);
+    db::connect(&url, backend).await
 }
 
-/// Truncate all application tables, preserving schema.
-pub async fn truncate_all(pool: &PgPool) {
-    sqlx::query(
-        "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs, labeler_subscriptions, labels RESTART IDENTITY CASCADE",
-    )
-    .execute(pool)
-    .await
-    .expect("failed to truncate tables");
+pub fn test_backend() -> DatabaseBackend {
+    let url =
+        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for e2e tests");
+    DatabaseBackend::from_url(&url)
+}
+
+pub async fn truncate_all(pool: &AnyPool) {
+    let backend = test_backend();
+    match backend {
+        DatabaseBackend::Postgres => {
+            sqlx::query(
+                "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs, labeler_subscriptions, labels RESTART IDENTITY CASCADE",
+            )
+            .execute(pool)
+            .await
+            .expect("failed to truncate tables");
+        }
+        DatabaseBackend::Sqlite => {
+            let tables = [
+                "records",
+                "lexicons",
+                "backfill_jobs",
+                "users",
+                "user_permissions",
+                "api_keys",
+                "event_logs",
+                "script_variables",
+                "dead_letter_hooks",
+                "record_refs",
+                "labeler_subscriptions",
+                "labels",
+            ];
+            for table in tables {
+                sqlx::query(&format!("DELETE FROM {table}"))
+                    .execute(pool)
+                    .await
+                    .unwrap_or_else(|e| panic!("failed to delete from {table}: {e}"));
+            }
+        }
+    }
 }

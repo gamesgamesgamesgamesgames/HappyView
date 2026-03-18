@@ -3,6 +3,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
@@ -19,28 +20,48 @@ pub(super) async fn list(
 ) -> Result<Json<RateLimitsResponse>, AppError> {
     auth.require(Permission::RateLimitsRead).await?;
 
-    let enabled: String =
-        sqlx::query_scalar("SELECT value FROM rate_limit_settings WHERE key = 'enabled'")
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to read rate limit settings: {e}")))?
-            .unwrap_or_else(|| "true".to_string());
+    let backend = state.db_backend;
 
-    let row: Option<(i32, f32, i32, i32, i32)> = sqlx::query_as(
+    let enabled_sql = adapt_sql(
+        "SELECT value FROM rate_limit_settings WHERE key = 'enabled'",
+        backend,
+    );
+    let enabled: String = sqlx::query_scalar(&enabled_sql)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to read rate limit settings: {e}")))?
+        .unwrap_or_else(|| "true".to_string());
+
+    let limits_sql = adapt_sql(
         "SELECT capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost FROM rate_limits WHERE method IS NULL",
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to read rate limits: {e}")))?;
+        backend,
+    );
+    let row: Option<(i32, f32, i32, i32, i32)> = sqlx::query_as(&limits_sql)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to read rate limits: {e}")))?;
 
     let (capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost) =
         row.unwrap_or((100, 2.0, 1, 1, 1));
 
-    let allowlist: Vec<AllowlistEntry> =
-        sqlx::query_as("SELECT id, cidr, note, created_at FROM rate_limit_allowlist ORDER BY id")
-            .fetch_all(&state.db)
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to list allowlist: {e}")))?;
+    let allowlist_sql = adapt_sql(
+        "SELECT id, cidr, note, created_at FROM rate_limit_allowlist ORDER BY id",
+        backend,
+    );
+    let allowlist_rows: Vec<(i32, String, Option<String>, String)> = sqlx::query_as(&allowlist_sql)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list allowlist: {e}")))?;
+
+    let allowlist: Vec<AllowlistEntry> = allowlist_rows
+        .into_iter()
+        .map(|(id, cidr, note, created_at)| AllowlistEntry {
+            id,
+            cidr,
+            note,
+            created_at,
+        })
+        .collect();
 
     Ok(Json(RateLimitsResponse {
         enabled: enabled == "true",
@@ -61,27 +82,32 @@ pub(super) async fn upsert(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::RateLimitsCreate).await?;
 
-    sqlx::query(
+    let backend = state.db_backend;
+    let now = now_rfc3339();
+    let sql = adapt_sql(
         r#"
-        INSERT INTO rate_limits (method, capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost)
-        VALUES (NULL, $1, $2, $3, $4, $5)
+        INSERT INTO rate_limits (method, capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost, created_at)
+        VALUES (NULL, $1, $2, $3, $4, $5, $6)
         ON CONFLICT (method) DO UPDATE SET
             capacity = EXCLUDED.capacity,
             refill_rate = EXCLUDED.refill_rate,
             default_query_cost = EXCLUDED.default_query_cost,
             default_procedure_cost = EXCLUDED.default_procedure_cost,
             default_proxy_cost = EXCLUDED.default_proxy_cost,
-            updated_at = NOW()
+            updated_at = $6
         "#,
-    )
-    .bind(body.capacity as i32)
-    .bind(body.refill_rate as f32)
-    .bind(body.default_query_cost as i32)
-    .bind(body.default_procedure_cost as i32)
-    .bind(body.default_proxy_cost as i32)
-    .execute(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to upsert rate limit: {e}")))?;
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(body.capacity as i32)
+        .bind(body.refill_rate as f32)
+        .bind(body.default_query_cost as i32)
+        .bind(body.default_procedure_cost as i32)
+        .bind(body.default_proxy_cost as i32)
+        .bind(&now)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to upsert rate limit: {e}")))?;
 
     state.rate_limiter.reload_from_db(&state.db).await;
 
@@ -100,6 +126,7 @@ pub(super) async fn upsert(
                 "default_proxy_cost": body.default_proxy_cost,
             }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -116,17 +143,22 @@ pub(super) async fn set_enabled(
 
     let value = if body.enabled { "true" } else { "false" };
 
-    sqlx::query(
+    let backend = state.db_backend;
+    let now = now_rfc3339();
+    let sql = adapt_sql(
         r#"
         INSERT INTO rate_limit_settings (key, value)
         VALUES ('enabled', $1)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = $2
         "#,
-    )
-    .bind(value)
-    .execute(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to update rate limit settings: {e}")))?;
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(value)
+        .bind(&now)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to update rate limit settings: {e}")))?;
 
     state.rate_limiter.set_enabled(body.enabled);
 
@@ -139,6 +171,7 @@ pub(super) async fn set_enabled(
             subject: None,
             detail: serde_json::json!({ "enabled": body.enabled }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -173,9 +206,16 @@ pub(super) async fn add_allowlist(
         return Err(AppError::BadRequest(format!("invalid CIDR: {}", cidr_str)));
     }
 
-    sqlx::query("INSERT INTO rate_limit_allowlist (cidr, note) VALUES ($1, $2)")
+    let backend = state.db_backend;
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "INSERT INTO rate_limit_allowlist (cidr, note, created_at) VALUES ($1, $2, $3)",
+        backend,
+    );
+    sqlx::query(&sql)
         .bind(&cidr_str)
         .bind(&body.note)
+        .bind(&now)
         .execute(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to add allowlist entry: {e}")))?;
@@ -191,6 +231,7 @@ pub(super) async fn add_allowlist(
             subject: Some(cidr_str),
             detail: serde_json::json!({ "note": body.note }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -205,7 +246,9 @@ pub(super) async fn remove_allowlist(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::RateLimitsDelete).await?;
 
-    let result = sqlx::query("DELETE FROM rate_limit_allowlist WHERE id = $1")
+    let backend = state.db_backend;
+    let sql = adapt_sql("DELETE FROM rate_limit_allowlist WHERE id = $1", backend);
+    let result = sqlx::query(&sql)
         .bind(id)
         .execute(&state.db)
         .await
@@ -228,6 +271,7 @@ pub(super) async fn remove_allowlist(
             subject: Some(id.to_string()),
             detail: serde_json::json!({}),
         },
+        state.db_backend,
     )
     .await;
 
