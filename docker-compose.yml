@@ -25,12 +25,14 @@ services:
     ports:
       - "2480:2480"
     environment:
-      TAP_DATABASE_URL: ${DATABASE_URL}/tap
+      TAP_DATABASE_URL: sqlite:///data/tap.db
       TAP_RELAY_URL: ${TAP_RELAY_URL}
       TAP_PLC_URL: ${TAP_PLC_URL}
       TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
       TAP_COLLECTION_FILTERS: ${TAP_COLLECTION_FILTERS}
       TAP_SIGNAL_COLLECTIONS: ${TAP_SIGNAL_COLLECTIONS}
+    volumes:
+      - tap-data:/data
     # Uncomment if using Postgres:
     # depends_on:
     #   postgres:
@@ -48,7 +50,7 @@ services:
       - cargo-git:/usr/local/cargo/git
       - cargo-target:/app/target
     environment:
-      DATABASE_URL: ${DATABASE_URL}/happyview
+      DATABASE_URL: ${DATABASE_URL}
       PUBLIC_URL: ${PUBLIC_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       TAP_URL: ${TAP_URL}
@@ -78,6 +80,7 @@ services:
 volumes:
   # Uncomment if using Postgres:
   # pgdata:
+  tap-data:
   cargo-registry:
   cargo-git:
   cargo-target:
