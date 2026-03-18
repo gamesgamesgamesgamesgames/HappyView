@@ -85,7 +85,7 @@ pub(super) async fn upload_lexicon(
     let sql = adapt_sql(
         r#"
         INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, action, script, index_hook, token_cost, source, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             backfill = EXCLUDED.backfill,
@@ -96,7 +96,7 @@ pub(super) async fn upload_lexicon(
             token_cost = EXCLUDED.token_cost,
             source = 'manual',
             revision = lexicons.revision + 1,
-            updated_at = $9
+            updated_at = ?
         RETURNING revision
         "#,
         backend,
@@ -110,6 +110,7 @@ pub(super) async fn upload_lexicon(
         .bind(&body.script)
         .bind(&body.index_hook)
         .bind(body.token_cost)
+        .bind(&now)
         .bind(&now)
         .fetch_one(&state.db)
         .await
@@ -276,7 +277,7 @@ pub(super) async fn get_lexicon(
     auth.require(Permission::LexiconsRead).await?;
     let backend = state.db_backend;
     let sql = adapt_sql(
-        "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons WHERE id = $1",
+        "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons WHERE id = ?",
         backend,
     );
     #[allow(clippy::type_complexity)]
@@ -363,7 +364,7 @@ pub(super) async fn delete_lexicon(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::LexiconsDelete).await?;
     let backend = state.db_backend;
-    let sql = adapt_sql("DELETE FROM lexicons WHERE id = $1", backend);
+    let sql = adapt_sql("DELETE FROM lexicons WHERE id = ?", backend);
     let result = sqlx::query(&sql)
         .bind(&id)
         .execute(&state.db)

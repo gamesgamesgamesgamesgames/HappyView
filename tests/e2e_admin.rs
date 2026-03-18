@@ -152,7 +152,7 @@ async fn admin_auto_bootstrap_first_user() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Verify the DID was inserted.
-    let sql = adapt_sql("SELECT COUNT(*) FROM users WHERE did = $1", backend);
+    let sql = adapt_sql("SELECT COUNT(*) FROM users WHERE did = ?", backend);
     let count: (i64,) = sqlx::query_as(&sql)
         .bind(bootstrap_did)
         .fetch_one(&app.state.db)
@@ -425,7 +425,7 @@ async fn stats_with_seeded_records() {
     });
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "INSERT INTO lexicons (id, lexicon_json, created_at) VALUES ($1, $2, $3)",
+        "INSERT INTO lexicons (id, lexicon_json, created_at) VALUES (?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)
@@ -439,7 +439,7 @@ async fn stats_with_seeded_records() {
     // Seed records directly
     let record_val = serde_json::json!({"title": "test"});
     let sql = adapt_sql(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)

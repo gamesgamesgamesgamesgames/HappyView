@@ -57,13 +57,15 @@ pub(super) async fn upsert(
     let sql = adapt_sql(
         r#"
         INSERT INTO script_variables (key, value, created_at)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = $3
+        VALUES (?, ?, ?)
+        ON CONFLICT (key) DO UPDATE SET value = ?, updated_at = ?
         "#,
         backend,
     );
     sqlx::query(&sql)
         .bind(&body.key)
+        .bind(&body.value)
+        .bind(&now)
         .bind(&body.value)
         .bind(&now)
         .execute(&state.db)
@@ -95,7 +97,7 @@ pub(super) async fn delete(
     auth.require(Permission::ScriptVariablesDelete).await?;
 
     let backend = state.db_backend;
-    let sql = adapt_sql("DELETE FROM script_variables WHERE key = $1", backend);
+    let sql = adapt_sql("DELETE FROM script_variables WHERE key = ?", backend);
     let result = sqlx::query(&sql)
         .bind(&key)
         .execute(&state.db)

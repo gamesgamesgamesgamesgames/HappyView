@@ -105,11 +105,11 @@ pub fn register_record_api(
                     let data_str = serde_json::to_string(&data).unwrap_or_default();
                     let upsert_sql = adapt_sql(
                         r#"INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at, created_at)
-                           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                            ON CONFLICT (uri) DO UPDATE
                                SET record = EXCLUDED.record,
                                    cid = EXCLUDED.cid,
-                                   indexed_at = $7"#,
+                                   indexed_at = ?"#,
                         backend,
                     );
                     let _ = sqlx::query(&upsert_sql)
@@ -119,6 +119,8 @@ pub fn register_record_api(
                         .bind(&rkey)
                         .bind(&data_str)
                         .bind(cid)
+                        .bind(&now)
+                        .bind(&now)
                         .bind(&now)
                         .execute(&state.db)
                         .await;
@@ -171,7 +173,7 @@ pub fn register_record_api(
                         let now = now_rfc3339();
                         let upsert_sql = adapt_sql(
                             r#"INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
-                               VALUES ($1, $2, $3, $4, $5, $6, $7)
+                               VALUES (?, ?, ?, ?, ?, ?, ?)
                                ON CONFLICT (uri) DO UPDATE
                                    SET record = EXCLUDED.record,
                                        cid = EXCLUDED.cid"#,
@@ -256,7 +258,7 @@ pub fn register_record_api(
                 }
 
                 // Delete from local DB
-                let delete_sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+                let delete_sql = adapt_sql("DELETE FROM records WHERE uri = ?", backend);
                 let _ = sqlx::query(&delete_sql).bind(&uri).execute(&state.db).await;
 
                 // Clear _uri and _cid
@@ -539,11 +541,11 @@ pub fn register_record_api(
                                 let data_str = serde_json::to_string(&data).unwrap_or_default();
                                 let upsert_sql = adapt_sql(
                                     r#"INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at, created_at)
-                                       VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                                        ON CONFLICT (uri) DO UPDATE
                                            SET record = EXCLUDED.record,
                                                cid = EXCLUDED.cid,
-                                               indexed_at = $7"#,
+                                               indexed_at = ?"#,
                                     backend,
                                 );
                                 let _ = sqlx::query(&upsert_sql)
@@ -553,6 +555,8 @@ pub fn register_record_api(
                                 .bind(&rkey)
                                 .bind(&data_str)
                                 .bind(cid)
+                                .bind(&now)
+                                .bind(&now)
                                 .bind(&now)
                                 .execute(&state.db)
                                 .await;
@@ -610,7 +614,7 @@ pub fn register_record_api(
                                     let now = now_rfc3339();
                                     let upsert_sql = adapt_sql(
                                         r#"INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
-                                           VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?)
                                            ON CONFLICT (uri) DO UPDATE
                                                SET record = EXCLUDED.record,
                                                    cid = EXCLUDED.cid"#,
@@ -665,7 +669,7 @@ pub fn register_record_api(
             async move {
                 let backend = state.db_backend;
                 let sql = adapt_sql(
-                    "SELECT collection, record, cid FROM records WHERE uri = $1",
+                    "SELECT collection, record, cid FROM records WHERE uri = ?",
                     backend,
                 );
                 let row: Option<(String, String, String)> = sqlx::query_as(&sql)
@@ -732,7 +736,7 @@ pub fn register_record_api(
                     let uri = uri.clone();
                     async move {
                         let sql = adapt_sql(
-                            "SELECT collection, record, cid FROM records WHERE uri = $1",
+                            "SELECT collection, record, cid FROM records WHERE uri = ?",
                             backend,
                         );
                         let row: Option<(String, String, String)> = sqlx::query_as(&sql)
