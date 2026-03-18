@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/lib/auth-context";
 import { getLexicon, getLexicons } from "@/lib/api";
 import {
   buildCollectionSchemas,
@@ -17,13 +16,12 @@ export function useLuaCompletions(jsonText: string): {
   luaCompletions: LuaCompletions;
   collections: string[];
 } {
-  const { getToken } = useAuth();
   const [collections, setCollections] = useState<string[]>([]);
   const [collectionSchemas, setCollectionSchemas] =
     useState<CollectionSchemas>({});
 
   useEffect(() => {
-    getLexicons(getToken).then(async (lexicons) => {
+    getLexicons().then(async (lexicons) => {
       const records = lexicons.filter((l) => l.lexicon_type === "record");
       setCollections(records.map((l) => l.id));
 
@@ -31,14 +29,14 @@ export function useLuaCompletions(jsonText: string): {
       const details = [];
       for (const rec of records) {
         try {
-          details.push(await getLexicon(getToken, rec.id));
+          details.push(await getLexicon(rec.id));
         } catch {
           // skip failed fetches
         }
       }
       setCollectionSchemas(buildCollectionSchemas(details));
     });
-  }, [getToken]);
+  }, []);
 
   const luaCompletions = useMemo(() => {
     const completions = extractLuaCompletions(jsonText);

@@ -4,7 +4,7 @@ HappyView ships with a web dashboard that provides a visual interface for everyt
 
 ## Logging in for the first time
 
-The dashboard uses AT Protocol OAuth via AIP. If no users exist in the database yet, the first authenticated request to any admin endpoint automatically bootstraps that user as the super user with all permissions.
+The dashboard uses AT Protocol OAuth. Click **Log in** and enter your handle to authenticate. If no users exist in the database yet, the first authenticated request to any admin endpoint automatically bootstraps that user as the super user with all permissions.
 
 ## Settings
 

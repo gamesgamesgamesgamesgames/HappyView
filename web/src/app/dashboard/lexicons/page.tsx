@@ -18,7 +18,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   deleteLexicon,
@@ -35,17 +34,16 @@ import { Button } from "@/components/ui/button";
 import { Eye, Rows3, Trash2 } from "lucide-react";
 
 export default function LexiconsPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const router = useRouter();
   const [lexicons, setLexicons] = useState<LexiconSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getLexicons(getToken)
+    getLexicons()
       .then(setLexicons)
       .catch((e) => setError(e.message));
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -54,9 +52,9 @@ export default function LexiconsPage() {
   async function handleDelete(lex: LexiconSummary) {
     try {
       if (lex.source === "network") {
-        await deleteNetworkLexicon(getToken, lex.id);
+        await deleteNetworkLexicon(lex.id);
       } else {
-        await deleteLexicon(getToken, lex.id);
+        await deleteLexicon(lex.id);
       }
       load();
     } catch (e: unknown) {
@@ -246,7 +244,7 @@ export default function LexiconsPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [getToken, hasPermission],
+    [hasPermission],
   );
 
   const [sorting, setSorting] = useState<SortingState>([

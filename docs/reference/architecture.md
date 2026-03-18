@@ -33,20 +33,22 @@ Reads flow top-down through the query handler to the database (SQLite by default
 
 ```
 src/
-  main.rs           Startup: config, DB, migrations, spawn Tap worker, start server
-  lib.rs            AppState struct, module declarations
+  main.rs           Startup: config, DB, migrations, build OAuth client, spawn Tap worker, start server
+  lib.rs            AppState struct (incl. OAuth client + cookie key), module declarations
   config.rs         Environment variable loading
+  dns.rs            DNS TXT resolver for atrium handle resolution
   error.rs          AppError enum (Auth, BadRequest, Forbidden, Internal, NotFound, PdsError)
-  server.rs         Axum router: fixed routes + admin nest + XRPC catch-all + static files
+  server.rs         Axum router: fixed routes + admin nest + auth routes + XRPC catch-all + static files
   lexicon.rs        ParsedLexicon, LexiconRegistry (Arc<RwLock<HashMap>>)
   profile.rs        DID document resolution, PDS discovery, profile fetching
   tap.rs            Tap WebSocket listener, collection filter sync, backfill delegation
-  aip.rs            AIP reverse proxy
   resolve.rs        NSID authority resolution (DNS TXT → DID → PDS)
   auth/
-    mod.rs          Re-exports
-    middleware.rs   Claims extractor (validates Bearer token via AIP /oauth/userinfo)
-    jwks.rs         JWKS key fetching
+    mod.rs          Re-exports, COOKIE_NAME constant
+    middleware.rs   Claims extractor (cookie auth, API key, or service auth JWT)
+    routes.rs       OAuth endpoints (/auth/login, /auth/callback, /auth/logout, /auth/me)
+    oauth_store.rs  Database-backed session and state stores for atrium-oauth
+    service_auth.rs XRPC service-to-service JWT validation (ES256/ES256K)
   admin/
     mod.rs          Admin route definitions
     auth.rs         UserAuth extractor (Claims + DID lookup + permission check + auto-bootstrap)
@@ -71,9 +73,8 @@ src/
     tid.rs          TID generation for Lua scripts
   repo/
     mod.rs          Re-exports
-    dpop.rs         DPoP JWT proof generation (ES256/P-256)
-    pds.rs          PDS proxy helpers (JSON POST, blob POST, response forwarding)
-    session.rs      ATP session fetching from AIP
+    pds.rs          PDS proxy helpers (JSON POST, blob POST, response forwarding via OAuth session)
+    session.rs      OAuth session restoration from atrium store
     upload_blob.rs  Blob upload handler
   xrpc/
     mod.rs          Re-exports
@@ -97,14 +98,14 @@ Client GET /xrpc/{method}?params
 ### Writes (procedures)
 
 ```
-Client POST /xrpc/{method} + Bearer token
-  -> Claims extractor validates token via AIP /oauth/userinfo
+Client POST /xrpc/{method} + session cookie or Bearer token
+  -> Claims extractor (cookie, API key, or service auth JWT)
   -> xrpc::xrpc_post()
   -> LexiconRegistry lookup (must be Procedure type)
   -> If Lua script attached: execute script (has access to Record API)
   -> Else: default create/update (auto-detect based on uri field)
-  -> Fetch ATP session from AIP /api/atprotocol/session
-  -> Generate DPoP proof (ES256)
+  -> Restore OAuth session from atrium store (by DID)
+  -> atrium handles DPoP proof generation and token refresh
   -> Proxy to user's PDS (createRecord or putRecord)
   -> Upsert record locally
   -> Forward PDS response
@@ -113,9 +114,9 @@ Client POST /xrpc/{method} + Bearer token
 ### Admin endpoints
 
 ```
-Client request + Bearer token
+Client request + session cookie or Bearer token
   -> AdminAuth extractor:
-     1. Claims validation via AIP
+     1. Claims validation (cookie, API key, or service auth JWT)
      2. DID lookup in users table (auto-bootstrap super user if empty)
      3. Permission check (403 if missing required permission)
   -> Admin handler
@@ -207,6 +208,23 @@ POST /admin/backfill
 | `last_used_at`| timestamptz|                                              |
 | `revoked_at` | timestamptz | Set when revoked (soft delete)               |
 
+### `oauth_sessions`
+
+| Column         | Type        | Description                                  |
+| -------------- | ----------- | -------------------------------------------- |
+| `did`          | text (PK)   | User's AT Protocol DID                       |
+| `session_data` | text        | Serialized OAuth session (managed by atrium) |
+| `created_at`   | timestamptz |                                              |
+| `updated_at`   | timestamptz |                                              |
+
+### `oauth_state`
+
+| Column       | Type        | Description                                  |
+| ------------ | ----------- | -------------------------------------------- |
+| `state_key`  | text (PK)   | OAuth state parameter                        |
+| `state_data` | text        | Serialized state (managed by atrium)         |
+| `created_at` | timestamptz |                                              |
+
 ### `event_logs`
 
 | Column       | Type        | Description                                  |
@@ -259,4 +277,4 @@ TEST_DATABASE_URL=postgres://happyview:happyview@localhost:5433/happyview_test c
 docker compose -f docker-compose.test.yml down
 ```
 
-End-to-end tests use `wiremock` to mock external services (AIP, PLC directory, PDSes) and a real database for full integration coverage. By default tests use SQLite; set `TEST_DATABASE_URL` to a Postgres connection string to test against Postgres.
+End-to-end tests use `wiremock` to mock external services (PLC directory, PDSes) and a real database for full integration coverage. By default tests use SQLite; set `TEST_DATABASE_URL` to a Postgres connection string to test against Postgres.

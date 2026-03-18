@@ -9,7 +9,6 @@ use serial_test::serial;
 use tower::ServiceExt;
 
 use common::app::TestApp;
-use common::auth::admin_auth_header;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,43 +19,53 @@ async fn json_body(resp: axum::response::Response) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-fn admin_get(uri: &str, token: &str) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_get(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .body(Body::empty())
         .unwrap()
 }
 
-fn admin_post(uri: &str, token: &str, body: &Value) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_post(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+    body: &Value,
+) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(body).unwrap()))
         .unwrap()
 }
 
-fn admin_patch(uri: &str, token: &str, body: &Value) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_patch(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+    body: &Value,
+) -> Request<Body> {
     Request::builder()
         .method("PATCH")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(body).unwrap()))
         .unwrap()
 }
 
-fn admin_delete(uri: &str, token: &str) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_delete(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+) -> Request<Body> {
     Request::builder()
         .method("DELETE")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .body(Body::empty())
         .unwrap()
 }
@@ -70,13 +79,13 @@ fn admin_delete(uri: &str, token: &str) -> Request<Body> {
 #[ignore]
 async fn labeler_add_returns_201() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let body = json!({ "did": "did:plc:labeler1" });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/labelers", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/labelers", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -88,23 +97,24 @@ async fn labeler_add_returns_201() {
 #[ignore]
 async fn labeler_add_upsert_reactivates() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let body = json!({ "did": "did:plc:labeler1" });
 
     // First add
     app.router
         .clone()
-        .oneshot(admin_post("/admin/labelers", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/labelers", app.admin_cookie(), &body))
         .await
         .unwrap();
 
     // Pause it
     app.router
         .clone()
+        .clone()
         .oneshot(admin_patch(
             "/admin/labelers/did:plc:labeler1",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "status": "paused" }),
         ))
         .await
@@ -114,7 +124,8 @@ async fn labeler_add_upsert_reactivates() {
     let resp = app
         .router
         .clone()
-        .oneshot(admin_post("/admin/labelers", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/labelers", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -123,7 +134,8 @@ async fn labeler_add_upsert_reactivates() {
     // Verify it's active again
     let resp = app
         .router
-        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/labelers", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -142,11 +154,11 @@ async fn labeler_add_upsert_reactivates() {
 #[ignore]
 async fn labeler_list_empty() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/labelers", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -160,13 +172,13 @@ async fn labeler_list_empty() {
 #[ignore]
 async fn labeler_list_returns_added() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/labelers",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "did": "did:plc:lab1" }),
         ))
         .await
@@ -174,9 +186,10 @@ async fn labeler_list_returns_added() {
 
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/labelers",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "did": "did:plc:lab2" }),
         ))
         .await
@@ -184,7 +197,8 @@ async fn labeler_list_returns_added() {
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/labelers", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -206,13 +220,13 @@ async fn labeler_list_returns_added() {
 #[ignore]
 async fn labeler_update_status() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/labelers",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "did": "did:plc:lab1" }),
         ))
         .await
@@ -221,9 +235,10 @@ async fn labeler_update_status() {
     let resp = app
         .router
         .clone()
+        .clone()
         .oneshot(admin_patch(
             "/admin/labelers/did:plc:lab1",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "status": "paused" }),
         ))
         .await
@@ -234,7 +249,8 @@ async fn labeler_update_status() {
     // Verify status changed
     let resp = app
         .router
-        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/labelers", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -248,13 +264,13 @@ async fn labeler_update_status() {
 #[ignore]
 async fn labeler_update_not_found() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_patch(
             "/admin/labelers/did:plc:nonexistent",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "status": "paused" }),
         ))
         .await
@@ -272,13 +288,13 @@ async fn labeler_update_not_found() {
 #[ignore]
 async fn labeler_delete_returns_204() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/labelers",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "did": "did:plc:lab1" }),
         ))
         .await
@@ -287,9 +303,10 @@ async fn labeler_delete_returns_204() {
     let resp = app
         .router
         .clone()
+        .clone()
         .oneshot(admin_delete(
             "/admin/labelers/did:plc:lab1",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -299,7 +316,8 @@ async fn labeler_delete_returns_204() {
     // Verify it's gone
     let resp = app
         .router
-        .oneshot(admin_get("/admin/labelers", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/labelers", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -312,13 +330,13 @@ async fn labeler_delete_returns_204() {
 #[ignore]
 async fn labeler_delete_not_found() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_delete(
             "/admin/labelers/did:plc:nonexistent",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -331,15 +349,15 @@ async fn labeler_delete_not_found() {
 #[ignore]
 async fn labeler_delete_removes_labels() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let backend = app.state.db_backend;
 
     // Add a labeler
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/labelers",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "did": "did:plc:lab1" }),
         ))
         .await
@@ -362,9 +380,10 @@ async fn labeler_delete_removes_labels() {
     // Delete the labeler
     app.router
         .clone()
+        .clone()
         .oneshot(admin_delete(
             "/admin/labelers/did:plc:lab1",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -392,6 +411,7 @@ async fn labeler_no_auth_returns_401() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/admin/labelers")

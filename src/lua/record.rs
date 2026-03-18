@@ -4,10 +4,11 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::AppState;
+use crate::HappyViewOAuthSession;
 use crate::auth::Claims;
 use crate::db::{adapt_sql, now_rfc3339};
 use crate::record_refs::sync_refs;
-use crate::repo::{self, AtpSession};
+use crate::repo;
 
 use super::tid::generate_tid;
 
@@ -27,7 +28,7 @@ pub fn register_record_api(
     lua: &Lua,
     state: Arc<AppState>,
     claims: Arc<Claims>,
-    session: Arc<AtpSession>,
+    session: Arc<HappyViewOAuthSession>,
 ) -> LuaResult<()> {
     // -- methods table (shared by all Record instances) --
     let methods = lua.create_table()?;

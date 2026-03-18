@@ -11,7 +11,6 @@ use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, ResponseTemplate};
 
 use common::app::TestApp;
-use common::auth::{admin_auth_header, mock_aip_userinfo};
 use common::fixtures;
 
 // ---------------------------------------------------------------------------
@@ -23,12 +22,15 @@ async fn json_body(resp: axum::response::Response) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-fn admin_post(uri: &str, token: &str, body: &Value) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_post(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+    body: &Value,
+) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(body).unwrap()))
         .unwrap()
@@ -43,14 +45,13 @@ fn authed_get(uri: &str, token: &str) -> Request<Body> {
 }
 
 async fn seed_lexicons(app: &TestApp) {
-    app.mock_admin_userinfo().await;
-
     // Record lexicon
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({
                 "lexicon_json": fixtures::game_record_lexicon(),
                 "backfill": false
@@ -62,9 +63,10 @@ async fn seed_lexicons(app: &TestApp) {
     // Query lexicon
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({
                 "lexicon_json": fixtures::list_games_query_lexicon(),
                 "target_collection": "games.gamesgamesgamesgames.game"
@@ -76,9 +78,10 @@ async fn seed_lexicons(app: &TestApp) {
     // Procedure lexicon
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({
                 "lexicon_json": fixtures::create_game_procedure_lexicon(),
                 "target_collection": "games.gamesgamesgamesgames.game"
@@ -120,6 +123,7 @@ async fn profile_no_auth_returns_401() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/xrpc/app.bsky.actor.getProfile")
@@ -138,9 +142,6 @@ async fn profile_no_auth_returns_401() {
 async fn profile_with_mocked_services_returns_200() {
     let app = TestApp::new().await;
     let did = "did:plc:testuser";
-
-    // Mock AIP userinfo
-    mock_aip_userinfo(&app.mock_server, did).await;
 
     // Mock PLC directory
     Mock::given(method("GET"))
@@ -161,6 +162,7 @@ async fn profile_with_mocked_services_returns_200() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(authed_get("/xrpc/app.bsky.actor.getProfile", "valid-token"))
         .await
         .unwrap();
@@ -183,6 +185,7 @@ async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/xrpc/nonexistent.method")
@@ -207,6 +210,7 @@ async fn xrpc_get_non_query_returns_400() {
     // game is a record, not a query
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.game")
@@ -243,6 +247,7 @@ async fn xrpc_get_single_record_by_uri() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(format!(
@@ -269,7 +274,7 @@ async fn xrpc_get_record_not_found() {
     seed_lexicons(&app).await;
 
     let resp = app
-        .router
+        .router.clone()
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames?uri=at%3A%2F%2Fdid%3Aplc%3Anone%2Fgames.gamesgamesgamesgames.game%2Fmissing")
@@ -318,6 +323,7 @@ async fn xrpc_get_list_with_pagination() {
     let resp = app
         .router
         .clone()
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames?limit=2")
@@ -336,6 +342,7 @@ async fn xrpc_get_list_with_pagination() {
     let cursor = json["cursor"].as_str().unwrap();
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(format!(
@@ -392,6 +399,7 @@ async fn xrpc_get_list_filtered_by_did() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames?did=did:plc:a")
@@ -421,6 +429,7 @@ async fn xrpc_post_no_auth_returns_401() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -442,16 +451,18 @@ async fn xrpc_post_non_procedure_returns_400() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
-    // Mock AIP userinfo so auth passes
-    mock_aip_userinfo(&app.mock_server, "did:plc:test").await;
+    // Use cookie auth for did:plc:test so auth passes
+    let (cookie_name, cookie_val) =
+        common::auth::admin_cookie_header("did:plc:test", &app.state.cookie_key);
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames")
-                .header("authorization", "Bearer valid-token")
+                .header(cookie_name, cookie_val)
                 .header("content-type", "application/json")
                 .body(Body::from(b"{}".to_vec()))
                 .unwrap(),
@@ -468,16 +479,16 @@ async fn xrpc_post_non_procedure_returns_400() {
 async fn xrpc_delete_procedure_removes_record() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
-    app.mock_admin_userinfo().await;
     let backend = app.state.db_backend;
 
     // Upload delete procedure lexicon with action: "delete"
     let resp = app
         .router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({
                 "lexicon_json": fixtures::delete_game_procedure_lexicon(),
                 "target_collection": "games.gamesgamesgamesgames.game",
@@ -503,8 +514,8 @@ async fn xrpc_delete_procedure_removes_record() {
         .unwrap();
     assert_eq!(count.0, 1);
 
-    // Mock AIP userinfo for the procedure call
-    mock_aip_userinfo(&app.mock_server, did).await;
+    // Use cookie auth for the procedure call
+    let (cookie_name, cookie_val) = common::auth::admin_cookie_header(did, &app.state.cookie_key);
 
     // Mock PLC directory for PDS resolution
     Mock::given(method("GET"))
@@ -539,11 +550,12 @@ async fn xrpc_delete_procedure_removes_record() {
     let _resp = app
         .router
         .clone()
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/xrpc/games.gamesgamesgamesgames.deleteGame")
-                .header("authorization", "Bearer valid-token")
+                .header(cookie_name, cookie_val)
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({"uri": uri})).unwrap(),
@@ -568,13 +580,13 @@ async fn xrpc_delete_procedure_removes_record() {
 #[ignore]
 async fn upload_lexicon_with_invalid_action_returns_400() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({
                 "lexicon_json": fixtures::create_game_procedure_lexicon(),
                 "target_collection": "games.gamesgamesgamesgames.game",

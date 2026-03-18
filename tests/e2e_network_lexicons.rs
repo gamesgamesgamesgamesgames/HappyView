@@ -9,7 +9,6 @@ use serial_test::serial;
 use tower::ServiceExt;
 
 use common::app::TestApp;
-use common::auth::admin_auth_header;
 use common::fixtures;
 
 // ---------------------------------------------------------------------------
@@ -21,21 +20,25 @@ async fn json_body(resp: axum::response::Response) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-fn admin_get(uri: &str, token: &str) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_get(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .body(Body::empty())
         .unwrap()
 }
 
-fn admin_delete(uri: &str, token: &str) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_delete(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+) -> Request<Body> {
     Request::builder()
         .method("DELETE")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .body(Body::empty())
         .unwrap()
 }
@@ -72,11 +75,11 @@ async fn seed_network_lexicon(app: &TestApp, nsid: &str, authority_did: &str) {
 #[ignore]
 async fn network_lexicon_list_empty() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/network-lexicons", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/network-lexicons", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -90,13 +93,13 @@ async fn network_lexicon_list_empty() {
 #[ignore]
 async fn network_lexicon_list_returns_seeded() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     seed_network_lexicon(&app, "games.gamesgamesgamesgames.game", "did:plc:authority").await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/network-lexicons", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/network-lexicons", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -113,7 +116,6 @@ async fn network_lexicon_list_returns_seeded() {
 #[ignore]
 async fn network_lexicon_delete_removes_tracking_and_lexicon() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let backend = app.state.db_backend;
 
     let nsid = "games.gamesgamesgamesgames.game";
@@ -122,9 +124,10 @@ async fn network_lexicon_delete_removes_tracking_and_lexicon() {
     let resp = app
         .router
         .clone()
+        .clone()
         .oneshot(admin_delete(
             &format!("/admin/network-lexicons/{nsid}"),
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -149,13 +152,13 @@ async fn network_lexicon_delete_removes_tracking_and_lexicon() {
 #[ignore]
 async fn network_lexicon_delete_not_found() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_delete(
             "/admin/network-lexicons/nonexistent.lexicon",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -171,6 +174,7 @@ async fn network_lexicon_no_auth_returns_401() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/admin/network-lexicons")

@@ -1,15 +1,16 @@
 # Admin API
 
-The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require an [AIP](https://github.com/graze-social/aip)-issued Bearer token from a DID that exists in the `users` table, with the appropriate [permissions](../guides/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../getting-started/dashboard.md).
+The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require authentication from a DID that exists in the `users` table, with the appropriate [permissions](../guides/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../getting-started/dashboard.md).
 
 ## Auth
 
-The admin API supports two authentication methods:
+The admin API supports three authentication methods:
 
-1. **OAuth (AIP)** — the Bearer token is validated against AIP's `/oauth/userinfo` endpoint to retrieve the caller's DID.
-2. **API keys** — read/write tokens starting with `hv_`. See the [API Keys guide](../guides/api-keys.md) for details.
+1. **Session cookie** (web UI) — Set during the OAuth login flow. The signed cookie contains the user's DID.
+2. **API keys** — read/write tokens starting with `hv_`, passed as `Authorization: Bearer hv_...`. See the [API Keys guide](../guides/api-keys.md) for details.
+3. **Service auth JWT** — AT Protocol inter-service authentication via signed JWTs.
 
-In both cases the resolved DID is checked against the `users` table, and the user's permissions are loaded to authorize the request.
+In all cases the resolved DID is checked against the `users` table, and the user's permissions are loaded to authorize the request.
 
 **Auto-bootstrap**: If the `users` table is empty, the first authenticated request automatically creates the caller as the **super user** with all permissions granted.
 
@@ -26,12 +27,12 @@ All error responses return JSON with an `error` field:
 | Status             | Meaning                                                                                                        |
 | ------------------ | -------------------------------------------------------------------------------------------------------------- |
 | `400 Bad Request`  | Invalid input (missing required fields, malformed lexicon JSON)                                                |
-| `401 Unauthorized` | Missing or invalid Bearer token. See [AIP documentation](https://github.com/graze-social/aip) for token issues |
+| `401 Unauthorized` | Missing or invalid session cookie, API key, or service auth JWT                                                |
 | `403 Forbidden`    | Authenticated DID is not in the users table, or user lacks the required permission                             |
 | `404 Not Found`    | Lexicon, user, or backfill job not found                                                                       |
 
 ```sh
-# All examples assume $TOKEN is an AIP-issued access token or API key
+# All examples assume $TOKEN is an API key (hv_...)
 AUTH="Authorization: Bearer $TOKEN"
 ```
 

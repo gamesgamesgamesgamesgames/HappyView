@@ -10,7 +10,6 @@ import {
 } from "@tanstack/react-table";
 
 import { useSearchParams } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getStats,
@@ -74,7 +73,6 @@ function formatCellValue(value: unknown): string {
 }
 
 export default function RecordsPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const searchParams = useSearchParams();
   const initialCollection = searchParams.get("collection") ?? "";
@@ -100,10 +98,10 @@ export default function RecordsPage() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   useEffect(() => {
-    getStats(getToken)
+    getStats()
       .then((stats) => setCollections(stats.collections))
       .catch((e) => setError(e.message));
-  }, [getToken]);
+  }, []);
 
   // Auto-select collection from URL search param on initial load.
   useEffect(() => {
@@ -121,7 +119,7 @@ export default function RecordsPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getAdminRecords(getToken, collection, 20, cursor);
+        const data = await getAdminRecords(collection, 20, cursor);
         setRecords(data.records);
         setNextCursor(data.cursor);
       } catch (e: unknown) {
@@ -132,14 +130,14 @@ export default function RecordsPage() {
         setLoading(false);
       }
     },
-    [getToken],
+    [],
   );
 
   const handleDeleteRecord = useCallback(
     async (uri: string) => {
       setDeleting(true);
       try {
-        await deleteRecord(getToken, uri);
+        await deleteRecord(uri);
         setDeleteUri(null);
         setViewRecord(null);
         if (selectedCollection) {
@@ -155,20 +153,20 @@ export default function RecordsPage() {
         setDeleting(false);
       }
     },
-    [getToken, selectedCollection, cursorStack, fetchRecords],
+    [selectedCollection, cursorStack, fetchRecords],
   );
 
   const handleDeleteAll = useCallback(async () => {
     if (!selectedCollection) return;
     setDeletingAll(true);
     try {
-      await deleteCollectionRecords(getToken, selectedCollection);
+      await deleteCollectionRecords(selectedCollection);
       setBulkDeleteOpen(false);
       setBulkDeleteMode("selected");
       setBulkDeleteConfirm("");
       setRowSelection({});
       // Refresh stats and records
-      const stats = await getStats(getToken);
+      const stats = await getStats();
       setCollections(stats.collections);
       setCursorStack([]);
       setNextCursor(undefined);
@@ -179,14 +177,14 @@ export default function RecordsPage() {
     } finally {
       setDeletingAll(false);
     }
-  }, [getToken, selectedCollection]);
+  }, [selectedCollection]);
 
   const handleBulkDelete = useCallback(async () => {
     setDeleting(true);
     try {
       const selectedUris = Object.keys(rowSelection);
       for (const uri of selectedUris) {
-        await deleteRecord(getToken, uri);
+        await deleteRecord(uri);
       }
       setRowSelection({});
       setBulkDeleteOpen(false);
@@ -202,7 +200,7 @@ export default function RecordsPage() {
     } finally {
       setDeleting(false);
     }
-  }, [getToken, rowSelection, selectedCollection, cursorStack, fetchRecords]);
+  }, [rowSelection, selectedCollection, cursorStack, fetchRecords]);
 
   // Build columns dynamically from the union of all record keys
   const columns = useMemo<ColumnDef<AdminRecord>[]>(() => {

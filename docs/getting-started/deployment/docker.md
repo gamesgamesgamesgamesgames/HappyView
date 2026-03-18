@@ -5,11 +5,6 @@ This guide runs the full HappyView stack locally using Docker Compose: [Tap](htt
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- An [AIP](https://github.com/graze-social/aip) instance for OAuth. The Docker Compose config points at the public AIP instance at `aip.gamesgamesgamesgames.games` by default.
-
-:::warning
-This public AIP instance is provided for development convenience only. Production deployments should run their own AIP instance or risk being blocked. See the [AIP documentation](https://github.com/graze-social/aip) for setup.
-:::
 
 ## 1. Clone and configure
 

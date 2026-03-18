@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getStats } from "@/lib/api";
 import type { StatsResponse } from "@/types/stats";
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/table";
 
 export default function DashboardPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +29,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!canReadStats) return;
-    getStats(getToken)
+    getStats()
       .then(setStats)
       .catch((e) => setError(e.message));
-  }, [getToken, canReadStats]);
+  }, [canReadStats]);
 
   return (
     <>

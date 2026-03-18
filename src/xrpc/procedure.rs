@@ -29,7 +29,7 @@ pub(super) async fn handle_procedure(
         AppError::BadRequest(format!("{method} has no target_collection configured"))
     })?;
 
-    let session = repo::get_atp_session(state, claims.token()).await?;
+    let session = repo::get_oauth_session(state, claims.did()).await?;
 
     match &lexicon.action {
         ProcedureAction::Create => {
@@ -58,7 +58,7 @@ async fn handle_create_record(
     claims: &Claims,
     input: &Value,
     collection: &str,
-    session: &repo::AtpSession,
+    session: &crate::HappyViewOAuthSession,
 ) -> Result<Response, AppError> {
     // Build record from input, adding $type
     let mut record = input.clone();
@@ -134,7 +134,7 @@ async fn handle_put_record(
     claims: &Claims,
     input: &Value,
     collection: &str,
-    session: &repo::AtpSession,
+    session: &crate::HappyViewOAuthSession,
 ) -> Result<Response, AppError> {
     let uri = input
         .get("uri")
@@ -222,7 +222,7 @@ async fn handle_delete_record(
     claims: &Claims,
     input: &Value,
     collection: &str,
-    session: &repo::AtpSession,
+    session: &crate::HappyViewOAuthSession,
 ) -> Result<Response, AppError> {
     let uri = input
         .get("uri")

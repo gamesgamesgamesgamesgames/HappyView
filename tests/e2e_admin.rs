@@ -9,7 +9,6 @@ use serial_test::serial;
 use tower::ServiceExt;
 
 use common::app::TestApp;
-use common::auth::admin_auth_header;
 use common::fixtures;
 
 // ---------------------------------------------------------------------------
@@ -21,32 +20,39 @@ async fn json_body(resp: axum::response::Response) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-fn admin_get(uri: &str, token: &str) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_get(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .body(Body::empty())
         .unwrap()
 }
 
-fn admin_post(uri: &str, token: &str, body: &Value) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_post(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+    body: &Value,
+) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(body).unwrap()))
         .unwrap()
 }
 
-fn admin_delete(uri: &str, token: &str) -> Request<Body> {
-    let (hname, hval) = admin_auth_header(token);
+fn admin_delete(
+    uri: &str,
+    cookie: (axum::http::HeaderName, axum::http::HeaderValue),
+) -> Request<Body> {
     Request::builder()
         .method("DELETE")
         .uri(uri)
-        .header(hname, hval)
+        .header(cookie.0, cookie.1)
         .body(Body::empty())
         .unwrap()
 }
@@ -63,6 +69,7 @@ async fn admin_no_auth_returns_401() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/admin/lexicons")
@@ -81,10 +88,17 @@ async fn admin_no_auth_returns_401() {
 async fn admin_wrong_token_returns_401() {
     let app = TestApp::new().await;
 
-    // No AIP mock mounted — the userinfo request will fail.
+    // No valid session cookie — the request will be rejected.
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", "wrong-token"))
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/lexicons")
+                .header("cookie", "session=invalid-cookie-value")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -96,11 +110,11 @@ async fn admin_wrong_token_returns_401() {
 #[ignore]
 async fn admin_valid_token_returns_200() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/lexicons", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -113,12 +127,14 @@ async fn admin_valid_token_returns_200() {
 async fn admin_non_admin_did_returns_403() {
     let app = TestApp::new().await;
 
-    // Mock AIP returning a DID that is NOT in the admins table.
-    common::auth::mock_aip_userinfo(&app.mock_server, "did:plc:notadmin").await;
-
+    // Use a DID that is NOT in the admins table.
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", "some-token"))
+        .clone()
+        .oneshot(admin_get(
+            "/admin/lexicons",
+            common::auth::admin_cookie_header("did:plc:notadmin", &app.state.cookie_key),
+        ))
         .await
         .unwrap();
 
@@ -138,13 +154,16 @@ async fn admin_auto_bootstrap_first_user() {
         .await
         .unwrap();
 
-    // Mock AIP returning a new DID.
+    // Use a new DID via cookie auth.
     let bootstrap_did = "did:plc:bootstrap";
-    common::auth::mock_aip_userinfo(&app.mock_server, bootstrap_did).await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", "bootstrap-token"))
+        .clone()
+        .oneshot(admin_get(
+            "/admin/lexicons",
+            common::auth::admin_cookie_header(bootstrap_did, &app.state.cookie_key),
+        ))
         .await
         .unwrap();
 
@@ -170,7 +189,6 @@ async fn admin_auto_bootstrap_first_user() {
 #[ignore]
 async fn lexicon_create_returns_201() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": fixtures::game_record_lexicon(),
         "backfill": true
@@ -178,7 +196,8 @@ async fn lexicon_create_returns_201() {
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/lexicons", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -193,7 +212,6 @@ async fn lexicon_create_returns_201() {
 #[ignore]
 async fn lexicon_upsert_returns_200_with_incremented_revision() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": fixtures::game_record_lexicon(),
         "backfill": true
@@ -203,7 +221,8 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
     let resp = app
         .router
         .clone()
-        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/lexicons", app.admin_cookie(), &body))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
@@ -211,7 +230,8 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
     // Upsert
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/lexicons", app.admin_cookie(), &body))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -224,14 +244,14 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
 #[ignore]
 async fn lexicon_invalid_version_returns_400() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": { "lexicon": 99, "id": "test.bad" },
     });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/lexicons", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -243,14 +263,14 @@ async fn lexicon_invalid_version_returns_400() {
 #[ignore]
 async fn lexicon_missing_id_returns_400() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let body = json!({
         "lexicon_json": { "lexicon": 1 },
     });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/lexicons", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/lexicons", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -262,14 +282,14 @@ async fn lexicon_missing_id_returns_400() {
 #[ignore]
 async fn lexicon_list_all() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     // Seed a lexicon
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "lexicon_json": fixtures::game_record_lexicon() }),
         ))
         .await
@@ -277,7 +297,8 @@ async fn lexicon_list_all() {
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/lexicons", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -293,13 +314,13 @@ async fn lexicon_list_all() {
 #[ignore]
 async fn lexicon_get_by_id() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "lexicon_json": fixtures::game_record_lexicon() }),
         ))
         .await
@@ -307,9 +328,10 @@ async fn lexicon_get_by_id() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_get(
             "/admin/lexicons/games.gamesgamesgamesgames.game",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -324,13 +346,13 @@ async fn lexicon_get_by_id() {
 #[ignore]
 async fn lexicon_get_not_found() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_get(
             "/admin/lexicons/nonexistent.lexicon",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -343,13 +365,13 @@ async fn lexicon_get_not_found() {
 #[ignore]
 async fn lexicon_delete() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "lexicon_json": fixtures::game_record_lexicon() }),
         ))
         .await
@@ -357,9 +379,10 @@ async fn lexicon_delete() {
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_delete(
             "/admin/lexicons/games.gamesgamesgamesgames.game",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -372,13 +395,13 @@ async fn lexicon_delete() {
 #[ignore]
 async fn lexicon_delete_not_found() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
+        .clone()
         .oneshot(admin_delete(
             "/admin/lexicons/nonexistent.lexicon",
-            &app.admin_token,
+            app.admin_cookie(),
         ))
         .await
         .unwrap();
@@ -395,11 +418,11 @@ async fn lexicon_delete_not_found() {
 #[ignore]
 async fn stats_empty_db() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/stats", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/stats", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -414,7 +437,6 @@ async fn stats_empty_db() {
 #[ignore]
 async fn stats_with_seeded_records() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let backend = app.state.db_backend;
 
     // Seed a lexicon so the stats query can join against it
@@ -456,7 +478,8 @@ async fn stats_with_seeded_records() {
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/stats", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/stats", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -476,7 +499,6 @@ async fn stats_with_seeded_records() {
 #[ignore]
 async fn backfill_create_job() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     // Register a record-type lexicon first (required by backfill validation).
     let lexicon_body = json!({
@@ -485,9 +507,10 @@ async fn backfill_create_job() {
     });
     app.router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/lexicons",
-            &app.admin_token,
+            app.admin_cookie(),
             &lexicon_body,
         ))
         .await
@@ -497,7 +520,8 @@ async fn backfill_create_job() {
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/backfill", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/backfill", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -512,18 +536,23 @@ async fn backfill_create_job() {
 #[ignore]
 async fn backfill_list_jobs() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     // Create a job first
     app.router
         .clone()
-        .oneshot(admin_post("/admin/backfill", &app.admin_token, &json!({})))
+        .clone()
+        .oneshot(admin_post(
+            "/admin/backfill",
+            app.admin_cookie(),
+            &json!({}),
+        ))
         .await
         .unwrap();
 
     let resp = app
         .router
-        .oneshot(admin_get("/admin/backfill/status", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/backfill/status", app.admin_cookie()))
         .await
         .unwrap();
 
@@ -541,12 +570,12 @@ async fn backfill_list_jobs() {
 #[ignore]
 async fn admin_create_returns_did() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
     let body = json!({ "did": "did:plc:newadmin" });
 
     let resp = app
         .router
-        .oneshot(admin_post("/admin/users", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/users", app.admin_cookie(), &body))
         .await
         .unwrap();
 
@@ -561,7 +590,6 @@ async fn admin_create_returns_did() {
 #[ignore]
 async fn admin_created_did_authenticates() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     let new_did = "did:plc:newadmin2";
     let body = json!({ "did": new_did });
@@ -569,16 +597,19 @@ async fn admin_created_did_authenticates() {
     // Create admin via the existing admin
     app.router
         .clone()
-        .oneshot(admin_post("/admin/users", &app.admin_token, &body))
+        .clone()
+        .oneshot(admin_post("/admin/users", app.admin_cookie(), &body))
         .await
         .unwrap();
 
-    // Now mock AIP returning the new DID for a different token
-    common::auth::mock_aip_userinfo(&app.mock_server, new_did).await;
-
+    // Use cookie auth with the new DID
     let resp = app
         .router
-        .oneshot(admin_get("/admin/lexicons", "new-admin-token"))
+        .clone()
+        .oneshot(admin_get(
+            "/admin/lexicons",
+            common::auth::admin_cookie_header(new_did, &app.state.cookie_key),
+        ))
         .await
         .unwrap();
 
@@ -590,11 +621,12 @@ async fn admin_created_did_authenticates() {
 #[ignore]
 async fn admin_list_returns_dids() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
+    let cookie = app.admin_cookie();
     let resp = app
         .router
-        .oneshot(admin_get("/admin/users", &app.admin_token))
+        .clone()
+        .oneshot(admin_get("/admin/users", cookie))
         .await
         .unwrap();
 
@@ -614,15 +646,15 @@ async fn admin_list_returns_dids() {
 #[ignore]
 async fn admin_delete_returns_204() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
     // Create an admin to delete
     let resp = app
         .router
         .clone()
+        .clone()
         .oneshot(admin_post(
             "/admin/users",
-            &app.admin_token,
+            app.admin_cookie(),
             &json!({ "did": "did:plc:disposable" }),
         ))
         .await
@@ -630,12 +662,11 @@ async fn admin_delete_returns_204() {
     let json = json_body(resp).await;
     let id = json["id"].as_str().unwrap();
 
+    let cookie = app.admin_cookie();
     let resp = app
         .router
-        .oneshot(admin_delete(
-            &format!("/admin/users/{id}"),
-            &app.admin_token,
-        ))
+        .clone()
+        .oneshot(admin_delete(&format!("/admin/users/{id}"), cookie))
         .await
         .unwrap();
 
@@ -647,13 +678,14 @@ async fn admin_delete_returns_204() {
 #[ignore]
 async fn admin_delete_not_found() {
     let app = TestApp::new().await;
-    app.mock_admin_userinfo().await;
 
+    let cookie = app.admin_cookie();
     let resp = app
         .router
+        .clone()
         .oneshot(admin_delete(
             "/admin/users/00000000-0000-0000-0000-000000000000",
-            &app.admin_token,
+            cookie,
         ))
         .await
         .unwrap();

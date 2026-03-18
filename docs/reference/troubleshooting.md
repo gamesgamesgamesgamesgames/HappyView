@@ -28,11 +28,9 @@ Common issues and how to resolve them.
 
 **Causes**:
 
-- The `Authorization: Bearer <token>` header is missing or malformed.
-- The token has expired or is invalid. Tokens are validated against AIP's `/oauth/userinfo` endpoint.
-- AIP is unreachable. Check that `AIP_URL` is set correctly and the AIP service is running.
-
-For AIP-specific issues, see the [AIP documentation](https://github.com/graze-social/aip).
+- No session cookie or `Authorization: Bearer` header is present.
+- The session cookie has expired or was signed with a different `SESSION_SECRET`.
+- The API key has been revoked or is invalid.
 
 ## Admin endpoints return 403 Forbidden
 
@@ -41,7 +39,7 @@ For AIP-specific issues, see the [AIP documentation](https://github.com/graze-so
 **Causes**:
 
 - Your DID is not in the users table. Ask an existing user with `users:create` permission to add you via `POST /admin/users`.
-- If this is a fresh deployment with no users, the first authenticated request to any admin endpoint automatically bootstraps you as the super user. Make sure you're sending a valid Bearer token.
+- If this is a fresh deployment with no users, the first authenticated request to any admin endpoint automatically bootstraps you as the super user. Make sure you're logged in via the dashboard or using a valid API key.
 - You may be in the users table but lack the required permission for the endpoint you're calling. Check your permissions with `GET /admin/users` or ask a user with `users:update` permission to grant the permission you need.
 
 ## Permission denied errors
@@ -90,13 +88,12 @@ See [Backfill](../guides/backfill.md) for how the process works.
 
 ## OAuth or login issues
 
-OAuth is handled entirely by [AIP](https://github.com/graze-social/aip). If users can't log in or tokens aren't working:
+HappyView handles AT Protocol OAuth internally via the `atrium-oauth` library. If users can't log in:
 
-1. Verify AIP is running and reachable at the configured `AIP_URL`.
-2. Check that AIP has valid signing keys configured (`OAUTH_SIGNING_KEYS`).
-3. Check that both HappyView and AIP have public URLs assigned (required for OAuth callbacks).
-
-See the [AIP documentation](https://github.com/graze-social/aip) for setup and debugging.
+1. Verify `PUBLIC_URL` is set correctly and the URL is publicly accessible (required for OAuth callbacks).
+2. Check that the user's PDS authorization server is reachable.
+3. Verify `SESSION_SECRET` hasn't changed since sessions were created (changing it invalidates all existing session cookies).
+4. Check server logs for OAuth-specific error messages.
 
 ## Database connection errors
 

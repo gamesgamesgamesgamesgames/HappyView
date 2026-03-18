@@ -1,3 +1,9 @@
+use atrium_identity::did::{CommonDidResolver, CommonDidResolverConfig};
+use atrium_identity::handle::{AtprotoHandleResolver, AtprotoHandleResolverConfig};
+use atrium_oauth::{
+    AtprotoLocalhostClientMetadata, DefaultHttpClient, KnownScope, OAuthClientConfig,
+    OAuthResolverConfig, Scope,
+};
 use axum::Router;
 use happyview::config::Config;
 use happyview::db::{DatabaseBackend, adapt_sql, now_rfc3339};
@@ -33,8 +39,8 @@ impl TestApp {
             port: 0,
             database_url: String::new(),
             database_backend: backend,
-            aip_url: mock_url.clone(),
-            aip_public_url: mock_url.clone(),
+            public_url: "http://127.0.0.1:0".into(),
+            session_secret: "test-secret".into(),
             tap_url: "http://localhost:2480".into(),
             tap_admin_password: None,
             relay_url: mock_url.clone(),
@@ -66,6 +72,36 @@ impl TestApp {
         let (collections_tx, _collections_rx) = watch::channel(initial_collections);
         let (labeler_subscriptions_tx, _) = watch::channel(());
 
+        let atrium_http = std::sync::Arc::new(DefaultHttpClient::default());
+        let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
+            plc_directory_url: "https://plc.directory".into(),
+            http_client: std::sync::Arc::clone(&atrium_http),
+        });
+        let handle_resolver = AtprotoHandleResolver::new(AtprotoHandleResolverConfig {
+            dns_txt_resolver: happyview::dns::NativeDnsResolver::new(),
+            http_client: atrium_http,
+        });
+        let oauth_pool = db::test_pool().await;
+        let oauth = atrium_oauth::OAuthClient::new(OAuthClientConfig {
+            client_metadata: AtprotoLocalhostClientMetadata {
+                redirect_uris: Some(vec!["http://127.0.0.1:0/auth/callback".into()]),
+                scopes: Some(vec![Scope::Known(KnownScope::Atproto)]),
+            },
+            keys: None,
+            state_store: happyview::auth::oauth_store::DbStateStore::new(
+                oauth_pool.clone(),
+                backend,
+            ),
+            session_store: happyview::auth::oauth_store::DbSessionStore::new(oauth_pool, backend),
+            resolver: OAuthResolverConfig {
+                did_resolver,
+                handle_resolver,
+                authorization_server_metadata: Default::default(),
+                protected_resource_metadata: Default::default(),
+            },
+        })
+        .expect("Failed to create test OAuth client");
+
         let state = AppState {
             config,
             http: reqwest::Client::new(),
@@ -85,6 +121,8 @@ impl TestApp {
                 },
                 vec![],
             ),
+            oauth: std::sync::Arc::new(oauth),
+            cookie_key: axum_extra::extract::cookie::Key::derive_from(b"test-secret"),
         };
 
         let router = server::router(state.clone());
@@ -98,8 +136,8 @@ impl TestApp {
         }
     }
 
-    pub async fn mock_admin_userinfo(&self) {
-        use crate::common::auth::mock_aip_userinfo;
-        mock_aip_userinfo(&self.mock_server, &self.admin_did).await;
+    /// Build a Cookie header that authenticates as the admin user.
+    pub fn admin_cookie(&self) -> (axum::http::HeaderName, axum::http::HeaderValue) {
+        crate::common::auth::admin_cookie_header(&self.admin_did, &self.state.cookie_key)
     }
 }

@@ -9,8 +9,8 @@ pub struct Config {
     pub port: u16,
     pub database_url: String,
     pub database_backend: DatabaseBackend,
-    pub aip_url: String,
-    pub aip_public_url: String,
+    pub public_url: String,
+    pub session_secret: String,
     pub tap_url: String,
     pub tap_admin_password: Option<String>,
     pub relay_url: String,
@@ -35,9 +35,9 @@ impl Config {
                 .unwrap_or(3000),
             database_url,
             database_backend,
-            aip_url: env::var("AIP_URL").expect("AIP_URL must be set"),
-            aip_public_url: env::var("AIP_PUBLIC_URL")
-                .unwrap_or_else(|_| env::var("AIP_URL").expect("AIP_URL must be set")),
+            public_url: env::var("PUBLIC_URL").expect("PUBLIC_URL must be set"),
+            session_secret: env::var("SESSION_SECRET")
+                .unwrap_or_else(|_| "change-me-in-production-not-secure".into()),
             tap_url: env::var("TAP_URL").unwrap_or_else(|_| "http://localhost:2480".into()),
             tap_admin_password: env::var("TAP_ADMIN_PASSWORD").ok(),
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
@@ -68,7 +68,8 @@ mod tests {
             "PORT",
             "DATABASE_URL",
             "DATABASE_BACKEND",
-            "AIP_URL",
+            "PUBLIC_URL",
+            "SESSION_SECRET",
             "TAP_URL",
             "TAP_ADMIN_PASSWORD",
             "RELAY_URL",
@@ -84,7 +85,7 @@ mod tests {
     unsafe fn set_required_env() {
         unsafe {
             env::set_var("DATABASE_URL", "postgres://localhost/test");
-            env::set_var("AIP_URL", "http://localhost:4000");
+            env::set_var("PUBLIC_URL", "http://127.0.0.1:3000");
         }
     }
 
@@ -95,8 +96,8 @@ mod tests {
             port: 8080,
             database_url: String::new(),
             database_backend: DatabaseBackend::Postgres,
-            aip_url: String::new(),
-            aip_public_url: String::new(),
+            public_url: String::new(),
+            session_secret: String::new(),
             tap_url: String::new(),
             tap_admin_password: None,
             relay_url: String::new(),
@@ -119,7 +120,7 @@ mod tests {
         }
         let config = Config::from_env();
         assert_eq!(config.database_url, "postgres://localhost/test");
-        assert_eq!(config.aip_url, "http://localhost:4000");
+        assert_eq!(config.public_url, "http://127.0.0.1:3000");
     }
 
     #[test]
@@ -162,15 +163,15 @@ mod tests {
     fn from_env_panics_without_database_url() {
         unsafe {
             clear_env();
-            env::set_var("AIP_URL", "http://localhost:4000");
+            env::set_var("PUBLIC_URL", "http://127.0.0.1:3000");
         }
         Config::from_env();
     }
 
     #[test]
     #[serial]
-    #[should_panic(expected = "AIP_URL must be set")]
-    fn from_env_panics_without_aip_url() {
+    #[should_panic(expected = "PUBLIC_URL must be set")]
+    fn from_env_panics_without_public_url() {
         unsafe {
             clear_env();
             env::set_var("DATABASE_URL", "postgres://localhost/test");
@@ -219,7 +220,7 @@ mod tests {
         unsafe {
             clear_env();
             env::set_var("DATABASE_URL", "postgres://localhost/test");
-            env::set_var("AIP_URL", "http://localhost:4000");
+            env::set_var("PUBLIC_URL", "http://127.0.0.1:3000");
         }
         let config = Config::from_env();
         assert_eq!(config.database_backend, DatabaseBackend::Postgres);
@@ -231,7 +232,7 @@ mod tests {
         unsafe {
             clear_env();
             env::set_var("DATABASE_URL", "sqlite://data/happyview.db?mode=rwc");
-            env::set_var("AIP_URL", "http://localhost:4000");
+            env::set_var("PUBLIC_URL", "http://127.0.0.1:3000");
         }
         let config = Config::from_env();
         assert_eq!(config.database_backend, DatabaseBackend::Sqlite);
@@ -244,7 +245,7 @@ mod tests {
             clear_env();
             env::set_var("DATABASE_URL", "postgres://localhost/test");
             env::set_var("DATABASE_BACKEND", "sqlite");
-            env::set_var("AIP_URL", "http://localhost:4000");
+            env::set_var("PUBLIC_URL", "http://127.0.0.1:3000");
         }
         let config = Config::from_env();
         assert_eq!(config.database_backend, DatabaseBackend::Sqlite);

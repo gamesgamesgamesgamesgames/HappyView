@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   createBackfillJob,
@@ -50,22 +49,21 @@ import {
 } from "@/components/ui/table";
 
 export default function BackfillPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [jobs, setJobs] = useState<BackfillJob[]>([]);
   const [tapStats, setTapStats] = useState<TapStatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getBackfillJobs(getToken)
+    getBackfillJobs()
       .then(setJobs)
       .catch((e) => setError(e.message));
     if (hasPermission("stats:read")) {
-      getTapStats(getToken)
+      getTapStats()
         .then(setTapStats)
         .catch(() => setTapStats(null));
     }
-  }, [getToken, hasPermission]);
+  }, [hasPermission]);
 
   useEffect(() => {
     load();
@@ -115,7 +113,7 @@ export default function BackfillPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Backfill Jobs</h2>
           {hasPermission("backfill:create") && (
-            <CreateDialog getToken={getToken} onSuccess={load} />
+            <CreateDialog onSuccess={load} />
           )}
         </div>
 
@@ -177,10 +175,8 @@ export default function BackfillPage() {
 }
 
 function CreateDialog({
-  getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>;
   onSuccess: () => void;
 }) {
   const [collection, setCollection] = useState<string | null>(null);
@@ -191,7 +187,7 @@ function CreateDialog({
 
   useEffect(() => {
     if (open) {
-      getLexicons(getToken)
+      getLexicons()
         .then((lexicons) =>
           setRecordLexicons(
             lexicons
@@ -202,12 +198,12 @@ function CreateDialog({
         )
         .catch(() => {});
     }
-  }, [open, getToken]);
+  }, [open]);
 
   async function handleCreate() {
     setError(null);
     try {
-      await createBackfillJob(getToken, {
+      await createBackfillJob({
         collection: collection || undefined,
         did: did || undefined,
       });

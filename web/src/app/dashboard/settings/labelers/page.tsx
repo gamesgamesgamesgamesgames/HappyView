@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Trash2, Pause, Play } from "lucide-react";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   getLabelers,
@@ -37,7 +36,6 @@ import {
 } from "@/components/ui/table";
 
 export default function LabelersPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const [labelers, setLabelers] = useState<LabelerSummary[]>([]);
   const [handles, setHandles] = useState<Record<string, string>>({});
@@ -46,10 +44,10 @@ export default function LabelersPage() {
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(() => {
-    getLabelers(getToken)
+    getLabelers()
       .then(setLabelers)
       .catch((e) => setError(e.message));
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -78,7 +76,7 @@ export default function LabelersPage() {
   async function handleToggleStatus(labeler: LabelerSummary) {
     try {
       const newStatus = labeler.status === "active" ? "paused" : "active";
-      await updateLabeler(getToken, labeler.did, { status: newStatus });
+      await updateLabeler(labeler.did, { status: newStatus });
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -88,7 +86,7 @@ export default function LabelersPage() {
   async function handleDelete(did: string) {
     setDeleting(true);
     try {
-      await deleteLabeler(getToken, did);
+      await deleteLabeler(did);
       setDeleteDid(null);
       load();
     } catch (e: unknown) {
@@ -112,7 +110,7 @@ export default function LabelersPage() {
             </p>
           </div>
           {hasPermission("labelers:create") && (
-            <AddLabelerDialog getToken={getToken} onSuccess={load} />
+            <AddLabelerDialog onSuccess={load} />
           )}
         </div>
 
@@ -252,10 +250,8 @@ export default function LabelersPage() {
 }
 
 function AddLabelerDialog({
-  getToken,
   onSuccess,
 }: {
-  getToken: () => Promise<string | null>;
   onSuccess: () => void;
 }) {
   const [did, setDid] = useState("");
@@ -265,7 +261,7 @@ function AddLabelerDialog({
   async function handleAdd() {
     setError(null);
     try {
-      await addLabeler(getToken, { did });
+      await addLabeler({ did });
       setDid("");
       setOpen(false);
       onSuccess();

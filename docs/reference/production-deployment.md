@@ -1,6 +1,6 @@
 # Deployment
 
-HappyView requires a database and an [AIP](https://github.com/graze-social/aip) instance for OAuth. SQLite is the default; Postgres is also supported, but requires additional setup. The [Quickstart](../getting-started/deployment/railway.md) covers the fastest path with Railway. This page covers other deployment options.
+HappyView requires a database. SQLite is the default; Postgres is also supported, but requires additional setup. The [Quickstart](../getting-started/deployment/railway.md) covers the fastest path with Railway. This page covers other deployment options.
 
 ## Docker
 
@@ -28,7 +28,8 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: "sqlite://data/happyview.db?mode=rwc"
-      AIP_URL: "https://aip.example.com"
+      PUBLIC_URL: "https://happyview.example.com"
+      SESSION_SECRET: "${SESSION_SECRET}"
     volumes:
       - happyview-data:/app/data
 
@@ -55,7 +56,8 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: "postgres://happyview:${POSTGRES_PASSWORD}@postgres/happyview"
-      AIP_URL: "https://aip.example.com"
+      PUBLIC_URL: "https://happyview.example.com"
+      SESSION_SECRET: "${SESSION_SECRET}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,11 +71,10 @@ volumes:
 The general process for any hosting platform:
 
 1. Choose a database: SQLite (default, zero setup) or Postgres 17+ (provision separately)
-2. Deploy an [AIP](https://github.com/graze-social/aip) instance (handles OAuth for your AppView)
-3. Set `DATABASE_URL` and `AIP_URL` environment variables (see [Configuration](../getting-started/configuration.md) for all options)
-4. Deploy the Docker image or build from source
-5. HappyView listens on `PORT` (default `3000`)
-6. Health check: `GET /health` returns `ok`
+2. Set `DATABASE_URL`, `PUBLIC_URL`, and `SESSION_SECRET` environment variables (see [Configuration](../getting-started/configuration.md) for all options)
+3. Deploy the Docker image or build from source
+4. HappyView listens on `PORT` (default `3000`)
+5. Health check: `GET /health` returns `ok`
 
 See the [database setup guide](../guides/database-setup.md) for details on both backends.
 
@@ -85,7 +86,7 @@ HappyView supports SQLite (default) and Postgres. The backend is auto-detected f
 
 ## TLS
 
-HappyView does not terminate TLS. Put it behind a reverse proxy (nginx, Caddy, Cloudflare Tunnel, etc.) for HTTPS.
+HappyView does not terminate TLS. Put it behind a reverse proxy (nginx, Caddy, Cloudflare Tunnel, etc.) for HTTPS. Make sure `PUBLIC_URL` matches the public-facing URL (including `https://`).
 
 ## Logging
 
