@@ -1,3 +1,4 @@
+use crate::db::{DatabaseBackend, adapt_sql};
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -32,29 +33,33 @@ fn collect_at_uris(value: &Value, uris: &mut HashSet<String>) {
 /// Update record_refs for a given source record.
 /// Deletes old refs and inserts new ones.
 pub async fn sync_refs(
-    db: &sqlx::PgPool,
+    db: &sqlx::AnyPool,
     source_uri: &str,
     collection: &str,
     record: &Value,
+    backend: DatabaseBackend,
 ) -> Result<(), sqlx::Error> {
     let uris = extract_at_uris(record);
 
     // Delete existing refs for this source
-    sqlx::query("DELETE FROM record_refs WHERE source_uri = $1")
+    let delete_sql = adapt_sql("DELETE FROM record_refs WHERE source_uri = $1", backend);
+    sqlx::query(&delete_sql)
         .bind(source_uri)
         .execute(db)
         .await?;
 
     // Insert new refs
+    let insert_sql = adapt_sql(
+        "INSERT INTO record_refs (source_uri, target_uri, collection) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        backend,
+    );
     for target_uri in &uris {
-        sqlx::query(
-            "INSERT INTO record_refs (source_uri, target_uri, collection) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
-        )
-        .bind(source_uri)
-        .bind(target_uri)
-        .bind(collection)
-        .execute(db)
-        .await?;
+        sqlx::query(&insert_sql)
+            .bind(source_uri)
+            .bind(target_uri)
+            .bind(collection)
+            .execute(db)
+            .await?;
     }
 
     Ok(())

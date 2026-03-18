@@ -1,4 +1,5 @@
 use happyview::config::Config;
+use happyview::db;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 use happyview::rate_limit::RateLimiter;
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
@@ -18,22 +19,20 @@ async fn main() {
         .init();
 
     let config = Config::from_env();
+    let db_backend = config.database_backend;
 
-    // Connect to Postgres.
-    let db = sqlx::PgPool::connect(&config.database_url)
-        .await
-        .expect("failed to connect to database");
+    // Connect to database and run migrations.
+    let db = db::connect(&config.database_url, db_backend).await;
 
-    info!("connected to database");
-
-    sqlx::migrate!()
-        .run(&db)
-        .await
-        .expect("failed to run migrations");
+    info!(
+        backend = ?db_backend,
+        "connected to database"
+    );
 
     // Backfill record_refs in the background (first run after upgrade)
     {
         let db_bg = db.clone();
+        let backend = db_backend;
         tokio::spawn(async move {
             let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM record_refs")
                 .fetch_one(&db_bg)
@@ -52,23 +51,30 @@ async fn main() {
                 let mut offset = 0i64;
                 let mut processed = 0usize;
 
+                let query = db::adapt_sql(
+                    "SELECT uri, collection, record FROM records ORDER BY uri LIMIT $1 OFFSET $2",
+                    backend,
+                );
+
                 loop {
-                    let batch: Vec<(String, String, serde_json::Value)> = sqlx::query_as(
-                        "SELECT uri, collection, record FROM records ORDER BY uri LIMIT $1 OFFSET $2",
-                    )
-                    .bind(batch_size)
-                    .bind(offset)
-                    .fetch_all(&db_bg)
-                    .await
-                    .expect("failed to fetch records for backfill");
+                    let batch: Vec<(String, String, String)> = sqlx::query_as(&query)
+                        .bind(batch_size)
+                        .bind(offset)
+                        .fetch_all(&db_bg)
+                        .await
+                        .expect("failed to fetch records for backfill");
 
                     if batch.is_empty() {
                         break;
                     }
 
-                    for (uri, collection, record) in &batch {
-                        if let Err(e) =
-                            happyview::record_refs::sync_refs(&db_bg, uri, collection, record).await
+                    for (uri, collection, record_str) in &batch {
+                        let record: serde_json::Value =
+                            serde_json::from_str(record_str).unwrap_or(serde_json::Value::Null);
+                        if let Err(e) = happyview::record_refs::sync_refs(
+                            &db_bg, uri, collection, &record, backend,
+                        )
+                        .await
                         {
                             warn!(uri = uri.as_str(), "failed to backfill refs: {e}");
                         }
@@ -117,20 +123,20 @@ async fn main() {
                             None,
                         ) {
                             Ok(parsed) => {
-                                if let Err(e) = sqlx::query(
-                                    r#"
-                                    UPDATE lexicons
-                                    SET lexicon_json = $2,
-                                        last_fetched_at = NOW(),
-                                        revision = revision + 1,
-                                        updated_at = NOW()
-                                    WHERE id = $1 AND source = 'network'
-                                    "#,
-                                )
-                                .bind(nsid)
-                                .bind(&lexicon_json)
-                                .execute(&db)
-                                .await
+                                let now = db::now_rfc3339();
+                                let update_sql = db::adapt_sql(
+                                    "UPDATE lexicons SET lexicon_json = $1, last_fetched_at = $2, revision = revision + 1, updated_at = $3 WHERE id = $4 AND source = 'network'",
+                                    db_backend,
+                                );
+                                let lexicon_json_str =
+                                    serde_json::to_string(&lexicon_json).unwrap_or_default();
+                                if let Err(e) = sqlx::query(&update_sql)
+                                    .bind(&lexicon_json_str)
+                                    .bind(&now)
+                                    .bind(&now)
+                                    .bind(nsid)
+                                    .execute(&db)
+                                    .await
                                 {
                                     warn!(nsid, "failed to update network lexicon in DB: {e}");
                                     continue;
@@ -170,6 +176,7 @@ async fn main() {
         config: config.clone(),
         http,
         db,
+        db_backend,
         lexicons,
         collections_tx,
         labeler_subscriptions_tx,
@@ -197,11 +204,12 @@ async fn main() {
     tap::spawn(state.clone(), collections_rx);
 
     labeler::spawn(state.clone(), labeler_subscriptions_rx);
-    tokio::spawn(labeler::spawn_label_gc(state.db.clone()));
+    tokio::spawn(labeler::spawn_label_gc(state.db.clone(), state.db_backend));
 
     tokio::spawn(happyview::event_log::spawn_retention_cleanup(
         state.db.clone(),
         state.config.event_log_retention_days,
+        state.db_backend,
     ));
 
     let app = server::router(state);

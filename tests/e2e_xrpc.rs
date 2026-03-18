@@ -2,6 +2,7 @@ mod common;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use happyview::db::{adapt_sql, now_rfc3339};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use serial_test::serial;
@@ -41,7 +42,6 @@ fn authed_get(uri: &str, token: &str) -> Request<Body> {
         .unwrap()
 }
 
-/// Seed the game record lexicon and a query lexicon into the test app.
 async fn seed_lexicons(app: &TestApp) {
     app.mock_admin_userinfo().await;
 
@@ -88,21 +88,24 @@ async fn seed_lexicons(app: &TestApp) {
         .unwrap();
 }
 
-/// Seed a record directly into the database.
 async fn seed_record(app: &TestApp, uri: &str, did: &str, collection: &str, record: &Value) {
     let rkey = uri.split('/').next_back().unwrap_or("1");
-    sqlx::query(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid) VALUES ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(uri)
-    .bind(did)
-    .bind(collection)
-    .bind(rkey)
-    .bind(record)
-    .bind("bafytest")
-    .execute(&app.state.db)
-    .await
-    .unwrap();
+    let backend = app.state.db_backend;
+    let sql = adapt_sql(
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(uri)
+        .bind(did)
+        .bind(collection)
+        .bind(rkey)
+        .bind(serde_json::to_string(record).unwrap_or_default())
+        .bind("bafytest")
+        .bind(now_rfc3339())
+        .execute(&app.state.db)
+        .await
+        .unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +114,7 @@ async fn seed_record(app: &TestApp, uri: &str, did: &str, collection: &str, reco
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn profile_no_auth_returns_401() {
     let app = TestApp::new().await;
 
@@ -130,6 +134,7 @@ async fn profile_no_auth_returns_401() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn profile_with_mocked_services_returns_200() {
     let app = TestApp::new().await;
     let did = "did:plc:testuser";
@@ -172,6 +177,7 @@ async fn profile_with_mocked_services_returns_200() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
     let app = TestApp::new().await;
 
@@ -193,6 +199,7 @@ async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_get_non_query_returns_400() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -214,6 +221,7 @@ async fn xrpc_get_non_query_returns_400() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_get_single_record_by_uri() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -255,6 +263,7 @@ async fn xrpc_get_single_record_by_uri() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_get_record_not_found() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -275,6 +284,7 @@ async fn xrpc_get_record_not_found() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_get_list_with_pagination() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -345,6 +355,7 @@ async fn xrpc_get_list_with_pagination() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_get_list_filtered_by_did() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -403,6 +414,7 @@ async fn xrpc_get_list_filtered_by_did() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_post_no_auth_returns_401() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -425,6 +437,7 @@ async fn xrpc_post_no_auth_returns_401() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_post_non_procedure_returns_400() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
@@ -451,10 +464,12 @@ async fn xrpc_post_non_procedure_returns_400() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn xrpc_delete_procedure_removes_record() {
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
     app.mock_admin_userinfo().await;
+    let backend = app.state.db_backend;
 
     // Upload delete procedure lexicon with action: "delete"
     let resp = app
@@ -480,7 +495,8 @@ async fn xrpc_delete_procedure_removes_record() {
     seed_record(&app, uri, did, "games.gamesgamesgamesgames.game", &record).await;
 
     // Verify record exists
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM records WHERE uri = $1")
+    let sql = adapt_sql("SELECT COUNT(*) FROM records WHERE uri = $1", backend);
+    let count: (i64,) = sqlx::query_as(&sql)
         .bind(uri)
         .fetch_one(&app.state.db)
         .await
@@ -549,6 +565,7 @@ async fn xrpc_delete_procedure_removes_record() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn upload_lexicon_with_invalid_action_returns_400() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;

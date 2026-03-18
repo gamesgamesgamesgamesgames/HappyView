@@ -10,6 +10,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
 use crate::AppState;
+use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::profile;
 
@@ -147,11 +148,14 @@ async fn run_subscription_once(
     let ws_url = http_to_ws(&pds_endpoint);
 
     // Read cursor from database.
-    let cursor: Option<(Option<i64>,)> =
-        sqlx::query_as("SELECT cursor FROM labeler_subscriptions WHERE did = $1")
-            .bind(did)
-            .fetch_optional(&state.db)
-            .await?;
+    let cursor_sql = adapt_sql(
+        "SELECT cursor FROM labeler_subscriptions WHERE did = $1",
+        state.db_backend,
+    );
+    let cursor: Option<(Option<i64>,)> = sqlx::query_as(&cursor_sql)
+        .bind(did)
+        .fetch_optional(&state.db)
+        .await?;
 
     let cursor_val = cursor.and_then(|(c,)| c).unwrap_or(0);
 
@@ -202,6 +206,7 @@ async fn run_subscription_once(
             subject: Some(did.to_string()),
             detail: serde_json::json!({ "did": did }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -215,7 +220,7 @@ async fn run_subscription_once(
             Some(Err(e)) => {
                 tracing::warn!(did = %did, "labeler websocket read error: {e}");
                 // Persist cursor before disconnecting.
-                persist_cursor(&state.db, did, last_seq).await;
+                persist_cursor(&state.db, did, last_seq, state.db_backend).await;
                 return Err(e.into());
             }
             None => {
@@ -248,18 +253,18 @@ async fn run_subscription_once(
         last_seq = message.seq;
 
         for label in &message.labels {
-            apply_label(&state.db, label).await;
+            apply_label(&state.db, label, state.db_backend).await;
         }
 
         events_since_cursor_save += 1;
         if events_since_cursor_save >= 100 {
-            persist_cursor(&state.db, did, last_seq).await;
+            persist_cursor(&state.db, did, last_seq, state.db_backend).await;
             events_since_cursor_save = 0;
         }
     }
 
     // Persist final cursor on disconnect.
-    persist_cursor(&state.db, did, last_seq).await;
+    persist_cursor(&state.db, did, last_seq, state.db_backend).await;
 
     log_event(
         &state.db,
@@ -270,6 +275,7 @@ async fn run_subscription_once(
             subject: Some(did.to_string()),
             detail: serde_json::json!({ "did": did, "last_seq": last_seq }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -317,10 +323,14 @@ fn http_to_ws(url: &str) -> String {
     }
 }
 
-async fn apply_label(db: &sqlx::PgPool, label: &Label) {
+async fn apply_label(db: &sqlx::AnyPool, label: &Label, backend: DatabaseBackend) {
     if label.neg {
         // Negation label — remove it.
-        if let Err(e) = sqlx::query("DELETE FROM labels WHERE src = $1 AND uri = $2 AND val = $3")
+        let delete_sql = adapt_sql(
+            "DELETE FROM labels WHERE src = $1 AND uri = $2 AND val = $3",
+            backend,
+        );
+        if let Err(e) = sqlx::query(&delete_sql)
             .bind(&label.src)
             .bind(&label.uri)
             .bind(&label.val)
@@ -333,18 +343,8 @@ async fn apply_label(db: &sqlx::PgPool, label: &Label) {
             );
         }
     } else {
-        // Normal label — upsert.
-        let cts = chrono::DateTime::parse_from_rfc3339(&label.cts)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .ok();
-
-        let exp = label
-            .exp
-            .as_deref()
-            .and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
-
-        if let Err(e) = sqlx::query(
+        // Normal label — upsert. Store timestamps as RFC3339 strings for portability.
+        let insert_sql = adapt_sql(
             r#"
             INSERT INTO labels (src, uri, val, cts, exp)
             VALUES ($1, $2, $3, $4, $5)
@@ -352,14 +352,17 @@ async fn apply_label(db: &sqlx::PgPool, label: &Label) {
                 SET cts = EXCLUDED.cts,
                     exp = EXCLUDED.exp
             "#,
-        )
-        .bind(&label.src)
-        .bind(&label.uri)
-        .bind(&label.val)
-        .bind(cts)
-        .bind(exp)
-        .execute(db)
-        .await
+            backend,
+        );
+
+        if let Err(e) = sqlx::query(&insert_sql)
+            .bind(&label.src)
+            .bind(&label.uri)
+            .bind(&label.val)
+            .bind(&label.cts)
+            .bind(&label.exp)
+            .execute(db)
+            .await
         {
             tracing::warn!(
                 src = %label.src, uri = %label.uri, val = %label.val,
@@ -369,14 +372,18 @@ async fn apply_label(db: &sqlx::PgPool, label: &Label) {
     }
 }
 
-async fn persist_cursor(db: &sqlx::PgPool, did: &str, seq: i64) {
-    if let Err(e) = sqlx::query(
-        "UPDATE labeler_subscriptions SET cursor = $1, updated_at = NOW() WHERE did = $2",
-    )
-    .bind(seq)
-    .bind(did)
-    .execute(db)
-    .await
+async fn persist_cursor(db: &sqlx::AnyPool, did: &str, seq: i64, backend: DatabaseBackend) {
+    let now = now_rfc3339();
+    let update_sql = adapt_sql(
+        "UPDATE labeler_subscriptions SET cursor = $1, updated_at = $2 WHERE did = $3",
+        backend,
+    );
+    if let Err(e) = sqlx::query(&update_sql)
+        .bind(seq)
+        .bind(&now)
+        .bind(did)
+        .execute(db)
+        .await
     {
         tracing::warn!(did = %did, seq, "failed to persist labeler cursor: {e}");
     }
@@ -445,7 +452,7 @@ async fn backfill_from_labeler(
     let response: QueryLabelsResponse = resp.json().await?;
 
     for label in &response.labels {
-        apply_label(&state.db, label).await;
+        apply_label(&state.db, label, state.db_backend).await;
     }
 
     Ok(())
@@ -456,17 +463,24 @@ async fn backfill_from_labeler(
 // ---------------------------------------------------------------------------
 
 /// Hourly task to clean up expired and orphaned labels.
-pub async fn spawn_label_gc(db: sqlx::PgPool) {
+pub async fn spawn_label_gc(db: sqlx::AnyPool, backend: DatabaseBackend) {
     tracing::info!("starting label garbage collection task");
 
     let interval = tokio::time::Duration::from_secs(3600); // 1 hour
+
+    // Build database-specific cleanup query for expired labels
+    let expired_sql = match backend {
+        DatabaseBackend::Postgres => "DELETE FROM labels WHERE exp IS NOT NULL AND exp < NOW()",
+        DatabaseBackend::Sqlite => {
+            "DELETE FROM labels WHERE exp IS NOT NULL AND exp < datetime('now')"
+        }
+    };
+
     loop {
         tokio::time::sleep(interval).await;
 
         // Delete expired labels.
-        let expired = sqlx::query("DELETE FROM labels WHERE exp IS NOT NULL AND exp < NOW()")
-            .execute(&db)
-            .await;
+        let expired = sqlx::query(expired_sql).execute(&db).await;
 
         let expired_count = match expired {
             Ok(r) => r.rows_affected(),

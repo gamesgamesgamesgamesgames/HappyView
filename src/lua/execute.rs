@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use crate::AppState;
 use crate::auth::Claims;
+use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use crate::error::{AppError, ScriptErrorType, parse_lua_line};
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::ParsedLexicon;
@@ -21,8 +22,9 @@ use super::record;
 use super::sandbox;
 
 /// Load all script variables from the database as a key-value map.
-async fn load_env_vars(db: &sqlx::PgPool) -> HashMap<String, String> {
-    sqlx::query_as::<_, (String, String)>("SELECT key, value FROM script_variables")
+async fn load_env_vars(db: &sqlx::AnyPool, backend: DatabaseBackend) -> HashMap<String, String> {
+    let sql = adapt_sql("SELECT key, value FROM script_variables", backend);
+    sqlx::query_as::<_, (String, String)>(&sql)
         .fetch_all(db)
         .await
         .unwrap_or_default()
@@ -40,6 +42,7 @@ pub async fn execute_procedure_script(
     script: &str,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
+    let backend = state.db_backend;
     let span = tracing::info_span!(
         "script.execute",
         method = method,
@@ -73,6 +76,7 @@ pub async fn execute_procedure_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(e);
@@ -99,6 +103,7 @@ pub async fn execute_procedure_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(AppError::Internal(error_message));
@@ -127,6 +132,7 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -150,6 +156,7 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -173,6 +180,7 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -196,6 +204,7 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -219,12 +228,13 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = context::set_env_context(&lua, &load_env_vars(&state.db).await) {
+    if let Err(e) = context::set_env_context(&lua, &load_env_vars(&state.db, backend).await) {
         let error_message = format!("failed to set env context: {e}");
         log_event(
             &state.db,
@@ -242,6 +252,7 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -266,6 +277,7 @@ pub async fn execute_procedure_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         let (line, clean_msg) = parse_lua_line(&error_message);
@@ -298,6 +310,7 @@ pub async fn execute_procedure_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(AppError::ScriptError {
@@ -346,6 +359,7 @@ pub async fn execute_procedure_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(app_error);
@@ -373,6 +387,7 @@ pub async fn execute_procedure_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(AppError::ScriptError {
@@ -406,6 +421,7 @@ pub async fn execute_procedure_script(
                 "response": json_value,
             }),
         },
+        backend,
     )
     .await;
 
@@ -422,6 +438,7 @@ pub async fn execute_query_script(
     claims: Option<&Claims>,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
+    let backend = state.db_backend;
     let span = tracing::info_span!("script.execute", method = method, script_type = "query",);
     span.in_scope(|| tracing::info!("script execution started"));
     let collection = lexicon.target_collection.as_deref().unwrap_or_default();
@@ -447,6 +464,7 @@ pub async fn execute_query_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(AppError::Internal(error_message));
@@ -471,6 +489,7 @@ pub async fn execute_query_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -492,6 +511,7 @@ pub async fn execute_query_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -513,6 +533,7 @@ pub async fn execute_query_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -536,12 +557,13 @@ pub async fn execute_query_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = context::set_env_context(&lua, &load_env_vars(&state.db).await) {
+    if let Err(e) = context::set_env_context(&lua, &load_env_vars(&state.db, backend).await) {
         let error_message = format!("failed to set env context: {e}");
         log_event(
             &state.db,
@@ -557,6 +579,7 @@ pub async fn execute_query_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         return Err(AppError::Internal(error_message));
@@ -579,6 +602,7 @@ pub async fn execute_query_script(
                     "duration_ms": start.elapsed().as_millis() as u64,
                 }),
             },
+            backend,
         )
         .await;
         let (line, clean_msg) = parse_lua_line(&error_message);
@@ -609,6 +633,7 @@ pub async fn execute_query_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(AppError::ScriptError {
@@ -655,6 +680,7 @@ pub async fn execute_query_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(app_error);
@@ -680,6 +706,7 @@ pub async fn execute_query_script(
                         "duration_ms": start.elapsed().as_millis() as u64,
                     }),
                 },
+                backend,
             )
             .await;
             return Err(AppError::ScriptError {
@@ -712,6 +739,7 @@ pub async fn execute_query_script(
                 "response": json_value,
             }),
         },
+        backend,
     )
     .await;
 
@@ -744,6 +772,7 @@ pub struct HookEvent<'a> {
 pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
     let max_attempts: i32 = 4; // 1 initial + 3 retries
     let mut last_error = String::new();
+    let backend = event.state.db_backend;
 
     for attempt in 0..max_attempts {
         if attempt > 0 {
@@ -767,6 +796,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
                             "attempts": attempt + 1,
                         }),
                     },
+                    backend,
                 )
                 .await;
                 return hook_result;
@@ -791,23 +821,29 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
         "hook dead-lettered after {max_attempts} attempts"
     );
 
-    if let Err(e) = sqlx::query(
+    let record_str = event
+        .record
+        .map(|r| serde_json::to_string(r).unwrap_or_default());
+    let dead_letter_sql = adapt_sql(
         r#"
-        INSERT INTO dead_letter_hooks (lexicon_id, uri, did, collection, rkey, action, record, error, attempts)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO dead_letter_hooks (lexicon_id, uri, did, collection, rkey, action, record, error, attempts, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         "#,
-    )
-    .bind(event.lexicon_id)
-    .bind(event.uri)
-    .bind(event.did)
-    .bind(event.collection)
-    .bind(event.rkey)
-    .bind(event.action)
-    .bind(event.record)
-    .bind(&last_error)
-    .bind(max_attempts)
-    .execute(&event.state.db)
-    .await
+        backend,
+    );
+    if let Err(e) = sqlx::query(&dead_letter_sql)
+        .bind(event.lexicon_id)
+        .bind(event.uri)
+        .bind(event.did)
+        .bind(event.collection)
+        .bind(event.rkey)
+        .bind(event.action)
+        .bind(&record_str)
+        .bind(&last_error)
+        .bind(max_attempts)
+        .bind(now_rfc3339())
+        .execute(&event.state.db)
+        .await
     {
         tracing::error!(uri = event.uri, "failed to insert dead letter hook: {e}");
     }
@@ -827,6 +863,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
                 "attempts": max_attempts,
             }),
         },
+        backend,
     )
     .await;
 
@@ -841,6 +878,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
 /// `Ok(Some(original))` for other non-nil types.
 async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
     let lua = sandbox::create_sandbox().map_err(|e| format!("failed to create Lua VM: {e}"))?;
+    let backend = event.state.db_backend;
 
     let state_arc = Arc::new(event.state.clone());
 
@@ -864,7 +902,7 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
     )
     .map_err(|e| format!("failed to set hook context: {e}"))?;
 
-    context::set_env_context(&lua, &load_env_vars(&event.state.db).await)
+    context::set_env_context(&lua, &load_env_vars(&event.state.db, backend).await)
         .map_err(|e| format!("failed to set env context: {e}"))?;
 
     lua.load(event.script)
@@ -900,6 +938,7 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::db::DatabaseBackend;
     use crate::lexicon::LexiconRegistry;
     use serde_json::json;
     use tokio::sync::watch;
@@ -909,6 +948,7 @@ mod tests {
             host: "127.0.0.1".into(),
             port: 3000,
             database_url: String::new(),
+            database_backend: crate::db::DatabaseBackend::Sqlite,
             aip_url: String::new(),
             aip_public_url: String::new(),
             tap_url: String::new(),
@@ -920,10 +960,12 @@ mod tests {
         };
         let (tx, _) = watch::channel(vec![]);
         let (labeler_tx, _) = watch::channel(());
+        sqlx::any::install_default_drivers();
         AppState {
             config,
             http: reqwest::Client::new(),
-            db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
+            db: sqlx::AnyPool::connect_lazy("sqlite::memory:").unwrap(),
+            db_backend: DatabaseBackend::Sqlite,
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
             labeler_subscriptions_tx: labeler_tx,

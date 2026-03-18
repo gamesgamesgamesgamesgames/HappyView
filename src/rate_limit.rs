@@ -1,7 +1,7 @@
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use ipnet::IpNet;
-use sqlx::PgPool;
+use sqlx::AnyPool;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -171,7 +171,7 @@ impl RateLimiter {
         }
     }
 
-    pub async fn load_from_db(db: &PgPool) -> RateLimiterState {
+    pub async fn load_from_db(db: &AnyPool) -> RateLimiterState {
         // Load enabled flag
         let enabled: bool = sqlx::query_scalar::<_, String>(
             "SELECT value FROM rate_limit_settings WHERE key = 'enabled'",
@@ -229,7 +229,7 @@ impl RateLimiter {
     }
 
     /// Reload all config from DB and apply to the live limiter.
-    pub async fn reload_from_db(&self, db: &PgPool) {
+    pub async fn reload_from_db(&self, db: &AnyPool) {
         let state = Self::load_from_db(db).await;
         self.set_enabled(state.enabled);
         self.update_config(state.global);

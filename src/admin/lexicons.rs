@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use serde_json::Value;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
@@ -26,6 +27,7 @@ pub(super) async fn upload_lexicon(
     Json(body): Json<UploadLexiconBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     auth.require(Permission::LexiconsCreate).await?;
+    let backend = state.db_backend;
     // Validate basic structure
     let lexicon_version = body
         .lexicon_json
@@ -76,12 +78,14 @@ pub(super) async fn upload_lexicon(
 
     let action_str = action.to_optional_str();
     let has_script = body.script.is_some();
+    let lexicon_json_str = serde_json::to_string(&body.lexicon_json).unwrap_or_default();
+    let now = now_rfc3339();
 
     // Upsert into database
-    let row: (i32,) = sqlx::query_as(
+    let sql = adapt_sql(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, action, script, index_hook, token_cost, source)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual')
+        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, action, script, index_hook, token_cost, source, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9)
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             backfill = EXCLUDED.backfill,
@@ -92,21 +96,24 @@ pub(super) async fn upload_lexicon(
             token_cost = EXCLUDED.token_cost,
             source = 'manual',
             revision = lexicons.revision + 1,
-            updated_at = NOW()
+            updated_at = $9
         RETURNING revision
         "#,
-    )
-    .bind(&id)
-    .bind(&body.lexicon_json)
-    .bind(body.backfill)
-    .bind(&body.target_collection)
-    .bind(action_str)
-    .bind(&body.script)
-    .bind(&body.index_hook)
-    .bind(body.token_cost)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to upsert lexicon: {e}")))?;
+        backend,
+    );
+    let row: (i32,) = sqlx::query_as(&sql)
+        .bind(&id)
+        .bind(&lexicon_json_str)
+        .bind(if body.backfill { 1_i32 } else { 0_i32 })
+        .bind(&body.target_collection)
+        .bind(action_str)
+        .bind(&body.script)
+        .bind(&body.index_hook)
+        .bind(body.token_cost)
+        .bind(&now)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to upsert lexicon: {e}")))?;
 
     let revision = row.0;
 
@@ -153,6 +160,7 @@ pub(super) async fn upload_lexicon(
                 "source": "manual",
             }),
         },
+        backend,
     )
     .await;
 
@@ -171,11 +179,28 @@ pub(super) async fn list_lexicons(
     auth: UserAuth,
 ) -> Result<Json<Vec<LexiconSummary>>, AppError> {
     auth.require(Permission::LexiconsRead).await?;
+    let backend = state.db_backend;
+    let sql = adapt_sql(
+        "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons ORDER BY id",
+        backend,
+    );
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<i32>)> =
-        sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons ORDER BY id",
-        )
+    let rows: Vec<(
+        String,
+        i32,
+        String,
+        i32,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        String,
+        Option<i32>,
+    )> = sqlx::query_as(&sql)
         .fetch_all(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to list lexicons: {e}")))?;
@@ -186,7 +211,7 @@ pub(super) async fn list_lexicons(
             |(
                 id,
                 revision,
-                json,
+                json_str,
                 backfill,
                 action,
                 target_collection,
@@ -199,6 +224,7 @@ pub(super) async fn list_lexicons(
                 updated_at,
                 token_cost,
             )| {
+                let json: Value = serde_json::from_str(&json_str).unwrap_or_default();
                 let parsed = ParsedLexicon::parse(
                     json,
                     revision,
@@ -221,7 +247,7 @@ pub(super) async fn list_lexicons(
                     id,
                     revision,
                     lexicon_type,
-                    backfill,
+                    backfill: backfill != 0,
                     action,
                     target_collection,
                     has_script: script.is_some(),
@@ -248,11 +274,28 @@ pub(super) async fn get_lexicon(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, AppError> {
     auth.require(Permission::LexiconsRead).await?;
+    let backend = state.db_backend;
+    let sql = adapt_sql(
+        "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons WHERE id = $1",
+        backend,
+    );
     #[allow(clippy::type_complexity)]
-    let row: Option<(String, i32, Value, bool, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<i32>)> =
-        sqlx::query_as(
-            "SELECT id, revision, lexicon_json, backfill, action, target_collection, script, index_hook, source, authority_did, last_fetched_at, created_at, updated_at, token_cost FROM lexicons WHERE id = $1",
-        )
+    let row: Option<(
+        String,
+        i32,
+        String,
+        i32,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        String,
+        Option<i32>,
+    )> = sqlx::query_as(&sql)
         .bind(&id)
         .fetch_optional(&state.db)
         .await
@@ -261,7 +304,7 @@ pub(super) async fn get_lexicon(
     let (
         id,
         revision,
-        lexicon_json,
+        lexicon_json_str,
         backfill,
         action,
         target_collection,
@@ -274,6 +317,8 @@ pub(super) async fn get_lexicon(
         updated_at,
         token_cost,
     ) = row.ok_or_else(|| AppError::NotFound(format!("lexicon '{id}' not found")))?;
+
+    let lexicon_json: Value = serde_json::from_str(&lexicon_json_str).unwrap_or_default();
 
     let lexicon_type = ParsedLexicon::parse(
         lexicon_json.clone(),
@@ -294,7 +339,7 @@ pub(super) async fn get_lexicon(
         "revision": revision,
         "lexicon_json": lexicon_json,
         "lexicon_type": lexicon_type,
-        "backfill": backfill,
+        "backfill": backfill != 0,
         "action": action,
         "target_collection": target_collection,
         "has_script": has_script,
@@ -317,7 +362,9 @@ pub(super) async fn delete_lexicon(
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::LexiconsDelete).await?;
-    let result = sqlx::query("DELETE FROM lexicons WHERE id = $1")
+    let backend = state.db_backend;
+    let sql = adapt_sql("DELETE FROM lexicons WHERE id = $1", backend);
+    let result = sqlx::query(&sql)
         .bind(&id)
         .execute(&state.db)
         .await
@@ -339,6 +386,7 @@ pub(super) async fn delete_lexicon(
             subject: Some(id.clone()),
             detail: serde_json::json!({}),
         },
+        backend,
     )
     .await;
 

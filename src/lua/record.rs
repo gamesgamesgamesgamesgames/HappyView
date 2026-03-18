@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::AppState;
 use crate::auth::Claims;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::record_refs::sync_refs;
 use crate::repo::{self, AtpSession};
 
@@ -41,6 +42,7 @@ pub fn register_record_api(
             let claims = claims.clone();
             let session = session.clone();
             async move {
+                let backend = state.db_backend;
                 let collection: String = this.raw_get("_collection")?;
                 let schema: mlua::Value = this.raw_get("_schema")?;
                 let repo_override: Option<String> = this.raw_get("_repo_override")?;
@@ -99,24 +101,29 @@ pub fn register_record_api(
                         .get("cid")
                         .and_then(|v| v.as_str())
                         .unwrap_or_default();
-                    let _ = sqlx::query(
-                        r#"INSERT INTO records (uri, did, collection, rkey, record, cid)
-                           VALUES ($1, $2, $3, $4, $5, $6)
+                    let now = now_rfc3339();
+                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                    let upsert_sql = adapt_sql(
+                        r#"INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at, created_at)
+                           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
                            ON CONFLICT (uri) DO UPDATE
                                SET record = EXCLUDED.record,
                                    cid = EXCLUDED.cid,
-                                   indexed_at = NOW()"#,
-                    )
-                    .bind(uri)
-                    .bind(repo)
-                    .bind(&collection)
-                    .bind(&rkey)
-                    .bind(&data)
-                    .bind(cid)
-                    .execute(&state.db)
-                    .await;
+                                   indexed_at = $7"#,
+                        backend,
+                    );
+                    let _ = sqlx::query(&upsert_sql)
+                        .bind(uri)
+                        .bind(repo)
+                        .bind(&collection)
+                        .bind(&rkey)
+                        .bind(&data_str)
+                        .bind(cid)
+                        .bind(&now)
+                        .execute(&state.db)
+                        .await;
 
-                    let _ = sync_refs(&state.db, uri, &collection, &data).await;
+                    let _ = sync_refs(&state.db, uri, &collection, &data, backend).await;
 
                     result
                 } else {
@@ -160,23 +167,28 @@ pub fn register_record_api(
                         result.get("cid").and_then(|v| v.as_str()),
                     ) {
                         let rkey = uri.split('/').next_back().unwrap_or_default();
-                        let _ = sqlx::query(
-                            r#"INSERT INTO records (uri, did, collection, rkey, record, cid)
-                               VALUES ($1, $2, $3, $4, $5, $6)
+                        let data_str = serde_json::to_string(&data).unwrap_or_default();
+                        let now = now_rfc3339();
+                        let upsert_sql = adapt_sql(
+                            r#"INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
+                               VALUES ($1, $2, $3, $4, $5, $6, $7)
                                ON CONFLICT (uri) DO UPDATE
                                    SET record = EXCLUDED.record,
                                        cid = EXCLUDED.cid"#,
-                        )
-                        .bind(uri)
-                        .bind(repo)
-                        .bind(&collection)
-                        .bind(rkey)
-                        .bind(&data)
-                        .bind(cid)
-                        .execute(&state.db)
-                        .await;
+                            backend,
+                        );
+                        let _ = sqlx::query(&upsert_sql)
+                            .bind(uri)
+                            .bind(repo)
+                            .bind(&collection)
+                            .bind(rkey)
+                            .bind(&data_str)
+                            .bind(cid)
+                            .bind(&now)
+                            .execute(&state.db)
+                            .await;
 
-                        let _ = sync_refs(&state.db, uri, &collection, &data).await;
+                        let _ = sync_refs(&state.db, uri, &collection, &data, backend).await;
                     }
 
                     result
@@ -206,6 +218,7 @@ pub fn register_record_api(
             let claims = claims.clone();
             let session = session.clone();
             async move {
+                let backend = state.db_backend;
                 let uri: String = this.raw_get::<Option<String>>("_uri")?.ok_or_else(|| {
                     mlua::Error::runtime("cannot delete a Record that has no _uri")
                 })?;
@@ -243,10 +256,8 @@ pub fn register_record_api(
                 }
 
                 // Delete from local DB
-                let _ = sqlx::query("DELETE FROM records WHERE uri = $1")
-                    .bind(&uri)
-                    .execute(&state.db)
-                    .await;
+                let delete_sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+                let _ = sqlx::query(&delete_sql).bind(&uri).execute(&state.db).await;
 
                 // Clear _uri and _cid
                 this.raw_set("_uri", mlua::Value::Nil)?;
@@ -444,6 +455,7 @@ pub fn register_record_api(
                 let claims = claims.clone();
                 let session = session.clone();
                 async move {
+                    let backend = state.db_backend;
                     // Extract save data from each record (sync)
                     type SaveItem = (mlua::Table, String, Option<String>, Option<String>, Option<String>, Value);
                     let mut save_items: Vec<SaveItem> = Vec::new();
@@ -523,24 +535,29 @@ pub fn register_record_api(
                                     .get("cid")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or_default();
-                                let _ = sqlx::query(
-                                    r#"INSERT INTO records (uri, did, collection, rkey, record, cid)
-                                       VALUES ($1, $2, $3, $4, $5, $6)
+                                let now = now_rfc3339();
+                                let data_str = serde_json::to_string(&data).unwrap_or_default();
+                                let upsert_sql = adapt_sql(
+                                    r#"INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at, created_at)
+                                       VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
                                        ON CONFLICT (uri) DO UPDATE
                                            SET record = EXCLUDED.record,
                                                cid = EXCLUDED.cid,
-                                               indexed_at = NOW()"#,
-                                )
+                                               indexed_at = $7"#,
+                                    backend,
+                                );
+                                let _ = sqlx::query(&upsert_sql)
                                 .bind(uri.as_str())
                                 .bind(repo)
                                 .bind(&collection)
                                 .bind(&rkey)
-                                .bind(&data)
+                                .bind(&data_str)
                                 .bind(cid)
+                                .bind(&now)
                                 .execute(&state.db)
                                 .await;
 
-                                let _ = sync_refs(&state.db, uri.as_str(), &collection, &data).await;
+                                let _ = sync_refs(&state.db, uri.as_str(), &collection, &data, backend).await;
 
                                 Ok(result)
                             } else {
@@ -589,23 +606,28 @@ pub fn register_record_api(
                                 ) {
                                     let rkey =
                                         uri.split('/').next_back().unwrap_or_default();
-                                    let _ = sqlx::query(
-                                        r#"INSERT INTO records (uri, did, collection, rkey, record, cid)
-                                           VALUES ($1, $2, $3, $4, $5, $6)
+                                    let data_str = serde_json::to_string(&data).unwrap_or_default();
+                                    let now = now_rfc3339();
+                                    let upsert_sql = adapt_sql(
+                                        r#"INSERT INTO records (uri, did, collection, rkey, record, cid, created_at)
+                                           VALUES ($1, $2, $3, $4, $5, $6, $7)
                                            ON CONFLICT (uri) DO UPDATE
                                                SET record = EXCLUDED.record,
                                                    cid = EXCLUDED.cid"#,
-                                    )
+                                        backend,
+                                    );
+                                    let _ = sqlx::query(&upsert_sql)
                                     .bind(uri)
                                     .bind(repo)
                                     .bind(&collection)
                                     .bind(rkey)
-                                    .bind(&data)
+                                    .bind(&data_str)
                                     .bind(cid)
+                                    .bind(&now)
                                     .execute(&state.db)
                                     .await;
 
-                                    let _ = sync_refs(&state.db, uri, &collection, &data).await;
+                                    let _ = sync_refs(&state.db, uri, &collection, &data, backend).await;
                                 }
 
                                 Ok(result)
@@ -641,15 +663,20 @@ pub fn register_record_api(
             let state = state.clone();
             let metatable = metatable_c.clone();
             async move {
-                let row: Option<(String, Value, String)> =
-                    sqlx::query_as("SELECT collection, record, cid FROM records WHERE uri = $1")
-                        .bind(&uri)
-                        .fetch_optional(&state.db)
-                        .await
-                        .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?;
+                let backend = state.db_backend;
+                let sql = adapt_sql(
+                    "SELECT collection, record, cid FROM records WHERE uri = $1",
+                    backend,
+                );
+                let row: Option<(String, String, String)> = sqlx::query_as(&sql)
+                    .bind(&uri)
+                    .fetch_optional(&state.db)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?;
 
                 match row {
-                    Some((collection, record, cid)) => {
+                    Some((collection, record_str, cid)) => {
+                        let record: Value = serde_json::from_str(&record_str).unwrap_or(json!({}));
                         let table = lua.create_table()?;
 
                         // Look up schema
@@ -697,22 +724,29 @@ pub fn register_record_api(
             let state = state.clone();
             let metatable = metatable_c.clone();
             async move {
+                let backend = state.db_backend;
                 let uris: Vec<String> = lua.from_value(mlua::Value::Table(uris_table))?;
 
                 let futs = uris.iter().map(|uri| {
                     let state = state.clone();
                     let uri = uri.clone();
                     async move {
-                        let row: Option<(String, Value, String)> = sqlx::query_as(
+                        let sql = adapt_sql(
                             "SELECT collection, record, cid FROM records WHERE uri = $1",
-                        )
-                        .bind(&uri)
-                        .fetch_optional(&state.db)
-                        .await
-                        .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?;
+                            backend,
+                        );
+                        let row: Option<(String, String, String)> = sqlx::query_as(&sql)
+                            .bind(&uri)
+                            .fetch_optional(&state.db)
+                            .await
+                            .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?;
 
                         let result: Result<_, mlua::Error> =
-                            Ok(row.map(|(collection, record, cid)| (uri, collection, record, cid)));
+                            Ok(row.map(|(collection, record_str, cid)| {
+                                let record: Value =
+                                    serde_json::from_str(&record_str).unwrap_or(json!({}));
+                                (uri, collection, record, cid)
+                            }));
                         result
                     }
                 });

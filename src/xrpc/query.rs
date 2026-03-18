@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::AppState;
 use crate::auth::Claims;
+use crate::db::adapt_sql;
 use crate::error::AppError;
 
 pub(super) async fn handle_query(
@@ -46,38 +47,45 @@ pub(super) async fn handle_query(
 
     let did = params.get("did").and_then(|v| v.as_str());
 
-    let rows: Vec<(String, String, Value)> = if let Some(did) = did {
-        sqlx::query_as(
+    let backend = state.db_backend;
+
+    let rows: Vec<(String, String, String)> = if let Some(did) = did {
+        let sql = adapt_sql(
             "SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY indexed_at DESC LIMIT $3 OFFSET $4",
-        )
-        .bind(collection)
-        .bind(did)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?
+            backend,
+        );
+        sqlx::query_as(&sql)
+            .bind(collection)
+            .bind(did)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?
     } else {
-        sqlx::query_as(
+        let sql = adapt_sql(
             "SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY indexed_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(collection)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?
+            backend,
+        );
+        sqlx::query_as(&sql)
+            .bind(collection)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?
     };
 
     let has_next_page = rows.len() as i64 == limit;
 
     let records: Vec<Value> = rows
         .into_iter()
-        .map(|(uri, _did, mut record)| {
+        .filter_map(|(uri, _did, record_str)| {
+            let mut record: Value = serde_json::from_str(&record_str).ok()?;
             record
                 .as_object_mut()
                 .map(|obj| obj.insert("uri".to_string(), json!(uri)));
-            record
+            Some(record)
         })
         .collect();
 
@@ -94,13 +102,17 @@ pub(super) async fn handle_query(
 }
 
 pub(super) async fn handle_get_record(state: &AppState, uri: &str) -> Result<Response, AppError> {
-    let row: Option<(Value,)> = sqlx::query_as("SELECT record FROM records WHERE uri = $1")
+    let backend = state.db_backend;
+    let sql = adapt_sql("SELECT record FROM records WHERE uri = $1", backend);
+    let row: Option<(String,)> = sqlx::query_as(&sql)
         .bind(uri)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("DB query failed: {e}")))?;
 
-    let (mut record,) = row.ok_or_else(|| AppError::NotFound("record not found".into()))?;
+    let (record_str,) = row.ok_or_else(|| AppError::NotFound("record not found".into()))?;
+    let mut record: Value = serde_json::from_str(&record_str)
+        .map_err(|e| AppError::Internal(format!("invalid record JSON: {e}")))?;
 
     record
         .as_object_mut()

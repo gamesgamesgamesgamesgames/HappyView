@@ -1,6 +1,8 @@
+use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::AnyPool;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -28,7 +30,7 @@ pub struct EventLog {
     pub detail: Value,
 }
 
-pub async fn spawn_retention_cleanup(db: PgPool, retention_days: u32) {
+pub async fn spawn_retention_cleanup(db: AnyPool, retention_days: u32, backend: DatabaseBackend) {
     if retention_days == 0 {
         tracing::info!("event log retention cleanup disabled");
         return;
@@ -37,15 +39,26 @@ pub async fn spawn_retention_cleanup(db: PgPool, retention_days: u32) {
     tracing::info!(retention_days, "starting event log retention cleanup task");
 
     let interval = tokio::time::Duration::from_secs(3600); // 1 hour
+
+    // Build database-specific cleanup query
+    let cleanup_sql = match backend {
+        DatabaseBackend::Postgres => {
+            "DELETE FROM event_logs WHERE created_at < NOW() - make_interval(days => $1)"
+                .to_string()
+        }
+        DatabaseBackend::Sqlite => {
+            "DELETE FROM event_logs WHERE created_at < datetime('now', '-' || ? || ' days')"
+                .to_string()
+        }
+    };
+
     loop {
         tokio::time::sleep(interval).await;
 
-        let result = sqlx::query(
-            "DELETE FROM event_logs WHERE created_at < NOW() - make_interval(days => $1)",
-        )
-        .bind(retention_days as i32)
-        .execute(&db)
-        .await;
+        let result = sqlx::query(&cleanup_sql)
+            .bind(retention_days as i32)
+            .execute(&db)
+            .await;
 
         match result {
             Ok(result) => {
@@ -61,19 +74,27 @@ pub async fn spawn_retention_cleanup(db: PgPool, retention_days: u32) {
     }
 }
 
-pub async fn log_event(db: &PgPool, event: EventLog) {
+pub async fn log_event(db: &AnyPool, event: EventLog, backend: DatabaseBackend) {
     let severity = event.severity.to_string();
-    let result = sqlx::query(
-        "INSERT INTO event_logs (event_type, severity, actor_did, subject, detail)
-         VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind(&event.event_type)
-    .bind(&severity)
-    .bind(&event.actor_did)
-    .bind(&event.subject)
-    .bind(&event.detail)
-    .execute(db)
-    .await;
+    let detail_str = serde_json::to_string(&event.detail).unwrap_or_else(|_| "{}".to_string());
+    let id = Uuid::new_v4().to_string();
+    let created_at = now_rfc3339();
+
+    let sql = adapt_sql(
+        "INSERT INTO event_logs (id, event_type, severity, actor_did, subject, detail, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        backend,
+    );
+
+    let result = sqlx::query(&sql)
+        .bind(&id)
+        .bind(&event.event_type)
+        .bind(&severity)
+        .bind(&event.actor_did)
+        .bind(&event.subject)
+        .bind(&detail_str)
+        .bind(&created_at)
+        .execute(db)
+        .await;
 
     if let Err(e) = result {
         tracing::warn!(event_type = %event.event_type, "failed to log event: {e}");

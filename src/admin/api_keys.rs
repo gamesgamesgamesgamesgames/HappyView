@@ -4,8 +4,10 @@ use axum::http::StatusCode;
 use hex;
 use rand::Rng;
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
@@ -48,19 +50,27 @@ pub(super) async fn create_api_key(
     // First 8 chars for display (e.g., "hv_a1b2c3d4").
     let key_prefix = raw_key[..11].to_string(); // "hv_" + 8 hex chars
 
-    let row: (String,) = sqlx::query_as(
-        "INSERT INTO api_keys (user_id, name, key_hash, key_prefix, permissions)
-         VALUES ($1::uuid, $2, $3, $4, $5)
-         RETURNING id::text",
-    )
-    .bind(&auth.user_id)
-    .bind(&body.name)
-    .bind(&hash)
-    .bind(&key_prefix)
-    .bind(&body.permissions)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to create api key: {e}")))?;
+    let id = Uuid::new_v4().to_string();
+    let now = now_rfc3339();
+    let permissions_json =
+        serde_json::to_string(&body.permissions).unwrap_or_else(|_| "[]".to_string());
+
+    let insert_sql = adapt_sql(
+        "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        state.db_backend,
+    );
+
+    sqlx::query(&insert_sql)
+        .bind(&id)
+        .bind(&auth.user_id)
+        .bind(&body.name)
+        .bind(&hash)
+        .bind(&key_prefix)
+        .bind(&permissions_json)
+        .bind(&now)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to create api key: {e}")))?;
 
     log_event(
         &state.db,
@@ -71,13 +81,14 @@ pub(super) async fn create_api_key(
             subject: Some(body.name.clone()),
             detail: serde_json::json!({ "key_prefix": key_prefix, "permissions": &body.permissions }),
         },
+        state.db_backend,
     )
     .await;
 
     Ok((
         StatusCode::CREATED,
         Json(CreateApiKeyResponse {
-            id: row.0,
+            id,
             name: body.name,
             key: raw_key,
             key_prefix,
@@ -93,31 +104,32 @@ pub(super) async fn list_api_keys(
 ) -> Result<Json<Vec<ApiKeySummary>>, AppError> {
     auth.require(Permission::ApiKeysRead).await?;
 
+    let select_sql = adapt_sql(
+        "SELECT k.id, k.name, k.key_prefix, k.permissions, k.created_at, k.last_used_at, k.revoked_at FROM api_keys k JOIN users u ON u.id = k.user_id WHERE u.did = $1 ORDER BY k.created_at DESC",
+        state.db_backend,
+    );
+
     #[allow(clippy::type_complexity)]
     let rows: Vec<(
         String,
         String,
         String,
-        Vec<String>,
-        chrono::DateTime<chrono::Utc>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    )> = sqlx::query_as(
-        "SELECT k.id::text, k.name, k.key_prefix, k.permissions, k.created_at, k.last_used_at, k.revoked_at
-         FROM api_keys k
-         JOIN users u ON u.id = k.user_id
-         WHERE u.did = $1
-         ORDER BY k.created_at DESC",
-    )
-    .bind(&auth.did)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to list api keys: {e}")))?;
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(&select_sql)
+        .bind(&auth.did)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list api keys: {e}")))?;
 
     let keys: Vec<ApiKeySummary> = rows
         .into_iter()
         .map(
-            |(id, name, key_prefix, permissions, created_at, last_used_at, revoked_at)| {
+            |(id, name, key_prefix, permissions_json, created_at, last_used_at, revoked_at)| {
+                let permissions: Vec<String> =
+                    serde_json::from_str(&permissions_json).unwrap_or_default();
                 ApiKeySummary {
                     id,
                     name,
@@ -142,17 +154,19 @@ pub(super) async fn revoke_api_key(
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::ApiKeysDelete).await?;
 
-    let result = sqlx::query(
-        "UPDATE api_keys SET revoked_at = NOW()
-         WHERE id::text = $1
-           AND user_id = (SELECT id FROM users WHERE did = $2)
-           AND revoked_at IS NULL",
-    )
-    .bind(&id)
-    .bind(&auth.did)
-    .execute(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to revoke api key: {e}")))?;
+    let now = now_rfc3339();
+    let update_sql = adapt_sql(
+        "UPDATE api_keys SET revoked_at = $1 WHERE id = $2 AND user_id = (SELECT id FROM users WHERE did = $3) AND revoked_at IS NULL",
+        state.db_backend,
+    );
+
+    let result = sqlx::query(&update_sql)
+        .bind(&now)
+        .bind(&id)
+        .bind(&auth.did)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to revoke api key: {e}")))?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("api key '{id}' not found")));
@@ -167,6 +181,7 @@ pub(super) async fn revoke_api_key(
             subject: Some(id.to_string()),
             detail: serde_json::json!({}),
         },
+        state.db_backend,
     )
     .await;
 

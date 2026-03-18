@@ -1,5 +1,6 @@
 use axum::Router;
 use happyview::config::Config;
+use happyview::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use happyview::lexicon::LexiconRegistry;
 use happyview::{AppState, server};
 use tokio::sync::watch;
@@ -11,17 +12,14 @@ pub struct TestApp {
     pub router: Router,
     pub state: AppState,
     pub mock_server: MockServer,
-    /// DID that is seeded as an admin in the test DB.
     pub admin_did: String,
-    /// Bearer token used for admin requests (validated by the mocked AIP).
     pub admin_token: String,
 }
 
 impl TestApp {
-    /// Build a fully wired TestApp with a real Postgres database and wiremock
-    /// for external services (AIP, relay, PLC directory).
     pub async fn new() -> Self {
         let pool = db::test_pool().await;
+        let backend = db::test_backend();
         db::truncate_all(&pool).await;
 
         let mock_server = MockServer::start().await;
@@ -33,7 +31,8 @@ impl TestApp {
         let config = Config {
             host: "127.0.0.1".into(),
             port: 0,
-            database_url: String::new(), // not used — pool is already connected
+            database_url: String::new(),
+            database_backend: backend,
             aip_url: mock_url.clone(),
             aip_public_url: mock_url.clone(),
             tap_url: "http://localhost:2480".into(),
@@ -44,9 +43,14 @@ impl TestApp {
             event_log_retention_days: 30,
         };
 
-        // Seed the admin user directly so tests don't rely on auto-bootstrap.
-        sqlx::query("INSERT INTO users (did, is_super) VALUES ($1, TRUE) ON CONFLICT DO NOTHING")
+        let sql = adapt_sql(
+            "INSERT INTO users (did, is_super, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+            backend,
+        );
+        sqlx::query(&sql)
             .bind(&admin_did)
+            .bind(1_i32)
+            .bind(now_rfc3339())
             .execute(&pool)
             .await
             .expect("failed to seed admin user");
@@ -65,6 +69,7 @@ impl TestApp {
             config,
             http: reqwest::Client::new(),
             db: pool,
+            db_backend: backend,
             lexicons,
             collections_tx,
             labeler_subscriptions_tx,
@@ -92,8 +97,6 @@ impl TestApp {
         }
     }
 
-    /// Mount the AIP userinfo mock that maps `self.admin_token` to
-    /// `self.admin_did`. Call this before any admin request.
     pub async fn mock_admin_userinfo(&self) {
         use crate::common::auth::mock_aip_userinfo;
         mock_aip_userinfo(&self.mock_server, &self.admin_did).await;

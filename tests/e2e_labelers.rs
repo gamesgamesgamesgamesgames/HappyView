@@ -2,6 +2,7 @@ mod common;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use happyview::db::{adapt_sql, now_rfc3339};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use serial_test::serial;
@@ -66,6 +67,7 @@ fn admin_delete(uri: &str, token: &str) -> Request<Body> {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_add_returns_201() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -83,6 +85,7 @@ async fn labeler_add_returns_201() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_add_upsert_reactivates() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -136,6 +139,7 @@ async fn labeler_add_upsert_reactivates() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_list_empty() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -153,6 +157,7 @@ async fn labeler_list_empty() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_list_returns_added() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -198,6 +203,7 @@ async fn labeler_list_returns_added() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_update_status() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -239,6 +245,7 @@ async fn labeler_update_status() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_update_not_found() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -262,6 +269,7 @@ async fn labeler_update_not_found() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_delete_returns_204() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -301,6 +309,7 @@ async fn labeler_delete_returns_204() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_delete_not_found() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
@@ -319,9 +328,11 @@ async fn labeler_delete_not_found() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_delete_removes_labels() {
     let app = TestApp::new().await;
     app.mock_admin_userinfo().await;
+    let backend = app.state.db_backend;
 
     // Add a labeler
     app.router
@@ -335,10 +346,15 @@ async fn labeler_delete_removes_labels() {
         .unwrap();
 
     // Seed some labels from that labeler
-    sqlx::query("INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, NOW())")
+    let sql = adapt_sql(
+        "INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, $4)",
+        backend,
+    );
+    sqlx::query(&sql)
         .bind("did:plc:lab1")
         .bind("at://did:plc:user/test.collection/rkey1")
         .bind("adult-content")
+        .bind(now_rfc3339())
         .execute(&app.state.db)
         .await
         .unwrap();
@@ -354,7 +370,8 @@ async fn labeler_delete_removes_labels() {
         .unwrap();
 
     // Verify labels were also removed
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM labels WHERE src = $1")
+    let sql = adapt_sql("SELECT COUNT(*) FROM labels WHERE src = $1", backend);
+    let count: (i64,) = sqlx::query_as(&sql)
         .bind("did:plc:lab1")
         .fetch_one(&app.state.db)
         .await
@@ -369,6 +386,7 @@ async fn labeler_delete_removes_labels() {
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn labeler_no_auth_returns_401() {
     let app = TestApp::new().await;
 

@@ -8,6 +8,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 
@@ -318,6 +319,7 @@ async fn run(
             subject: None,
             detail: serde_json::json!({ "url": ws_url }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -431,6 +433,7 @@ async fn run(
             subject: None,
             detail: serde_json::json!({ "reason": "connection closed" }),
         },
+        state.db_backend,
     )
     .await;
 
@@ -509,6 +512,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                                         "reason": "hook returned nil",
                                     }),
                                 },
+                                state.db_backend,
                             )
                             .await;
                             return;
@@ -520,29 +524,39 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                     rec.clone()
                 };
 
-            match sqlx::query(
+            let now = now_rfc3339();
+            let backend = state.db_backend;
+            let insert_sql = adapt_sql(
                 r#"
-                INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                INSERT INTO records (uri, did, collection, rkey, record, cid, indexed_at, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
                 ON CONFLICT (uri) DO UPDATE
                     SET record = EXCLUDED.record,
                         cid = EXCLUDED.cid,
-                        indexed_at = NOW()
+                        indexed_at = $7
                 "#,
-            )
-            .bind(&uri)
-            .bind(&record.did)
-            .bind(&record.collection)
-            .bind(&record.rkey)
-            .bind(&rec_to_store)
-            .bind(cid)
-            .execute(db)
-            .await
+                backend,
+            );
+            match sqlx::query(&insert_sql)
+                .bind(&uri)
+                .bind(&record.did)
+                .bind(&record.collection)
+                .bind(&record.rkey)
+                .bind(serde_json::to_string(&rec_to_store).unwrap_or_default())
+                .bind(cid)
+                .bind(&now)
+                .execute(db)
+                .await
             {
                 Ok(_) => {
-                    let _ =
-                        crate::record_refs::sync_refs(db, &uri, &record.collection, &rec_to_store)
-                            .await;
+                    let _ = crate::record_refs::sync_refs(
+                        db,
+                        &uri,
+                        &record.collection,
+                        &rec_to_store,
+                        backend,
+                    )
+                    .await;
 
                     log_event(
                         db,
@@ -557,6 +571,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                                 "rkey": record.rkey,
                             }),
                         },
+                        backend,
                     )
                     .await;
 
@@ -578,12 +593,15 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                                 "error": e.to_string(),
                             }),
                         },
+                        backend,
                     )
                     .await;
                 }
             }
         }
         "delete" => {
+            let backend = state.db_backend;
+
             // Run index hook before deleting, if configured.
             if let Some(script) = state.lexicons.get_index_hook(&record.collection).await {
                 let hook_result = crate::lua::execute_hook_script(&crate::lua::HookEvent {
@@ -615,17 +633,15 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                                 "reason": "hook returned nil",
                             }),
                         },
+                        backend,
                     )
                     .await;
                     return;
                 }
             }
 
-            match sqlx::query("DELETE FROM records WHERE uri = $1")
-                .bind(&uri)
-                .execute(db)
-                .await
-            {
+            let delete_sql = adapt_sql("DELETE FROM records WHERE uri = $1", backend);
+            match sqlx::query(&delete_sql).bind(&uri).execute(db).await {
                 Ok(_) => {
                     log_event(
                         db,
@@ -640,6 +656,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                                 "rkey": record.rkey,
                             }),
                         },
+                        backend,
                     )
                     .await;
                 }
@@ -659,6 +676,7 @@ async fn handle_record_event(state: &AppState, record: &TapRecordEvent) {
                                 "error": e.to_string(),
                             }),
                         },
+                        backend,
                     )
                     .await;
                 }
@@ -679,15 +697,19 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
     let collections_tx = &state.collections_tx;
     let nsid = &record.rkey;
 
+    let backend = state.db_backend;
+
     // Check if this NSID is one we're tracking and the DID matches the authority.
-    let tracked: Option<(Option<String>,)> = sqlx::query_as(
+    let select_sql = adapt_sql(
         "SELECT target_collection FROM lexicons WHERE id = $1 AND source = 'network' AND authority_did = $2",
-    )
-    .bind(nsid)
-    .bind(did)
-    .fetch_optional(db)
-    .await
-    .unwrap_or(None);
+        backend,
+    );
+    let tracked: Option<(Option<String>,)> = sqlx::query_as(&select_sql)
+        .bind(nsid)
+        .bind(did)
+        .fetch_optional(db)
+        .await
+        .unwrap_or(None);
 
     let target_collection = match tracked {
         Some((tc,)) => tc,
@@ -720,24 +742,28 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
             let is_record = parsed.lexicon_type == crate::lexicon::LexiconType::Record;
 
             // Upsert into lexicons table with last_fetched_at.
-            if let Err(e) = sqlx::query(
+            let now = now_rfc3339();
+            let upsert_sql = adapt_sql(
                 r#"
-                INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at)
-                VALUES ($1, $2, false, $3, 'network', $4, NOW())
+                INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at, created_at)
+                VALUES ($1, $2, 0, $3, 'network', $4, $5, $5)
                 ON CONFLICT (id) DO UPDATE SET
                     lexicon_json = EXCLUDED.lexicon_json,
                     target_collection = EXCLUDED.target_collection,
-                    last_fetched_at = NOW(),
+                    last_fetched_at = $5,
                     revision = lexicons.revision + 1,
-                    updated_at = NOW()
+                    updated_at = $5
                 "#,
-            )
-            .bind(nsid)
-            .bind(rec)
-            .bind(&target_collection)
-            .bind(did)
-            .execute(db)
-            .await
+                backend,
+            );
+            if let Err(e) = sqlx::query(&upsert_sql)
+                .bind(nsid)
+                .bind(serde_json::to_string(rec).unwrap_or_default())
+                .bind(&target_collection)
+                .bind(did)
+                .bind(&now)
+                .execute(db)
+                .await
             {
                 tracing::warn!(nsid, "failed to upsert lexicon from event: {e}");
                 return;
@@ -753,10 +779,8 @@ async fn handle_lexicon_schema_event(state: &AppState, did: &str, record: &TapRe
         }
         "delete" => {
             // Remove from lexicons table and registry.
-            let _ = sqlx::query("DELETE FROM lexicons WHERE id = $1")
-                .bind(nsid)
-                .execute(db)
-                .await;
+            let delete_sql = adapt_sql("DELETE FROM lexicons WHERE id = $1", backend);
+            let _ = sqlx::query(&delete_sql).bind(nsid).execute(db).await;
 
             let was_present = lexicons.remove(nsid).await;
             if was_present {

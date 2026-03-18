@@ -166,11 +166,11 @@ impl LexiconRegistry {
     }
 
     /// Load all lexicons from the database, replacing any existing entries.
-    pub async fn load_from_db(&self, db: &sqlx::PgPool) -> Result<(), String> {
+    pub async fn load_from_db(&self, db: &sqlx::AnyPool) -> Result<(), String> {
         #[allow(clippy::type_complexity)]
         let rows: Vec<(
             String,
-            Value,
+            String,
             i32,
             Option<String>,
             Option<String>,
@@ -188,9 +188,24 @@ impl LexiconRegistry {
         inner.clear();
 
         let mut loaded = 0u32;
-        for (id, json, revision, target_collection, action_str, script, index_hook, token_cost) in
-            rows
+        for (
+            id,
+            json_str,
+            revision,
+            target_collection,
+            action_str,
+            script,
+            index_hook,
+            token_cost,
+        ) in rows
         {
+            let json: Value = match serde_json::from_str(&json_str) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(%id, "failed to parse lexicon_json: {e}");
+                    continue;
+                }
+            };
             let action = match ProcedureAction::from_optional_str(action_str.as_deref()) {
                 Ok(a) => a,
                 Err(e) => {

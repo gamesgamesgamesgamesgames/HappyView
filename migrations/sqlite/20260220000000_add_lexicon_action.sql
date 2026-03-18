@@ -1,0 +1,1 @@
+ALTER TABLE lexicons ADD COLUMN action TEXT;

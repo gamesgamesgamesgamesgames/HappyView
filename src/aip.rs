@@ -97,10 +97,12 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_state(aip_url: &str) -> AppState {
+        sqlx::any::install_default_drivers();
         let config = crate::config::Config {
             host: "127.0.0.1".into(),
             port: 3000,
             database_url: String::new(),
+            database_backend: crate::db::DatabaseBackend::Sqlite,
             aip_url: aip_url.into(),
             aip_public_url: String::new(),
             tap_url: String::new(),
@@ -115,7 +117,8 @@ mod tests {
         AppState {
             config,
             http: reqwest::Client::new(),
-            db: sqlx::PgPool::connect_lazy("postgres://localhost/fake").unwrap(),
+            db: sqlx::AnyPool::connect_lazy("sqlite::memory:").unwrap(),
+            db_backend: crate::db::DatabaseBackend::Sqlite,
             lexicons: crate::lexicon::LexiconRegistry::new(),
             collections_tx: tx,
             labeler_subscriptions_tx: labeler_tx,

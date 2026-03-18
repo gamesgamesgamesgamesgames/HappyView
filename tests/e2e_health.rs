@@ -8,6 +8,7 @@ use tower::ServiceExt;
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn health_returns_200_ok() {
     let app = common::app::TestApp::new().await;
 

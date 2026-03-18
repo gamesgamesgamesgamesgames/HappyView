@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::tap;
@@ -87,25 +88,33 @@ pub(super) async fn create_backfill(
     Json(body): Json<CreateBackfillBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     admin.require(Permission::BackfillCreate).await?;
-    // Create a backfill_jobs record for tracking/audit.
-    let row: (String,) = sqlx::query_as(
-        "INSERT INTO backfill_jobs (collection, did) VALUES ($1, $2) RETURNING id::text",
-    )
-    .bind(&body.collection)
-    .bind(&body.did)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to create backfill job: {e}")))?;
+    let backend = state.db_backend;
+
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "INSERT INTO backfill_jobs (collection, did, created_at) VALUES ($1, $2, $3) RETURNING id",
+        backend,
+    );
+    let row: (String,) = sqlx::query_as(&sql)
+        .bind(&body.collection)
+        .bind(&body.did)
+        .bind(&now)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to create backfill job: {e}")))?;
 
     let job_id = row.0.clone();
 
-    // Mark as running.
-    let _ = sqlx::query(
-        "UPDATE backfill_jobs SET status = 'running', started_at = NOW() WHERE id::text = $1",
-    )
-    .bind(&job_id)
-    .execute(&state.db)
-    .await;
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "UPDATE backfill_jobs SET status = 'running', started_at = $2 WHERE id = $1",
+        backend,
+    );
+    let _ = sqlx::query(&sql)
+        .bind(&job_id)
+        .bind(&now)
+        .execute(&state.db)
+        .await;
 
     log_event(
         &state.db,
@@ -118,12 +127,11 @@ pub(super) async fn create_backfill(
                 "job_id": job_id.clone(),
             }),
         },
+        backend,
     )
     .await;
 
-    // Determine target collections.
     let collections: Vec<String> = if let Some(ref col) = body.collection {
-        // Validate that a record-type lexicon exists for the explicit collection.
         let lexicon_exists: bool = state
             .lexicons
             .get(col)
@@ -131,13 +139,17 @@ pub(super) async fn create_backfill(
             .is_some_and(|lex| lex.lexicon_type == crate::lexicon::LexiconType::Record);
         if !lexicon_exists {
             let error = format!("no record-type lexicon registered for collection '{col}'");
-            let _ = sqlx::query(
-                "UPDATE backfill_jobs SET status = 'failed', completed_at = NOW(), error = $2 WHERE id::text = $1",
-            )
-            .bind(&job_id)
-            .bind(&error)
-            .execute(&state.db)
-            .await;
+            let now = now_rfc3339();
+            let sql = adapt_sql(
+                "UPDATE backfill_jobs SET status = 'failed', completed_at = $2, error = $3 WHERE id = $1",
+                backend,
+            );
+            let _ = sqlx::query(&sql)
+                .bind(&job_id)
+                .bind(&now)
+                .bind(&error)
+                .execute(&state.db)
+                .await;
 
             return Ok((
                 StatusCode::CREATED,
@@ -150,22 +162,35 @@ pub(super) async fn create_backfill(
         }
         vec![col.clone()]
     } else {
-        let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT id FROM lexicons WHERE backfill = TRUE AND lexicon_json->'defs'->'main'->>'type' = 'record'",
-        )
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| AppError::Internal(format!("failed to query backfill-eligible lexicons: {e}")))?;
+        let sql = match backend {
+            crate::db::DatabaseBackend::Postgres => {
+                "SELECT id FROM lexicons WHERE backfill = 1 AND lexicon_json::jsonb->'defs'->'main'->>'type' = 'record'".to_string()
+            }
+            crate::db::DatabaseBackend::Sqlite => {
+                "SELECT id FROM lexicons WHERE backfill = 1 AND json_extract(lexicon_json, '$.defs.main.type') = 'record'".to_string()
+            }
+        };
+        let rows: Vec<(String,)> =
+            sqlx::query_as(&sql)
+                .fetch_all(&state.db)
+                .await
+                .map_err(|e| {
+                    AppError::Internal(format!("failed to query backfill-eligible lexicons: {e}"))
+                })?;
         rows.into_iter().map(|(id,)| id).collect()
     };
 
     if collections.is_empty() {
-        let _ = sqlx::query(
-            "UPDATE backfill_jobs SET status = 'completed', completed_at = NOW(), error = 'no backfill-eligible collections' WHERE id::text = $1",
-        )
-        .bind(&job_id)
-        .execute(&state.db)
-        .await;
+        let now = now_rfc3339();
+        let sql = adapt_sql(
+            "UPDATE backfill_jobs SET status = 'completed', completed_at = $2, error = 'no backfill-eligible collections' WHERE id = $1",
+            backend,
+        );
+        let _ = sqlx::query(&sql)
+            .bind(&job_id)
+            .bind(&now)
+            .execute(&state.db)
+            .await;
 
         return Ok((
             StatusCode::CREATED,
@@ -177,7 +202,6 @@ pub(super) async fn create_backfill(
         ));
     }
 
-    // Discover repos and add them to Tap.
     let mut all_dids = Vec::new();
 
     for collection in &collections {
@@ -196,21 +220,21 @@ pub(super) async fn create_backfill(
         all_dids.extend(dids);
     }
 
-    // Deduplicate DIDs.
     all_dids.sort();
     all_dids.dedup();
 
     let total_repos = all_dids.len() as i32;
 
-    // Update job with total repos.
-    let _ = sqlx::query("UPDATE backfill_jobs SET total_repos = $2 WHERE id::text = $1")
+    let sql = adapt_sql(
+        "UPDATE backfill_jobs SET total_repos = $2 WHERE id = $1",
+        backend,
+    );
+    let _ = sqlx::query(&sql)
         .bind(&job_id)
         .bind(total_repos)
         .execute(&state.db)
         .await;
 
-    // Remove repos from Tap first so their record cache is cleared,
-    // ensuring the subsequent add triggers a fresh resync.
     for chunk in all_dids.chunks(1000) {
         if let Err(e) = tap::remove_repos(
             &state.http,
@@ -224,7 +248,6 @@ pub(super) async fn create_backfill(
         }
     }
 
-    // Add repos to Tap in batches.
     if !all_dids.is_empty() {
         for chunk in all_dids.chunks(1000) {
             if let Err(e) = tap::add_repos(
@@ -236,13 +259,17 @@ pub(super) async fn create_backfill(
             .await
             {
                 tracing::warn!(error = %e, "failed to add repos to tap");
-                let _ = sqlx::query(
-                    "UPDATE backfill_jobs SET status = 'failed', completed_at = NOW(), error = $2 WHERE id::text = $1",
-                )
-                .bind(&job_id)
-                .bind(&e)
-                .execute(&state.db)
-                .await;
+                let now = now_rfc3339();
+                let sql = adapt_sql(
+                    "UPDATE backfill_jobs SET status = 'failed', completed_at = $2, error = $3 WHERE id = $1",
+                    backend,
+                );
+                let _ = sqlx::query(&sql)
+                    .bind(&job_id)
+                    .bind(&now)
+                    .bind(&e)
+                    .execute(&state.db)
+                    .await;
 
                 log_event(
                     &state.db,
@@ -256,6 +283,7 @@ pub(super) async fn create_backfill(
                             "error": e,
                         }),
                     },
+                    backend,
                 )
                 .await;
 
@@ -271,14 +299,17 @@ pub(super) async fn create_backfill(
         }
     }
 
-    // Mark as completed (Tap handles the actual backfill asynchronously).
-    let _ = sqlx::query(
-        "UPDATE backfill_jobs SET status = 'completed', completed_at = NOW(), processed_repos = $2 WHERE id::text = $1",
-    )
-    .bind(&job_id)
-    .bind(total_repos)
-    .execute(&state.db)
-    .await;
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "UPDATE backfill_jobs SET status = 'completed', completed_at = $2, processed_repos = $3 WHERE id = $1",
+        backend,
+    );
+    let _ = sqlx::query(&sql)
+        .bind(&job_id)
+        .bind(&now)
+        .bind(total_repos)
+        .execute(&state.db)
+        .await;
 
     log_event(
         &state.db,
@@ -292,6 +323,7 @@ pub(super) async fn create_backfill(
                 "total_repos": total_repos,
             }),
         },
+        backend,
     )
     .await;
 
@@ -311,6 +343,12 @@ pub(super) async fn backfill_status(
     auth: UserAuth,
 ) -> Result<Json<Vec<BackfillJob>>, AppError> {
     auth.require(Permission::BackfillRead).await?;
+    let backend = state.db_backend;
+
+    let sql = adapt_sql(
+        "SELECT id, collection, did, status, total_repos, processed_repos, total_records, error, started_at, completed_at, created_at FROM backfill_jobs ORDER BY created_at DESC",
+        backend,
+    );
     #[allow(clippy::type_complexity)]
     let rows: Vec<(
         String,
@@ -321,15 +359,13 @@ pub(super) async fn backfill_status(
         Option<i32>,
         Option<i32>,
         Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        chrono::DateTime<chrono::Utc>,
-    )> = sqlx::query_as(
-        "SELECT id::text, collection, did, status, total_repos, processed_repos, total_records, error, started_at, completed_at, created_at FROM backfill_jobs ORDER BY created_at DESC",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to list backfill jobs: {e}")))?;
+        Option<String>,
+        Option<String>,
+        String,
+    )> = sqlx::query_as(&sql)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list backfill jobs: {e}")))?;
 
     let jobs: Vec<BackfillJob> = rows
         .into_iter()

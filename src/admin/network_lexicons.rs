@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use serde_json::Value;
 
 use crate::AppState;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::lexicon::{LexiconType, ParsedLexicon, ProcedureAction};
 use crate::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
@@ -48,29 +49,36 @@ pub(super) async fn add(
     )
     .map_err(|e| AppError::BadRequest(format!("failed to parse lexicon: {e}")))?;
 
+    let backend = state.db_backend;
+    let now = now_rfc3339();
+    let lexicon_json_str = serde_json::to_string(&lexicon_json).unwrap_or_default();
+
     // Upsert into lexicons table with network source.
-    let row: (i32,) = sqlx::query_as(
+    let sql = adapt_sql(
         r#"
-        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at)
-        VALUES ($1, $2, false, $3, 'network', $4, NOW())
+        INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at, created_at)
+        VALUES ($1, $2, 0, $3, 'network', $4, $5, $5)
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             target_collection = EXCLUDED.target_collection,
             source = 'network',
             authority_did = EXCLUDED.authority_did,
-            last_fetched_at = NOW(),
+            last_fetched_at = $5,
             revision = lexicons.revision + 1,
-            updated_at = NOW()
+            updated_at = $5
         RETURNING revision
         "#,
-    )
-    .bind(nsid)
-    .bind(&lexicon_json)
-    .bind(&body.target_collection)
-    .bind(&authority_did)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to upsert network lexicon: {e}")))?;
+        backend,
+    );
+    let row: (i32,) = sqlx::query_as(&sql)
+        .bind(nsid)
+        .bind(&lexicon_json_str)
+        .bind(&body.target_collection)
+        .bind(&authority_did)
+        .bind(&now)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to upsert network lexicon: {e}")))?;
 
     let revision = row.0;
 
@@ -108,11 +116,20 @@ pub(super) async fn list(
     auth: UserAuth,
 ) -> Result<Json<Vec<NetworkLexiconSummary>>, AppError> {
     auth.require(Permission::LexiconsRead).await?;
+
+    let backend = state.db_backend;
+    let sql = adapt_sql(
+        "SELECT id, authority_did, target_collection, last_fetched_at, created_at FROM lexicons WHERE source = 'network' ORDER BY id",
+        backend,
+    );
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, Option<String>, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)> =
-        sqlx::query_as(
-            "SELECT id, authority_did, target_collection, last_fetched_at, created_at FROM lexicons WHERE source = 'network' ORDER BY id",
-        )
+    let rows: Vec<(
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        String,
+    )> = sqlx::query_as(&sql)
         .fetch_all(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to list network lexicons: {e}")))?;
@@ -142,7 +159,13 @@ pub(super) async fn remove(
     Path(nsid): Path<String>,
 ) -> Result<StatusCode, AppError> {
     auth.require(Permission::LexiconsDelete).await?;
-    let result = sqlx::query("DELETE FROM lexicons WHERE id = $1 AND source = 'network'")
+
+    let backend = state.db_backend;
+    let sql = adapt_sql(
+        "DELETE FROM lexicons WHERE id = $1 AND source = 'network'",
+        backend,
+    );
+    let result = sqlx::query(&sql)
         .bind(&nsid)
         .execute(&state.db)
         .await
