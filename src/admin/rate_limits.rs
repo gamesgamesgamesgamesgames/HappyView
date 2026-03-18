@@ -36,7 +36,7 @@ pub(super) async fn list(
         "SELECT capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost FROM rate_limits WHERE method IS NULL",
         backend,
     );
-    let row: Option<(i32, f32, i32, i32, i32)> = sqlx::query_as(&limits_sql)
+    let row: Option<(i32, f64, i32, i32, i32)> = sqlx::query_as(&limits_sql)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to read rate limits: {e}")))?;
@@ -100,7 +100,7 @@ pub(super) async fn upsert(
     );
     sqlx::query(&sql)
         .bind(body.capacity as i32)
-        .bind(body.refill_rate as f32)
+        .bind(body.refill_rate)
         .bind(body.default_query_cost as i32)
         .bind(body.default_procedure_cost as i32)
         .bind(body.default_proxy_cost as i32)
