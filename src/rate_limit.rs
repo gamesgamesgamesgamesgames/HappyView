@@ -184,7 +184,7 @@ impl RateLimiter {
         .unwrap_or(true);
 
         // Load global rate limit config (method IS NULL row)
-        let row: Option<(i32, f32, i32, i32, i32)> = sqlx::query_as(
+        let row: Option<(i32, f64, i32, i32, i32)> = sqlx::query_as(
             "SELECT capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost FROM rate_limits WHERE method IS NULL",
         )
         .fetch_optional(db)
@@ -195,7 +195,7 @@ impl RateLimiter {
             Some((capacity, refill_rate, query_cost, procedure_cost, proxy_cost)) => {
                 RateLimitConfig {
                     capacity: capacity as u32,
-                    refill_rate: refill_rate as f64,
+                    refill_rate,
                     default_query_cost: query_cost as u32,
                     default_procedure_cost: procedure_cost as u32,
                     default_proxy_cost: proxy_cost as u32,

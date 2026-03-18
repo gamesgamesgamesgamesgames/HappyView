@@ -239,7 +239,7 @@ pub(super) struct AddAllowlistBody {
 pub(super) struct RateLimitsResponse {
     pub(super) enabled: bool,
     pub(super) capacity: i32,
-    pub(super) refill_rate: f32,
+    pub(super) refill_rate: f64,
     pub(super) default_query_cost: i32,
     pub(super) default_procedure_cost: i32,
     pub(super) default_proxy_cost: i32,
