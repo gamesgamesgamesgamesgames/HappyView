@@ -6,7 +6,7 @@ RUN npm ci
 COPY web/ .
 RUN npm run build
 
-FROM rust:1.93 AS builder
+FROM rust:1.93-bookworm AS builder
 
 WORKDIR /app
 
