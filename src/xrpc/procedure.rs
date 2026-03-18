@@ -15,11 +15,14 @@ pub(super) async fn handle_procedure(
     method: &str,
     claims: &Claims,
     input: &Value,
+    params: &std::collections::HashMap<String, Value>,
     lexicon: &crate::lexicon::ParsedLexicon,
 ) -> Result<Response, AppError> {
     if let Some(ref script) = lexicon.script {
-        return crate::lua::execute_procedure_script(state, method, claims, input, lexicon, script)
-            .await;
+        return crate::lua::execute_procedure_script(
+            state, method, claims, input, params, lexicon, script,
+        )
+        .await;
     }
 
     let collection = lexicon.target_collection.as_deref().ok_or_else(|| {

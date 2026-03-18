@@ -281,10 +281,13 @@ fn ip_from_forwarded_for(value: Option<&str>) -> Option<IpAddr> {
 pub async fn xrpc_post(
     State(state): State<AppState>,
     Path(method): Path<String>,
+    RawQuery(raw_query): RawQuery,
     claims: Claims,
     headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
+    let raw_query = raw_query.unwrap_or_default();
+    let mut params = parse_query_params(&raw_query);
     let client_ip =
         ip_from_forwarded_for(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
     let rate_key = claims.did().to_string();
@@ -321,7 +324,7 @@ pub async fn xrpc_post(
     let lexicon = match lexicon {
         Some(l) => l,
         None => {
-            let mut response = proxy_to_authority(&state, &method, "", Some(&body)).await?;
+            let mut response = proxy_to_authority(&state, &method, &raw_query, Some(&body)).await?;
             if let CheckResult::Allowed {
                 remaining,
                 limit,
@@ -340,8 +343,12 @@ pub async fn xrpc_post(
         )));
     }
 
+    if let Some(ref param_schema) = lexicon.parameters {
+        coerce_params(&mut params, param_schema);
+    }
+
     let mut response =
-        procedure::handle_procedure(&state, &method, &claims, &body, &lexicon).await?;
+        procedure::handle_procedure(&state, &method, &claims, &body, &params, &lexicon).await?;
     if let CheckResult::Allowed {
         remaining,
         limit,
@@ -351,4 +358,145 @@ pub async fn xrpc_post(
         apply_rate_limit_headers(&mut response, remaining, limit, reset);
     }
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // -----------------------------------------------------------------------
+    // parse_query_params
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_query_params_single_values() {
+        let params = parse_query_params("limit=10&cursor=abc");
+        assert_eq!(params.get("limit").unwrap(), "10");
+        assert_eq!(params.get("cursor").unwrap(), "abc");
+    }
+
+    #[test]
+    fn parse_query_params_repeated_key_becomes_array() {
+        let params = parse_query_params("tag=a&tag=b&tag=c");
+        let arr = params.get("tag").unwrap().as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0], "a");
+        assert_eq!(arr[1], "b");
+        assert_eq!(arr[2], "c");
+    }
+
+    #[test]
+    fn parse_query_params_empty_string() {
+        let params = parse_query_params("");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn parse_query_params_url_decodes() {
+        let params = parse_query_params("uri=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fcol%2Frkey");
+        assert_eq!(params.get("uri").unwrap(), "at://did:plc:abc/col/rkey");
+    }
+
+    #[test]
+    fn parse_query_params_key_without_value() {
+        let params = parse_query_params("flag");
+        assert_eq!(params.get("flag").unwrap(), "");
+    }
+
+    // -----------------------------------------------------------------------
+    // coerce_params
+    // -----------------------------------------------------------------------
+
+    fn make_schema(properties: Value) -> Value {
+        json!({ "properties": properties })
+    }
+
+    #[test]
+    fn coerce_integer_from_string() {
+        let mut params = HashMap::new();
+        params.insert("limit".into(), Value::String("25".into()));
+        let schema = make_schema(json!({ "limit": { "type": "integer" } }));
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["limit"], json!(25));
+    }
+
+    #[test]
+    fn coerce_boolean_true_variants() {
+        for val in &["true", "1"] {
+            let mut params = HashMap::new();
+            params.insert("active".into(), Value::String((*val).into()));
+            let schema = make_schema(json!({ "active": { "type": "boolean" } }));
+            coerce_params(&mut params, &schema);
+            assert_eq!(params["active"], json!(true), "failed for input {val}");
+        }
+    }
+
+    #[test]
+    fn coerce_boolean_false_variants() {
+        for val in &["false", "0"] {
+            let mut params = HashMap::new();
+            params.insert("active".into(), Value::String((*val).into()));
+            let schema = make_schema(json!({ "active": { "type": "boolean" } }));
+            coerce_params(&mut params, &schema);
+            assert_eq!(params["active"], json!(false), "failed for input {val}");
+        }
+    }
+
+    #[test]
+    fn coerce_number_from_string() {
+        let mut params = HashMap::new();
+        params.insert(
+            "score".into(),
+            Value::String(std::f64::consts::PI.to_string()),
+        );
+        let schema = make_schema(json!({ "score": { "type": "number" } }));
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["score"], json!(std::f64::consts::PI));
+    }
+
+    #[test]
+    fn coerce_leaves_string_type_alone() {
+        let mut params = HashMap::new();
+        params.insert("name".into(), Value::String("42".into()));
+        let schema = make_schema(json!({ "name": { "type": "string" } }));
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["name"], json!("42"));
+    }
+
+    #[test]
+    fn coerce_skips_params_not_in_schema() {
+        let mut params = HashMap::new();
+        params.insert("extra".into(), Value::String("100".into()));
+        let schema = make_schema(json!({ "limit": { "type": "integer" } }));
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["extra"], json!("100"));
+    }
+
+    #[test]
+    fn coerce_skips_invalid_integer() {
+        let mut params = HashMap::new();
+        params.insert("limit".into(), Value::String("not_a_number".into()));
+        let schema = make_schema(json!({ "limit": { "type": "integer" } }));
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["limit"], json!("not_a_number"));
+    }
+
+    #[test]
+    fn coerce_skips_already_typed_value() {
+        let mut params = HashMap::new();
+        params.insert("limit".into(), json!(25));
+        let schema = make_schema(json!({ "limit": { "type": "integer" } }));
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["limit"], json!(25));
+    }
+
+    #[test]
+    fn coerce_empty_schema_is_noop() {
+        let mut params = HashMap::new();
+        params.insert("limit".into(), Value::String("25".into()));
+        let schema = json!({});
+        coerce_params(&mut params, &schema);
+        assert_eq!(params["limit"], json!("25"));
+    }
 }

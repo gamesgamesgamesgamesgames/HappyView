@@ -7,12 +7,14 @@ pub fn set_procedure_context(
     lua: &Lua,
     method: &str,
     input: &Value,
+    params: &HashMap<String, Value>,
     caller_did: &str,
     collection: &str,
 ) -> LuaResult<()> {
     let globals = lua.globals();
     globals.set("method", method.to_string())?;
     globals.set("input", lua.to_value(input)?)?;
+    globals.set("params", lua.to_value(params)?)?;
     globals.set("caller_did", caller_did.to_string())?;
     globals.set("collection", collection.to_string())?;
     Ok(())
@@ -106,10 +108,13 @@ mod tests {
     fn procedure_context_sets_all_globals() {
         let lua = create_sandbox().unwrap();
         let input = json!({"key": "val"});
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), json!(10));
         set_procedure_context(
             &lua,
             "com.example.doThing",
             &input,
+            &params,
             "did:plc:test",
             "com.example.thing",
         )
@@ -128,6 +133,9 @@ mod tests {
 
         let input_table: mlua::Table = globals.get("input").unwrap();
         assert_eq!(input_table.get::<String>("key").unwrap(), "val");
+
+        let params_table: mlua::Table = globals.get("params").unwrap();
+        assert_eq!(params_table.get::<i64>("limit").unwrap(), 10);
     }
 
     #[test]
