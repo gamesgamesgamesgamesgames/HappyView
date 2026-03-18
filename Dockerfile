@@ -27,14 +27,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -r -s /bin/false happyview
-
 COPY --from=builder /app/target/release/happyview /usr/local/bin/happyview
 COPY --from=frontend /app/web/out /srv/static
 
 ENV STATIC_DIR=/srv/static
-
-USER happyview
 
 EXPOSE 3000
 
