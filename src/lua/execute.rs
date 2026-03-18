@@ -827,7 +827,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
     let dead_letter_sql = adapt_sql(
         r#"
         INSERT INTO dead_letter_hooks (lexicon_id, uri, did, collection, rkey, action, record, error, attempts, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         backend,
     );

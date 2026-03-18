@@ -52,7 +52,7 @@ async fn main() {
                 let mut processed = 0usize;
 
                 let query = db::adapt_sql(
-                    "SELECT uri, collection, record FROM records ORDER BY uri LIMIT $1 OFFSET $2",
+                    "SELECT uri, collection, record FROM records ORDER BY uri LIMIT ? OFFSET ?",
                     backend,
                 );
 
@@ -125,7 +125,7 @@ async fn main() {
                             Ok(parsed) => {
                                 let now = db::now_rfc3339();
                                 let update_sql = db::adapt_sql(
-                                    "UPDATE lexicons SET lexicon_json = $1, last_fetched_at = $2, revision = revision + 1, updated_at = $3 WHERE id = $4 AND source = 'network'",
+                                    "UPDATE lexicons SET lexicon_json = ?, last_fetched_at = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND source = 'network'",
                                     db_backend,
                                 );
                                 let lexicon_json_str =

@@ -44,10 +44,11 @@ impl TestApp {
         };
 
         let sql = adapt_sql(
-            "INSERT INTO users (did, is_super, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+            "INSERT INTO users (id, did, is_super, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
             backend,
         );
         sqlx::query(&sql)
+            .bind(uuid::Uuid::new_v4().to_string())
             .bind(&admin_did)
             .bind(1_i32)
             .bind(now_rfc3339())

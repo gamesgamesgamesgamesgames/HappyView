@@ -1,20 +1,24 @@
 services:
-  postgres:
-    image: postgres:17
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./docker/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+  # Postgres is optional — only needed if you set DATABASE_URL to a postgres:// URL.
+  # SQLite is the default and requires no container. To use Postgres, uncomment this
+  # service and update DATABASE_URL in .env.
+  #
+  # postgres:
+  #   image: postgres:17
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB: ${POSTGRES_DB}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #     - ./docker/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 5
 
   tap:
     image: ghcr.io/bluesky-social/indigo/tap:latest
@@ -27,9 +31,10 @@ services:
       TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
       TAP_COLLECTION_FILTERS: ${TAP_COLLECTION_FILTERS}
       TAP_SIGNAL_COLLECTIONS: ${TAP_SIGNAL_COLLECTIONS}
-    depends_on:
-      postgres:
-        condition: service_healthy
+    # Uncomment if using Postgres:
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
 
   happyview:
     image: rust:1.93
@@ -50,8 +55,9 @@ services:
       RELAY_URL: ${RELAY_URL}
       PORT: ${PORT}
     depends_on:
-      postgres:
-        condition: service_healthy
+      # Uncomment if using Postgres:
+      # postgres:
+      #   condition: service_healthy
       tap:
         condition: service_started
 
@@ -70,7 +76,8 @@ services:
       AIP_PROXY_URL: ${AIP_PROXY_URL}
 
 volumes:
-  pgdata:
+  # Uncomment if using Postgres:
+  # pgdata:
   cargo-registry:
   cargo-git:
   cargo-target:

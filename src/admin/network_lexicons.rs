@@ -57,15 +57,15 @@ pub(super) async fn add(
     let sql = adapt_sql(
         r#"
         INSERT INTO lexicons (id, lexicon_json, backfill, target_collection, source, authority_did, last_fetched_at, created_at)
-        VALUES ($1, $2, 0, $3, 'network', $4, $5, $5)
+        VALUES (?, ?, 0, ?, 'network', ?, ?, ?)
         ON CONFLICT (id) DO UPDATE SET
             lexicon_json = EXCLUDED.lexicon_json,
             target_collection = EXCLUDED.target_collection,
             source = 'network',
             authority_did = EXCLUDED.authority_did,
-            last_fetched_at = $5,
+            last_fetched_at = ?,
             revision = lexicons.revision + 1,
-            updated_at = $5
+            updated_at = ?
         RETURNING revision
         "#,
         backend,
@@ -75,6 +75,9 @@ pub(super) async fn add(
         .bind(&lexicon_json_str)
         .bind(&body.target_collection)
         .bind(&authority_did)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
         .bind(&now)
         .fetch_one(&state.db)
         .await
@@ -162,7 +165,7 @@ pub(super) async fn remove(
 
     let backend = state.db_backend;
     let sql = adapt_sql(
-        "DELETE FROM lexicons WHERE id = $1 AND source = 'network'",
+        "DELETE FROM lexicons WHERE id = ? AND source = 'network'",
         backend,
     );
     let result = sqlx::query(&sql)

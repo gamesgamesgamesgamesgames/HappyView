@@ -92,7 +92,7 @@ async fn seed_record(app: &TestApp, uri: &str, did: &str, collection: &str, reco
     let rkey = uri.split('/').next_back().unwrap_or("1");
     let backend = app.state.db_backend;
     let sql = adapt_sql(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)
@@ -495,7 +495,7 @@ async fn xrpc_delete_procedure_removes_record() {
     seed_record(&app, uri, did, "games.gamesgamesgamesgames.game", &record).await;
 
     // Verify record exists
-    let sql = adapt_sql("SELECT COUNT(*) FROM records WHERE uri = $1", backend);
+    let sql = adapt_sql("SELECT COUNT(*) FROM records WHERE uri = ?", backend);
     let count: (i64,) = sqlx::query_as(&sql)
         .bind(uri)
         .fetch_one(&app.state.db)

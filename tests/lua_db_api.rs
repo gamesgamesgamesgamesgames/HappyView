@@ -81,7 +81,7 @@ async fn seed_records(pool: &sqlx::AnyPool, backend: DatabaseBackend) {
 
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO records (uri, did, collection, rkey, record, cid, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         backend,
     );
     for (uri, did, collection, rkey, record, cid) in &records {

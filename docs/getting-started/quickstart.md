@@ -6,11 +6,11 @@ This page walks you through the fastest path to a working HappyView instance. By
 
 Pick whichever option fits your situation:
 
-| Option | Best for |
-|--------|----------|
-| [**Railway**](deployment/railway.md) | Fastest path — one-click deploy of the full stack (HappyView + AIP + Tap + Postgres) |
-| [**Docker Compose**](deployment/docker.md) | Local development with the full stack running in containers |
-| [**From source**](deployment/other.md) | Running HappyView with `cargo run` and managing dependencies yourself |
+| Option                                     | Best for                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [**Railway**](deployment/railway.md)       | Fastest path — one-click deploy of the full stack (HappyView + AIP + Tap + Postgres) |
+| [**Docker Compose**](deployment/docker.md) | Local development with the full stack in containers                                  |
+| [**From source**](deployment/other.md)     | Running HappyView with `cargo run` and managing dependencies yourself                |
 
 If you're just trying HappyView for the first time, start with Railway.
 

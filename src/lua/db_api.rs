@@ -76,14 +76,14 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     format!("{sort_field} {direction}")
                 } else {
                     match backend {
-                        DatabaseBackend::Postgres => format!("record::jsonb->'value'->>'{sort_field}' {direction}"),
                         DatabaseBackend::Sqlite => format!("json_extract(record, '$.value.{sort_field}') {direction}"),
+                        DatabaseBackend::Postgres => format!("record::jsonb->'value'->>'{sort_field}' {direction}"),
                     }
                 };
 
                 let rows: Vec<(String, String, String)> = if let Some(ref did) = did {
                     let sql = adapt_sql(
-                        &format!("SELECT uri, did, record FROM records WHERE collection = $1 AND did = $2 ORDER BY {order_expr} LIMIT $3 OFFSET $4"),
+                        &format!("SELECT uri, did, record FROM records WHERE collection = ? AND did = ? ORDER BY {order_expr} LIMIT ? OFFSET ?"),
                         backend,
                     );
                     sqlx::query_as(&sql)
@@ -96,7 +96,7 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     .map_err(|e| mlua::Error::runtime(format!("DB query failed: {e}")))?
                 } else {
                     let sql = adapt_sql(
-                        &format!("SELECT uri, did, record FROM records WHERE collection = $1 ORDER BY {order_expr} LIMIT $2 OFFSET $3"),
+                        &format!("SELECT uri, did, record FROM records WHERE collection = ? ORDER BY {order_expr} LIMIT ? OFFSET ?"),
                         backend,
                     );
                     sqlx::query_as(&sql)
@@ -143,14 +143,15 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     (Some(did), Some((cursor_ts, cursor_uri))) => {
                         let sql = adapt_sql(
                             "SELECT uri, did, record, created_at FROM records \
-                             WHERE collection = $1 AND did = $2 AND (created_at < $3 OR (created_at = $3 AND uri < $4)) \
+                             WHERE collection = ? AND did = ? AND (created_at < ? OR (created_at = ? AND uri < ?)) \
                              ORDER BY created_at DESC, uri DESC \
-                             LIMIT $5",
+                             LIMIT ?",
                             backend,
                         );
                         sqlx::query_as(&sql)
                         .bind(&collection)
                         .bind(did)
+                        .bind(cursor_ts)
                         .bind(cursor_ts)
                         .bind(cursor_uri)
                         .bind(limit)
@@ -161,9 +162,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     (Some(did), None) => {
                         let sql = adapt_sql(
                             "SELECT uri, did, record, created_at FROM records \
-                             WHERE collection = $1 AND did = $2 \
+                             WHERE collection = ? AND did = ? \
                              ORDER BY created_at DESC, uri DESC \
-                             LIMIT $3",
+                             LIMIT ?",
                             backend,
                         );
                         sqlx::query_as(&sql)
@@ -177,13 +178,14 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     (None, Some((cursor_ts, cursor_uri))) => {
                         let sql = adapt_sql(
                             "SELECT uri, did, record, created_at FROM records \
-                             WHERE collection = $1 AND (created_at < $2 OR (created_at = $2 AND uri < $3)) \
+                             WHERE collection = ? AND (created_at < ? OR (created_at = ? AND uri < ?)) \
                              ORDER BY created_at DESC, uri DESC \
-                             LIMIT $4",
+                             LIMIT ?",
                             backend,
                         );
                         sqlx::query_as(&sql)
                         .bind(&collection)
+                        .bind(cursor_ts)
                         .bind(cursor_ts)
                         .bind(cursor_uri)
                         .bind(limit)
@@ -194,9 +196,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     (None, None) => {
                         let sql = adapt_sql(
                             "SELECT uri, did, record, created_at FROM records \
-                             WHERE collection = $1 \
+                             WHERE collection = ? \
                              ORDER BY created_at DESC, uri DESC \
-                             LIMIT $2",
+                             LIMIT ?",
                             backend,
                         );
                         sqlx::query_as(&sql)
@@ -248,7 +250,7 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
         let state = state_get.clone();
         async move {
             let backend = state.db_backend;
-            let sql = adapt_sql("SELECT record FROM records WHERE uri = $1", backend);
+            let sql = adapt_sql("SELECT record FROM records WHERE uri = ?", backend);
             let row: Option<(String,)> = sqlx::query_as(&sql)
                 .bind(&uri)
                 .fetch_optional(&state.db)
@@ -290,33 +292,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
 
             let like_pattern = format!("%{query}%");
 
+            // Cannot use adapt_sql: Postgres reuses $3 for two bind positions,
+            // while SQLite needs separate ? for each. Different bind counts.
             let rows: Vec<(String, String, String)> = match backend {
-                DatabaseBackend::Postgres => {
-                    let sql = adapt_sql(
-                        &format!(
-                            "SELECT uri, did, record FROM records \
-                             WHERE collection = $1 \
-                               AND record::jsonb->>'{field}' ILIKE $2 \
-                             ORDER BY \
-                               CASE \
-                                 WHEN LOWER(record::jsonb->>'{field}') = LOWER($3) THEN 0 \
-                                 WHEN LOWER(record::jsonb->>'{field}') LIKE LOWER($3) || '%' THEN 1 \
-                                 ELSE 2 \
-                               END, \
-                               record::jsonb->>'{field}' \
-                             LIMIT $4"
-                        ),
-                        backend,
-                    );
-                    sqlx::query_as(&sql)
-                    .bind(&collection)
-                    .bind(&like_pattern)
-                    .bind(&query)
-                    .bind(limit)
-                    .fetch_all(&state.db)
-                    .await
-                    .map_err(|e| mlua::Error::runtime(format!("DB search failed: {e}")))?
-                }
                 DatabaseBackend::Sqlite => {
                     let sql = format!(
                         "SELECT uri, did, record FROM records \
@@ -335,6 +313,29 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     .bind(&collection)
                     .bind(&like_pattern)
                     .bind(&query)
+                    .bind(&query)
+                    .bind(limit)
+                    .fetch_all(&state.db)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("DB search failed: {e}")))?
+                }
+                DatabaseBackend::Postgres => {
+                    let sql = format!(
+                        "SELECT uri, did, record FROM records \
+                         WHERE collection = $1 \
+                           AND record::jsonb->>'{field}' ILIKE $2 \
+                         ORDER BY \
+                           CASE \
+                             WHEN LOWER(record::jsonb->>'{field}') = LOWER($3) THEN 0 \
+                             WHEN LOWER(record::jsonb->>'{field}') LIKE LOWER($3) || '%' THEN 1 \
+                             ELSE 2 \
+                           END, \
+                           record::jsonb->>'{field}' \
+                         LIMIT $4"
+                    );
+                    sqlx::query_as(&sql)
+                    .bind(&collection)
+                    .bind(&like_pattern)
                     .bind(&query)
                     .bind(limit)
                     .fetch_all(&state.db)
@@ -378,7 +379,7 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 let backend = state.db_backend;
                 let count: (i64,) = if let Some(ref did) = did {
                     let sql = adapt_sql(
-                        "SELECT COUNT(*) FROM records WHERE collection = $1 AND did = $2",
+                        "SELECT COUNT(*) FROM records WHERE collection = ? AND did = ?",
                         backend,
                     );
                     sqlx::query_as(&sql)
@@ -388,10 +389,8 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                         .await
                         .map_err(|e| mlua::Error::runtime(format!("DB count failed: {e}")))?
                 } else {
-                    let sql = adapt_sql(
-                        "SELECT COUNT(*) FROM records WHERE collection = $1",
-                        backend,
-                    );
+                    let sql =
+                        adapt_sql("SELECT COUNT(*) FROM records WHERE collection = ?", backend);
                     sqlx::query_as(&sql)
                         .bind(&collection)
                         .fetch_one(&state.db)
@@ -425,16 +424,17 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     let sql = adapt_sql(
                         "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
                          INNER JOIN record_refs ref ON ref.source_uri = r.uri \
-                         WHERE ref.target_uri = $1 AND ref.collection = $2 AND r.did = $3 \
-                         AND (r.created_at < $4 OR (r.created_at = $4 AND r.uri < $5)) \
+                         WHERE ref.target_uri = ? AND ref.collection = ? AND r.did = ? \
+                         AND (r.created_at < ? OR (r.created_at = ? AND r.uri < ?)) \
                          ORDER BY r.created_at DESC, r.uri DESC \
-                         LIMIT $6",
+                         LIMIT ?",
                         backend,
                     );
                     sqlx::query_as(&sql)
                         .bind(&uri)
                         .bind(&collection)
                         .bind(did)
+                        .bind(cursor_ts)
                         .bind(cursor_ts)
                         .bind(cursor_uri)
                         .bind(limit)
@@ -446,9 +446,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     let sql = adapt_sql(
                         "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
                          INNER JOIN record_refs ref ON ref.source_uri = r.uri \
-                         WHERE ref.target_uri = $1 AND ref.collection = $2 AND r.did = $3 \
+                         WHERE ref.target_uri = ? AND ref.collection = ? AND r.did = ? \
                          ORDER BY r.created_at DESC, r.uri DESC \
-                         LIMIT $4",
+                         LIMIT ?",
                         backend,
                     );
                     sqlx::query_as(&sql)
@@ -464,15 +464,16 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     let sql = adapt_sql(
                         "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
                          INNER JOIN record_refs ref ON ref.source_uri = r.uri \
-                         WHERE ref.target_uri = $1 AND ref.collection = $2 \
-                         AND (r.created_at < $3 OR (r.created_at = $3 AND r.uri < $4)) \
+                         WHERE ref.target_uri = ? AND ref.collection = ? \
+                         AND (r.created_at < ? OR (r.created_at = ? AND r.uri < ?)) \
                          ORDER BY r.created_at DESC, r.uri DESC \
-                         LIMIT $5",
+                         LIMIT ?",
                         backend,
                     );
                     sqlx::query_as(&sql)
                         .bind(&uri)
                         .bind(&collection)
+                        .bind(cursor_ts)
                         .bind(cursor_ts)
                         .bind(cursor_uri)
                         .bind(limit)
@@ -484,9 +485,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                     let sql = adapt_sql(
                         "SELECT r.uri, r.did, r.record, r.created_at FROM records r \
                          INNER JOIN record_refs ref ON ref.source_uri = r.uri \
-                         WHERE ref.target_uri = $1 AND ref.collection = $2 \
+                         WHERE ref.target_uri = ? AND ref.collection = ? \
                          ORDER BY r.created_at DESC, r.uri DESC \
-                         LIMIT $3",
+                         LIMIT ?",
                         backend,
                     );
                     sqlx::query_as(&sql)

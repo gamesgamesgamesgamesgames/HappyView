@@ -46,16 +46,18 @@ async fn seed_network_lexicon(app: &TestApp, nsid: &str, authority_did: &str) {
     let sql = adapt_sql(
         r#"
         INSERT INTO lexicons (id, lexicon_json, backfill, source, authority_did, last_fetched_at, created_at)
-        VALUES ($1, $2, 0, 'network', $3, $4, $4)
+        VALUES (?, ?, 0, 'network', ?, ?, ?)
         ON CONFLICT (id) DO NOTHING
         "#,
         backend,
     );
+    let now = now_rfc3339();
     sqlx::query(&sql)
         .bind(nsid)
         .bind(serde_json::to_string(&lexicon_json).unwrap_or_default())
         .bind(authority_did)
-        .bind(now_rfc3339())
+        .bind(&now)
+        .bind(&now)
         .execute(&app.state.db)
         .await
         .expect("failed to seed network lexicon");
@@ -131,7 +133,7 @@ async fn network_lexicon_delete_removes_tracking_and_lexicon() {
 
     // Verify lexicon is removed.
     let sql = adapt_sql(
-        "SELECT COUNT(*) FROM lexicons WHERE id = $1 AND source = 'network'",
+        "SELECT COUNT(*) FROM lexicons WHERE id = ? AND source = 'network'",
         backend,
     );
     let count: (i64,) = sqlx::query_as(&sql)

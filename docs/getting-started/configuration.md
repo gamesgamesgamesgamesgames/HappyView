@@ -6,7 +6,8 @@ HappyView is configured via environment variables. A `.env` file in the project 
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | yes | --- | Postgres connection string |
+| `DATABASE_URL` | yes | --- | Database connection string. SQLite (`sqlite://path/to/db?mode=rwc`) or Postgres (`postgres://user:pass@host/db`) |
+| `DATABASE_BACKEND` | no | auto-detected | Force `sqlite` or `postgres`. Auto-detected from `DATABASE_URL` scheme if not set |
 | `AIP_URL` | yes | --- | [AIP](https://github.com/graze-social/aip) instance URL for OAuth token validation |
 | `HOST` | no | `0.0.0.0` | Bind host |
 | `PORT` | no | `3000` | Bind port |
@@ -20,8 +21,12 @@ HappyView is configured via environment variables. A `.env` file in the project 
 ## Example `.env`
 
 ```sh
-DATABASE_URL=postgres://happyview:happyview@localhost/happyview
+# SQLite (default — zero setup required)
+DATABASE_URL=sqlite://data/happyview.db?mode=rwc
 AIP_URL=http://localhost:8080
+
+# Or use Postgres instead:
+# DATABASE_URL=postgres://happyview:happyview@localhost/happyview
 
 # Optional overrides
 # HOST=0.0.0.0

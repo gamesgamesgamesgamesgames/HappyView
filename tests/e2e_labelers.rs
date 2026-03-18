@@ -347,7 +347,7 @@ async fn labeler_delete_removes_labels() {
 
     // Seed some labels from that labeler
     let sql = adapt_sql(
-        "INSERT INTO labels (src, uri, val, cts) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO labels (src, uri, val, cts) VALUES (?, ?, ?, ?)",
         backend,
     );
     sqlx::query(&sql)
@@ -370,7 +370,7 @@ async fn labeler_delete_removes_labels() {
         .unwrap();
 
     // Verify labels were also removed
-    let sql = adapt_sql("SELECT COUNT(*) FROM labels WHERE src = $1", backend);
+    let sql = adapt_sql("SELECT COUNT(*) FROM labels WHERE src = ?", backend);
     let count: (i64,) = sqlx::query_as(&sql)
         .bind("did:plc:lab1")
         .fetch_one(&app.state.db)
