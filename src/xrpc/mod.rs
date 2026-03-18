@@ -50,6 +50,54 @@ fn parse_query_params(query: &str) -> HashMap<String, Value> {
         .collect()
 }
 
+/// Coerce query-param values from strings to their lexicon-declared types.
+///
+/// HTTP query params arrive as strings. Without this, Lua scripts receive
+/// `"25"` (a string) for `params.limit`, which Postgres rejects when used
+/// in LIMIT (`argument of LIMIT must be type bigint, not type text`).
+fn coerce_params(params: &mut HashMap<String, Value>, parameters: &Value) {
+    let properties = match parameters.get("properties").and_then(|p| p.as_object()) {
+        Some(p) => p,
+        None => return,
+    };
+    for (key, schema) in properties {
+        let type_str = match schema.get("type").and_then(|t| t.as_str()) {
+            Some(t) => t,
+            None => continue,
+        };
+        let Some(val) = params.get(key) else {
+            continue;
+        };
+        let Some(s) = val.as_str() else {
+            continue;
+        };
+        match type_str {
+            "integer" => {
+                if let Ok(n) = s.parse::<i64>() {
+                    params.insert(key.clone(), Value::Number(n.into()));
+                }
+            }
+            "boolean" => match s {
+                "true" | "1" => {
+                    params.insert(key.clone(), Value::Bool(true));
+                }
+                "false" | "0" => {
+                    params.insert(key.clone(), Value::Bool(false));
+                }
+                _ => {}
+            },
+            "number" => {
+                if let Ok(n) = s.parse::<f64>()
+                    && let Some(num) = serde_json::Number::from_f64(n)
+                {
+                    params.insert(key.clone(), Value::Number(num));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Proxy an unrecognized XRPC method to its home AppView resolved via DNS.
 async fn proxy_to_authority(
     state: &AppState,
@@ -140,7 +188,7 @@ pub async fn xrpc_get(
     mut parts: Parts,
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
-    let params = parse_query_params(&raw_query);
+    let mut params = parse_query_params(&raw_query);
     let client_ip = extract_client_ip(&parts);
     let claims = Claims::from_request_parts(&mut parts, &state).await.ok();
 
@@ -203,6 +251,10 @@ pub async fn xrpc_get(
         return Err(AppError::BadRequest(format!(
             "{method} is not a query endpoint"
         )));
+    }
+
+    if let Some(ref param_schema) = lexicon.parameters {
+        coerce_params(&mut params, param_schema);
     }
 
     let mut response =
