@@ -92,13 +92,12 @@ async fn callback(
         .unwrap_or_else(|| "/".to_string());
 
     // Set the session cookie
+    // Must use SameSite=None for cross-origin requests (e.g., Pentaract calling HappyView)
     let mut session_cookie = Cookie::new(COOKIE_NAME, did.to_string());
     session_cookie.set_path("/");
     session_cookie.set_http_only(true);
-    session_cookie.set_same_site(axum_extra::extract::cookie::SameSite::Lax);
-    if state.config.public_url.starts_with("https") {
-        session_cookie.set_secure(true);
-    }
+    session_cookie.set_same_site(axum_extra::extract::cookie::SameSite::None);
+    session_cookie.set_secure(true); // Required when SameSite=None
 
     // Remove the redirect cookie
     let mut redirect_removal = Cookie::from(REDIRECT_COOKIE_NAME);
