@@ -12,9 +12,12 @@ use crate::auth::COOKIE_NAME;
 use crate::db::adapt_sql;
 use crate::error::AppError;
 
+const REDIRECT_COOKIE_NAME: &str = "happyview_redirect";
+
 #[derive(Deserialize)]
 pub struct LoginQuery {
     handle: String,
+    redirect_uri: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -34,15 +37,30 @@ pub fn routes() -> Router<AppState> {
 
 async fn login(
     State(state): State<AppState>,
+    jar: SignedCookieJar<Key>,
     Query(query): Query<LoginQuery>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<(SignedCookieJar<Key>, Json<serde_json::Value>), AppError> {
     let url = state
         .oauth
         .authorize(&query.handle, Default::default())
         .await
         .map_err(|e| AppError::Internal(format!("OAuth authorize failed: {e}")))?;
 
-    Ok(Json(serde_json::json!({ "url": url })))
+    // Store the redirect URI in a cookie if provided
+    let jar = if let Some(redirect_uri) = query.redirect_uri {
+        let mut cookie = Cookie::new(REDIRECT_COOKIE_NAME, redirect_uri);
+        cookie.set_path("/");
+        cookie.set_http_only(true);
+        cookie.set_same_site(axum_extra::extract::cookie::SameSite::Lax);
+        if state.config.public_url.starts_with("https") {
+            cookie.set_secure(true);
+        }
+        jar.add(cookie)
+    } else {
+        jar
+    };
+
+    Ok((jar, Json(serde_json::json!({ "url": url }))))
 }
 
 async fn callback(
@@ -68,16 +86,27 @@ async fn callback(
         .await
         .ok_or_else(|| AppError::Internal("no DID in OAuth session".into()))?;
 
-    let mut cookie = Cookie::new(COOKIE_NAME, did.to_string());
-    cookie.set_path("/");
-    cookie.set_http_only(true);
-    cookie.set_same_site(axum_extra::extract::cookie::SameSite::Lax);
+    // Get the redirect URL from cookie, defaulting to "/"
+    let redirect_url = jar
+        .get(REDIRECT_COOKIE_NAME)
+        .map(|c| c.value().to_string())
+        .unwrap_or_else(|| "/".to_string());
+
+    // Set the session cookie
+    let mut session_cookie = Cookie::new(COOKIE_NAME, did.to_string());
+    session_cookie.set_path("/");
+    session_cookie.set_http_only(true);
+    session_cookie.set_same_site(axum_extra::extract::cookie::SameSite::Lax);
     if state.config.public_url.starts_with("https") {
-        cookie.set_secure(true);
+        session_cookie.set_secure(true);
     }
 
-    let jar = jar.add(cookie);
-    Ok((jar, Redirect::to("/")))
+    // Remove the redirect cookie
+    let mut redirect_removal = Cookie::from(REDIRECT_COOKIE_NAME);
+    redirect_removal.set_path("/");
+
+    let jar = jar.add(session_cookie).remove(redirect_removal);
+    Ok((jar, Redirect::to(&redirect_url)))
 }
 
 async fn logout(
