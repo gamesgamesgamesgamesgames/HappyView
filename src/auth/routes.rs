@@ -47,14 +47,13 @@ async fn login(
         .map_err(|e| AppError::Internal(format!("OAuth authorize failed: {e}")))?;
 
     // Store the redirect URI in a cookie if provided
+    // Must use SameSite=None for cross-origin requests (e.g., Pentaract calling HappyView)
     let jar = if let Some(redirect_uri) = query.redirect_uri {
         let mut cookie = Cookie::new(REDIRECT_COOKIE_NAME, redirect_uri);
         cookie.set_path("/");
         cookie.set_http_only(true);
-        cookie.set_same_site(axum_extra::extract::cookie::SameSite::Lax);
-        if state.config.public_url.starts_with("https") {
-            cookie.set_secure(true);
-        }
+        cookie.set_same_site(axum_extra::extract::cookie::SameSite::None);
+        cookie.set_secure(true); // Required when SameSite=None
         jar.add(cookie)
     } else {
         jar
