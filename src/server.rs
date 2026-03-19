@@ -1,5 +1,6 @@
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::HeaderMap;
+use axum::http::{Method, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -76,7 +77,13 @@ pub fn router(state: AppState) -> Router {
         .route("/config", get(config_endpoint))
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
+                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE])
+                .allow_credentials(true),
+        )
         .with_state(state)
 }
 
