@@ -56,6 +56,7 @@ src/
     permissions.rs  Permission enum (20 permissions), templates (Viewer, Operator, Manager, FullAccess)
     api_keys.rs     API key CRUD handlers (create, list, revoke) with scoped permissions
     events.rs       Event log query handler
+    settings.rs     Instance settings CRUD handlers (list, upsert, delete, logo upload/serve)
     script_variables.rs  Script variable CRUD handlers (list, upsert, delete)
     lexicons.rs     Lexicon CRUD handlers
     network_lexicons.rs  Network lexicon tracking (add, list, remove)
@@ -224,6 +225,14 @@ POST /admin/backfill
 | `state_key`  | text (PK)   | OAuth state parameter                        |
 | `state_data` | text        | Serialized state (managed by atrium)         |
 | `created_at` | timestamptz |                                              |
+
+### `instance_settings`
+
+| Column       | Type        | Description                                  |
+| ------------ | ----------- | -------------------------------------------- |
+| `key`        | text (PK)   | Setting name (e.g. `app_name`)               |
+| `value`      | text        | Setting value                                |
+| `updated_at` | timestamptz | Last modified                                |
 
 ### `event_logs`
 

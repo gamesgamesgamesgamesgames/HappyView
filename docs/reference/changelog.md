@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.0 — Native OAuth & Instance Settings
+
+- **Built-in OAuth** — replaced external AIP OAuth dependency with native `atrium-oauth` integration; HappyView manages the full OAuth flow internally
+- **Instance settings** — new `instance_settings` key/value table for configurable instance metadata (app name, logo, ToS, privacy policy) with env var fallback
+- **OAuth branding** — authorization screens now show configurable app name, logo, terms of service, and privacy policy links via the `/oauth/client-metadata.json` endpoint
+- **Logo upload** — upload a logo image via `PUT /admin/settings/logo` (stored in DB, served at `GET /settings/logo`)
+- **`settings:manage` permission** — new permission for managing instance settings, included in Manager and Full Access templates
+- **Redirect URI support** — `/auth/login` accepts optional `redirect_uri` parameter for post-login navigation
+- **CORS improvements** — origin-mirroring CORS with credentials support for cross-origin auth flows
+
 ## v2.0.0 — User Permissions & Settings Restructure
 
 - **User permissions system** — replaced the `admins` table with a `users` table supporting 20 granular permissions, permission templates (Viewer, Operator, Manager, Full Access), and a super user concept with escalation and self-modification guards

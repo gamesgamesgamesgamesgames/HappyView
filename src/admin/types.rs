@@ -195,6 +195,22 @@ pub(super) struct UpdateLabelerBody {
 }
 
 // ---------------------------------------------------------------------------
+// Settings types
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub(super) struct SettingEntry {
+    pub(super) key: String,
+    pub(super) value: String,
+    pub(super) source: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertSettingBody {
+    pub(super) value: String,
+}
+
+// ---------------------------------------------------------------------------
 // User permission / transfer types
 // ---------------------------------------------------------------------------
 

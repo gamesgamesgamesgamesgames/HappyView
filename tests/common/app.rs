@@ -47,6 +47,10 @@ impl TestApp {
             plc_url: mock_url.clone(),
             static_dir: "./web/out".into(),
             event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
         };
 
         let sql = adapt_sql(
@@ -122,7 +126,9 @@ impl TestApp {
                 vec![],
             ),
             oauth: std::sync::Arc::new(oauth),
-            cookie_key: axum_extra::extract::cookie::Key::derive_from(b"test-secret"),
+            cookie_key: axum_extra::extract::cookie::Key::derive_from(
+                b"test-secret-that-is-at-least-32-bytes-long",
+            ),
         };
 
         let router = server::router(state.clone());

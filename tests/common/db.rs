@@ -20,7 +20,7 @@ pub async fn truncate_all(pool: &AnyPool) {
     match backend {
         DatabaseBackend::Postgres => {
             sqlx::query(
-                "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs, labeler_subscriptions, labels RESTART IDENTITY CASCADE",
+                "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs, labeler_subscriptions, labels, instance_settings RESTART IDENTITY CASCADE",
             )
             .execute(pool)
             .await
@@ -40,6 +40,7 @@ pub async fn truncate_all(pool: &AnyPool) {
                 "record_refs",
                 "labeler_subscriptions",
                 "labels",
+                "instance_settings",
             ];
             for table in tables {
                 sqlx::query(&format!("DELETE FROM {table}"))

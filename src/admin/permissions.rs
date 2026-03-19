@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-/// All 23 permissions in the system.
+/// All 27 permissions in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Permission {
     #[serde(rename = "lexicons:create")]
@@ -66,6 +66,9 @@ pub enum Permission {
     RateLimitsCreate,
     #[serde(rename = "rate-limits:delete")]
     RateLimitsDelete,
+
+    #[serde(rename = "settings:manage")]
+    SettingsManage,
 }
 
 impl Permission {
@@ -98,10 +101,11 @@ impl Permission {
             Self::RateLimitsRead => "rate-limits:read",
             Self::RateLimitsCreate => "rate-limits:create",
             Self::RateLimitsDelete => "rate-limits:delete",
+            Self::SettingsManage => "settings:manage",
         }
     }
 
-    /// All 26 permissions.
+    /// All 27 permissions.
     pub fn all() -> HashSet<Permission> {
         HashSet::from([
             Self::LexiconsCreate,
@@ -130,6 +134,7 @@ impl Permission {
             Self::RateLimitsRead,
             Self::RateLimitsCreate,
             Self::RateLimitsDelete,
+            Self::SettingsManage,
         ])
     }
 }
@@ -177,6 +182,7 @@ impl Template {
                 perms.insert(Permission::RateLimitsRead);
                 perms.insert(Permission::RateLimitsCreate);
                 perms.insert(Permission::RateLimitsDelete);
+                perms.insert(Permission::SettingsManage);
                 perms
             }
             Self::FullAccess => Permission::all(),

@@ -9,6 +9,7 @@ pub(crate) mod permissions;
 mod rate_limits;
 mod records;
 mod script_variables;
+pub(crate) mod settings;
 mod stats;
 mod tap_stats;
 mod types;
@@ -78,5 +79,14 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route(
             "/rate-limits/allowlist/{id}",
             delete(rate_limits::remove_allowlist),
+        )
+        .route("/settings", get(settings::list))
+        .route(
+            "/settings/logo",
+            put(settings::upload_logo).delete(settings::delete_logo),
+        )
+        .route(
+            "/settings/{key}",
+            put(settings::upsert).delete(settings::delete),
         )
 }
