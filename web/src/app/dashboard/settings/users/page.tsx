@@ -89,7 +89,7 @@ export default function UsersPage() {
     getUsers()
       .then(setUsers)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [did]);
+  }, []);
 
   useEffect(() => {
     load();
