@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   addNetworkLexicon,
@@ -21,7 +20,6 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AddLexiconPage() {
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +130,7 @@ export default function AddLexiconPage() {
     setSubmitting(true);
     try {
       const lexiconJson = JSON.parse(json);
-      await uploadLexicon(getToken, {
+      await uploadLexicon({
         lexicon_json: lexiconJson,
         backfill: localMainType === "record" && backfill,
         script: showScript && script ? script : undefined,
@@ -148,7 +146,7 @@ export default function AddLexiconPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await addNetworkLexicon(getToken, {
+      await addNetworkLexicon({
         nsid,
         target_collection: showNetworkTargetCollection
           ? networkTargetCollection || undefined

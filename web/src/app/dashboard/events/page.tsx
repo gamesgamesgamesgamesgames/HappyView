@@ -12,7 +12,6 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
-import { useAuth } from "@/lib/auth-context";
 import { getEvents, type EventLogEntry } from "@/lib/api";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
@@ -203,7 +202,6 @@ function EventDetailBody({ event }: { event: EventLogEntry }) {
 }
 
 export default function EventsPage() {
-  const { getToken } = useAuth();
   const [events, setEvents] = useState<EventLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -250,7 +248,7 @@ export default function EventsPage() {
         const subjectFilter = debouncedFilters.find((f) => f.id === "subject")
           ?.value as string | undefined;
 
-        const data = await getEvents(getToken, {
+        const data = await getEvents({
           category: categoryFilter?.[0] || undefined,
           severity: severityFilter?.[0] || undefined,
           subject: subjectFilter || undefined,
@@ -267,7 +265,7 @@ export default function EventsPage() {
         setLoading(false);
       }
     },
-    [getToken, debouncedFilters],
+    [debouncedFilters],
   );
 
   // Fetch on mount and when filters change (reset to first page)
