@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { useAuth } from "@/lib/auth-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { CodePanels } from "@/components/code-panels";
 import {
@@ -36,7 +35,6 @@ export default function LexiconDetailPage() {
   const id = decodeURIComponent(
     pathname.split("/").filter(Boolean).pop() ?? "",
   );
-  const { getToken } = useAuth();
   const { hasPermission } = useCurrentUser();
   const router = useRouter();
   const [lexicon, setLexicon] = useState<LexiconDetail | null>(null);
@@ -57,7 +55,7 @@ export default function LexiconDetailPage() {
   const { luaCompletions, collections } = useLuaCompletions(jsonText);
 
   const load = useCallback(() => {
-    getLexicon(getToken, id)
+    getLexicon(id)
       .then((lex) => {
         setLexicon(lex);
         const json = JSON.stringify(lex.lexicon_json, null, 2);
@@ -87,7 +85,7 @@ export default function LexiconDetailPage() {
         setOriginalTokenCost(lex.token_cost != null ? String(lex.token_cost) : "");
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [getToken, id]);
+  }, [id]);
 
   useEffect(() => {
     load();
@@ -105,7 +103,7 @@ export default function LexiconDetailPage() {
     setError(null);
     try {
       const lexiconJson = JSON.parse(jsonText);
-      await uploadLexicon(getToken, {
+      await uploadLexicon({
         lexicon_json: lexiconJson,
         backfill: lexicon.backfill,
         script: luaText || undefined,
@@ -125,9 +123,9 @@ export default function LexiconDetailPage() {
     setDeleting(true);
     try {
       if (lexicon.source === "network") {
-        await deleteNetworkLexicon(getToken, lexicon.id);
+        await deleteNetworkLexicon(lexicon.id);
       } else {
-        await deleteLexicon(getToken, lexicon.id);
+        await deleteLexicon(lexicon.id);
       }
       router.push("/dashboard/lexicons");
     } catch (e: unknown) {
