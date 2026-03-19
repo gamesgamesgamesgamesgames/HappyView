@@ -64,6 +64,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
+        .route("/settings/logo", get(crate::admin::settings::serve_logo))
         .nest("/admin", admin::admin_routes(state.clone()))
         .nest("/auth", crate::auth::routes::routes())
         .route("/oauth/client-metadata.json", get(client_metadata))
@@ -96,8 +97,37 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
 }
 
 async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let client_metadata = &state.oauth.client_metadata;
-    Json(serde_json::to_value(client_metadata).unwrap_or_default())
+    let mut metadata = serde_json::to_value(&state.oauth.client_metadata).unwrap_or_default();
+
+    let pool = &state.db;
+    let backend = state.db_backend;
+
+    if let Some(name) = crate::admin::settings::get_setting(pool, "app_name", backend).await {
+        metadata["client_name"] = serde_json::Value::String(name);
+    }
+
+    // Logo: prefer uploaded logo_data (served at /settings/logo), fall back to logo_uri setting
+    let has_logo_data = crate::admin::settings::get_setting(pool, "logo_data", backend)
+        .await
+        .is_some();
+    if has_logo_data {
+        metadata["logo_uri"] = serde_json::Value::String(format!(
+            "{}/settings/logo",
+            state.config.public_url.trim_end_matches('/')
+        ));
+    } else if let Some(uri) = crate::admin::settings::get_setting(pool, "logo_uri", backend).await {
+        metadata["logo_uri"] = serde_json::Value::String(uri);
+    }
+
+    if let Some(uri) = crate::admin::settings::get_setting(pool, "tos_uri", backend).await {
+        metadata["tos_uri"] = serde_json::Value::String(uri);
+    }
+
+    if let Some(uri) = crate::admin::settings::get_setting(pool, "policy_uri", backend).await {
+        metadata["policy_uri"] = serde_json::Value::String(uri);
+    }
+
+    Json(metadata)
 }
 
 fn ip_from_forwarded_for(value: Option<&str>) -> Option<IpAddr> {

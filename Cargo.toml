@@ -11,7 +11,7 @@ atrium-identity = "0.1"
 atrium-common = "0.1"
 atrium-api = { version = "0.25", features = ["agent"] }
 atrium-xrpc = "0.12"
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 axum-extra = { version = "0.10", features = ["cookie", "cookie-signed", "cookie-key-expansion", "query"] }
 base64 = "0.22"
 dashmap = "6"

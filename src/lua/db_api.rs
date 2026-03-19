@@ -626,6 +626,10 @@ mod tests {
             plc_url: String::new(),
             static_dir: String::new(),
             event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
         };
         let (tx, _) = watch::channel(vec![]);
         let (labeler_tx, _) = watch::channel(());

@@ -17,6 +17,10 @@ pub struct Config {
     pub plc_url: String,
     pub static_dir: String,
     pub event_log_retention_days: u32,
+    pub app_name: Option<String>,
+    pub logo_uri: Option<String>,
+    pub tos_uri: Option<String>,
+    pub policy_uri: Option<String>,
 }
 
 impl Config {
@@ -47,6 +51,10 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),
+            app_name: env::var("APP_NAME").ok(),
+            logo_uri: env::var("LOGO_URI").ok(),
+            tos_uri: env::var("TOS_URI").ok(),
+            policy_uri: env::var("POLICY_URI").ok(),
         }
     }
 
@@ -75,6 +83,10 @@ mod tests {
             "RELAY_URL",
             "PLC_URL",
             "EVENT_LOG_RETENTION_DAYS",
+            "APP_NAME",
+            "LOGO_URI",
+            "TOS_URI",
+            "POLICY_URI",
         ] {
             unsafe {
                 env::remove_var(key);
@@ -104,6 +116,10 @@ mod tests {
             plc_url: String::new(),
             static_dir: String::new(),
             event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
         };
         assert_eq!(
             config.listen_addr(),

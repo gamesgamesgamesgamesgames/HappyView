@@ -18,6 +18,10 @@ HappyView is configured via environment variables. A `.env` file in the project 
 | `PLC_URL` | no | `https://plc.directory` | [PLC directory](https://github.com/did-method-plc/did-method-plc) URL for DID resolution |
 | `EVENT_LOG_RETENTION_DAYS` | no | `30` | Number of days to keep event logs before automatic cleanup. Set to `0` to disable cleanup |
 | `RUST_LOG` | no | `happyview=debug,tower_http=debug` | Log filter (uses `tracing_subscriber::EnvFilter`) |
+| `APP_NAME` | no | --- | Application name shown on OAuth authorization screens. Overridden by database setting if set via admin API |
+| `LOGO_URI` | no | --- | URL to application logo for OAuth screens. Overridden by database setting or logo upload |
+| `TOS_URI` | no | --- | URL to terms of service. Overridden by database setting if set via admin API |
+| `POLICY_URI` | no | --- | URL to privacy policy. Overridden by database setting if set via admin API |
 
 ## Example `.env`
 
@@ -39,4 +43,8 @@ SESSION_SECRET=change-me-in-production
 # PLC_URL=https://plc.directory
 # EVENT_LOG_RETENTION_DAYS=30
 # RUST_LOG=happyview=debug,tower_http=debug
+# APP_NAME=My App
+# LOGO_URI=https://example.com/logo.png
+# TOS_URI=https://example.com/tos
+# POLICY_URI=https://example.com/privacy
 ```
