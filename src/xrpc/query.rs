@@ -34,15 +34,19 @@ pub(super) async fn handle_query(
 
     let limit: i64 = params
         .get("limit")
-        .and_then(|v| v.as_str())
-        .and_then(|l| l.parse().ok())
+        .and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
         .unwrap_or(20)
         .min(100);
 
     let offset: i64 = params
         .get("cursor")
-        .and_then(|v| v.as_str())
-        .and_then(|c| c.parse().ok())
+        .and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
         .unwrap_or(0);
 
     let did = params.get("did").and_then(|v| v.as_str());

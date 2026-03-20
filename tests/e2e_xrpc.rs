@@ -36,14 +36,6 @@ fn admin_post(
         .unwrap()
 }
 
-fn authed_get(uri: &str, token: &str) -> Request<Body> {
-    Request::builder()
-        .uri(uri)
-        .header("authorization", format!("Bearer {token}"))
-        .body(Body::empty())
-        .unwrap()
-}
-
 async fn seed_lexicons(app: &TestApp) {
     // Record lexicon
     app.router
@@ -141,7 +133,7 @@ async fn profile_no_auth_returns_401() {
 #[ignore]
 async fn profile_with_mocked_services_returns_200() {
     let app = TestApp::new().await;
-    let did = "did:plc:testuser";
+    let did = &app.admin_did;
 
     // Mock PLC directory
     Mock::given(method("GET"))
@@ -160,16 +152,23 @@ async fn profile_with_mocked_services_returns_200() {
         .mount(&app.mock_server)
         .await;
 
+    let cookie = app.admin_cookie();
     let resp = app
         .router
         .clone()
-        .oneshot(authed_get("/xrpc/app.bsky.actor.getProfile", "valid-token"))
+        .oneshot(
+            Request::builder()
+                .uri("/xrpc/app.bsky.actor.getProfile")
+                .header(cookie.0, cookie.1)
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
     let json = json_body(resp).await;
-    assert_eq!(json["did"], did);
+    assert_eq!(json["did"], did.as_str());
     assert_eq!(json["displayName"], "Test User");
 }
 

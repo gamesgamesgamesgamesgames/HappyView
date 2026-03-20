@@ -1,4 +1,5 @@
 use axum::http::{HeaderName, HeaderValue};
+use axum::response::IntoResponse;
 use axum_extra::extract::cookie::{Cookie, Key, SignedCookieJar};
 
 /// Build a Cookie header containing a signed session cookie for the given DID.
@@ -9,12 +10,20 @@ pub fn admin_cookie_header(did: &str, cookie_key: &Key) -> (HeaderName, HeaderVa
     cookie.set_path("/");
     let jar = jar.add(cookie);
 
-    // Extract the Set-Cookie value and convert to a Cookie request header
-    let cookie_header = jar
+    // Build a response to extract the Set-Cookie header with the signed value,
+    // then convert it to a Cookie request header.
+    let response = jar.into_response();
+    let set_cookie_values: Vec<String> = response
+        .headers()
+        .get_all("set-cookie")
         .iter()
-        .map(|c| format!("{}={}", c.name(), c.value()))
-        .collect::<Vec<_>>()
-        .join("; ");
+        .filter_map(|v| {
+            let s = v.to_str().ok()?;
+            // Extract just "name=value" from "name=value; Path=/; ..."
+            Some(s.split(';').next()?.to_string())
+        })
+        .collect();
+    let cookie_header = set_cookie_values.join("; ");
 
     (
         HeaderName::from_static("cookie"),
