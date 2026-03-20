@@ -1,4 +1,5 @@
 .DS_Store
+/data
 /target
 .env
 web/node_modules/

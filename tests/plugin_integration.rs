@@ -18,6 +18,7 @@ async fn test_plugin_registry_crud() {
             api_version: "1".into(),
             icon_url: None,
             required_secrets: vec![],
+            auth_type: "oauth2".into(),
             config_schema: None,
         },
         source: PluginSource::File {
@@ -59,6 +60,7 @@ async fn test_plugin_registry_multiple() {
                 api_version: "1".into(),
                 icon_url: None,
                 required_secrets: vec![],
+                auth_type: "oauth2".into(),
                 config_schema: None,
             },
             source: PluginSource::File {
