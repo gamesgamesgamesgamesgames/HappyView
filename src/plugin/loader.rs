@@ -271,6 +271,7 @@ mod tests {
             api_version: "1".into(),
             icon_url: None,
             required_secrets: vec![],
+            auth_type: "oauth2".into(),
             config_schema: None,
         };
 
