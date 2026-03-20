@@ -21,6 +21,7 @@ if (process.env.NODE_ENV === "production") {
       { source: "/health", destination: `${apiBase}/health` },
       { source: "/config", destination: `${apiBase}/config` },
       { source: "/oauth/:path*", destination: `${apiBase}/oauth/:path*` },
+      { source: "/external-auth/:path*", destination: `${apiBase}/external-auth/:path*` },
     ],
     afterFiles: [],
     fallback: [],

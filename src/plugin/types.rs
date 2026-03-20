@@ -11,8 +11,16 @@ pub struct PluginInfo {
     pub icon_url: Option<String>,
     #[serde(default)]
     pub required_secrets: Vec<String>,
+    /// Authentication type: "oauth2", "openid", "api_key"
+    #[serde(default = "default_auth_type")]
+    pub auth_type: String,
+    /// JSON Schema describing user-provided configuration (e.g., API keys)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_schema: Option<serde_json::Value>,
+}
+
+fn default_auth_type() -> String {
+    "oauth2".to_string()
 }
 
 /// OAuth callback parameters passed to handle_callback()

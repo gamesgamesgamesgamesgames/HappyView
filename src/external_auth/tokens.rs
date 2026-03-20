@@ -195,4 +195,40 @@ pub async fn get_account_id(
     Ok(row.map(|(id,)| id))
 }
 
+/// Summary of a linked external account (without tokens)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LinkedAccountSummary {
+    pub plugin_id: String,
+    pub account_id: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// List all linked external accounts for a user
+pub async fn list_linked_accounts(
+    db: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    did: &str,
+) -> Result<Vec<LinkedAccountSummary>, TokenError> {
+    let sql = adapt_sql(
+        "SELECT plugin_id, account_id, created_at, updated_at FROM external_account_tokens WHERE did = ? ORDER BY created_at DESC",
+        backend,
+    );
+
+    let rows: Vec<(String, String, String, String)> =
+        sqlx::query_as(&sql).bind(did).fetch_all(db).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(plugin_id, account_id, created_at, updated_at)| LinkedAccountSummary {
+                plugin_id,
+                account_id,
+                created_at,
+                updated_at,
+            },
+        )
+        .collect())
+}
+
 // Integration tests for token storage are in tests/e2e_external_auth.rs
