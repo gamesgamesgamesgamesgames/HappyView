@@ -222,6 +222,7 @@ mod tests {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
+            token_encryption_key: None,
         };
         let (tx, _) = watch::channel(vec![]);
         let (labeler_tx, _) = watch::channel(());
@@ -287,6 +288,7 @@ mod tests {
             cookie_key: axum_extra::extract::cookie::Key::derive_from(
                 b"test-secret-for-tests-only-not-production",
             ),
+            plugin_registry: std::sync::Arc::new(crate::plugin::PluginRegistry::new()),
         }
     }
 

@@ -67,6 +67,7 @@ pub fn router(state: AppState) -> Router {
         .route("/settings/logo", get(crate::admin::settings::serve_logo))
         .nest("/admin", admin::admin_routes(state.clone()))
         .nest("/auth", crate::auth::routes::routes())
+        .nest("/external-auth", crate::external_auth::routes())
         .route("/oauth/client-metadata.json", get(client_metadata))
         .route("/xrpc/app.bsky.actor.getProfile", get(get_profile))
         .route(

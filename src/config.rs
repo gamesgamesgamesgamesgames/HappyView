@@ -21,6 +21,7 @@ pub struct Config {
     pub logo_uri: Option<String>,
     pub tos_uri: Option<String>,
     pub policy_uri: Option<String>,
+    pub token_encryption_key: Option<[u8; 32]>,
 }
 
 impl Config {
@@ -55,6 +56,13 @@ impl Config {
             logo_uri: env::var("LOGO_URI").ok(),
             tos_uri: env::var("TOS_URI").ok(),
             policy_uri: env::var("POLICY_URI").ok(),
+            token_encryption_key: env::var("TOKEN_ENCRYPTION_KEY").ok().and_then(|s| {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD
+                    .decode(&s)
+                    .ok()
+                    .and_then(|bytes| bytes.try_into().ok())
+            }),
         }
     }
 
@@ -120,6 +128,7 @@ mod tests {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
+            token_encryption_key: None,
         };
         assert_eq!(
             config.listen_addr(),
