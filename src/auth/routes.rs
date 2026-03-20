@@ -99,9 +99,11 @@ async fn callback(
     session_cookie.set_same_site(axum_extra::extract::cookie::SameSite::None);
     session_cookie.set_secure(true); // Required when SameSite=None
 
-    // Remove the redirect cookie
+    // Remove the redirect cookie (must match attributes from login)
     let mut redirect_removal = Cookie::from(REDIRECT_COOKIE_NAME);
     redirect_removal.set_path("/");
+    redirect_removal.set_same_site(axum_extra::extract::cookie::SameSite::None);
+    redirect_removal.set_secure(true);
 
     let jar = jar.add(session_cookie).remove(redirect_removal);
     Ok((jar, Redirect::to(&redirect_url)))
