@@ -59,6 +59,8 @@ pub struct AppState {
     pub oauth: Arc<HappyViewOAuthClient>,
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub plugin_registry: Arc<plugin::PluginRegistry>,
+    pub wasm_runtime: Arc<plugin::WasmRuntime>,
+    pub attestation_signer: Option<Arc<plugin::attestation::AttestationSigner>>,
 }
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {

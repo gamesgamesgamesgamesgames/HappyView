@@ -1,9 +1,11 @@
+mod bindings;
 mod http;
 mod kv;
 mod logging;
 mod lookup;
 mod secrets;
 
+pub use bindings::{PluginState, register_host_functions};
 pub use http::*;
 pub use kv::*;
 pub use logging::*;

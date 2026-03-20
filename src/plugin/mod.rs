@@ -1,9 +1,15 @@
+pub mod attestation;
 pub mod encryption;
+pub mod executor;
 pub mod host;
 pub mod loader;
+pub mod memory;
 mod runtime;
+pub mod sync;
 mod types;
 
+pub use executor::{ExecutionError, PluginExecutor, PluginInstance};
+pub use memory::{MemoryError, PluginEnvelopeError, PluginResponse};
 pub use runtime::WasmRuntime;
 pub use types::*;
 

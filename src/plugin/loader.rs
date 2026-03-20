@@ -1,6 +1,11 @@
+use crate::plugin::host::{PluginState, register_host_functions};
+use crate::plugin::memory::PluginResponse;
+use crate::plugin::runtime::DEFAULT_FUEL;
 use crate::plugin::{LoadedPlugin, PluginInfo, PluginSource};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::Path;
+use wasmtime::{Config, Engine, Linker, Module, Store};
 
 const SUPPORTED_API_VERSION: &str = "1";
 
@@ -84,23 +89,106 @@ pub async fn load_from_url(
 
 /// Extract plugin info by instantiating WASM and calling plugin_info()
 fn extract_plugin_info(wasm_bytes: &[u8]) -> Result<PluginInfo, LoadError> {
-    // TODO: Full implementation with wasmtime
-    // For now, this is a placeholder that will be filled in when we integrate wasmtime calls
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            tokio::task::block_in_place(|| handle.block_on(extract_plugin_info_async(wasm_bytes)))
+        }
+        Err(_) => {
+            let rt = tokio::runtime::Runtime::new().map_err(|e| {
+                LoadError::WasmValidation(format!("failed to create runtime: {}", e))
+            })?;
+            rt.block_on(extract_plugin_info_async(wasm_bytes))
+        }
+    }
+}
 
-    // Validate it's valid WASM
-    wasmtime::Module::validate(&wasmtime::Engine::default(), wasm_bytes)
+/// Async implementation of plugin info extraction via WASM instantiation
+async fn extract_plugin_info_async(wasm_bytes: &[u8]) -> Result<PluginInfo, LoadError> {
+    // Create async-enabled engine with fuel
+    let mut config = Config::new();
+    config.async_support(true);
+    config.consume_fuel(true);
+    let engine = Engine::new(&config).map_err(|e| LoadError::WasmValidation(e.to_string()))?;
+
+    let module =
+        Module::new(&engine, wasm_bytes).map_err(|e| LoadError::WasmValidation(e.to_string()))?;
+
+    // Create linker with host functions
+    let mut linker = Linker::new(&engine);
+    register_host_functions(&mut linker).map_err(|e| LoadError::WasmValidation(e.to_string()))?;
+
+    // Create minimal state - no db needed for plugin_info()
+    let state = PluginState {
+        plugin_id: "loading".into(),
+        scope: "".into(),
+        secrets: HashMap::new(),
+        config: serde_json::Value::Null,
+        db: None, // Not needed for plugin_info
+        db_backend: crate::db::DatabaseBackend::Sqlite,
+        http_client: reqwest::Client::new(),
+        lexicons: std::sync::Arc::new(crate::lexicon::LexiconRegistry::new()),
+        usage: Default::default(),
+        memory: None,
+        alloc: None,
+        dealloc: None,
+    };
+
+    let mut store = Store::new(&engine, state);
+    store
+        .set_fuel(DEFAULT_FUEL)
         .map_err(|e| LoadError::WasmValidation(e.to_string()))?;
 
-    // Return placeholder - real implementation calls plugin_info() export
-    Ok(PluginInfo {
-        id: "placeholder".into(),
-        name: "Placeholder".into(),
-        version: "0.0.0".into(),
-        api_version: SUPPORTED_API_VERSION.into(),
-        icon_url: None,
-        required_secrets: vec![],
-        config_schema: None,
-    })
+    // Instantiate
+    let instance = linker
+        .instantiate_async(&mut store, &module)
+        .await
+        .map_err(|e| LoadError::WasmValidation(format!("instantiation failed: {}", e)))?;
+
+    // Get memory and alloc/dealloc
+    let memory = instance
+        .get_memory(&mut store, "memory")
+        .ok_or_else(|| LoadError::WasmValidation("missing memory export".into()))?;
+    let alloc = instance
+        .get_typed_func::<u32, u32>(&mut store, "alloc")
+        .map_err(|_| LoadError::WasmValidation("missing alloc export".into()))?;
+    let dealloc = instance
+        .get_typed_func::<(u32, u32), ()>(&mut store, "dealloc")
+        .map_err(|_| LoadError::WasmValidation("missing dealloc export".into()))?;
+
+    // Store in state
+    store.data_mut().memory = Some(memory);
+    store.data_mut().alloc = Some(alloc);
+    store.data_mut().dealloc = Some(dealloc);
+
+    // Call plugin_info
+    let func = instance
+        .get_typed_func::<(), i64>(&mut store, "plugin_info")
+        .map_err(|_| LoadError::WasmValidation("missing plugin_info export".into()))?;
+
+    let packed = func
+        .call_async(&mut store, ())
+        .await
+        .map_err(|e| LoadError::WasmValidation(format!("plugin_info failed: {}", e)))?;
+
+    // Unpack i64: upper 32 bits = ptr, lower 32 bits = len
+    let ptr = (packed >> 32) as u32;
+    let len = (packed & 0xFFFFFFFF) as u32;
+
+    // Read result from memory
+    let mem_data = memory.data(&store);
+    if (ptr as usize) + (len as usize) > mem_data.len() {
+        return Err(LoadError::WasmValidation(
+            "plugin_info returned out of bounds pointer".into(),
+        ));
+    }
+    let bytes = mem_data[ptr as usize..(ptr as usize + len as usize)].to_vec();
+
+    // Parse response
+    let response: PluginResponse<PluginInfo> = serde_json::from_slice(&bytes)?;
+
+    response
+        .into_result()
+        .map_err(|e| LoadError::WasmValidation(format!("plugin error: {}", e.message)))
 }
 
 fn validate_api_version(info: &PluginInfo) -> Result<(), LoadError> {

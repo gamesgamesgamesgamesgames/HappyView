@@ -289,6 +289,10 @@ mod tests {
                 b"test-secret-for-tests-only-not-production",
             ),
             plugin_registry: std::sync::Arc::new(crate::plugin::PluginRegistry::new()),
+            wasm_runtime: std::sync::Arc::new(
+                crate::plugin::WasmRuntime::new().expect("wasm runtime"),
+            ),
+            attestation_signer: None,
         }
     }
 
