@@ -173,8 +173,11 @@ async fn main() {
         );
     }
 
-    // Initialize plugin registry
-    let plugin_registry = Arc::new(happyview::plugin::PluginRegistry::new());
+    // Initialize plugin registry (with DB for persistence)
+    let plugin_registry = Arc::new(happyview::plugin::PluginRegistry::with_db(
+        db_pool.clone(),
+        db_backend,
+    ));
 
     // Initialize WASM runtime
     let wasm_runtime =
