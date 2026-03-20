@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use super::HostContext;
 use crate::db::adapt_sql;
 use crate::plugin::StrongRef;
@@ -8,6 +10,13 @@ pub enum LookupError {
     Database(#[from] sqlx::Error),
     #[error("Invalid external ID field path")]
     InvalidFieldPath,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LookupRequest {
+    pub collection: String,
+    pub external_id_field: String,
+    pub external_id_value: String,
 }
 
 /// Look up a record by external ID
@@ -48,6 +57,19 @@ pub async fn lookup_record(
     Ok(result.map(|(uri, cid)| StrongRef { uri, cid }))
 }
 
+pub async fn lookup_record_by_request(
+    ctx: &HostContext,
+    request: LookupRequest,
+) -> Result<Option<StrongRef>, LookupError> {
+    lookup_record(
+        ctx,
+        &request.collection,
+        &request.external_id_field,
+        &request.external_id_value,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -63,5 +85,14 @@ mod tests {
     fn test_lookup_error_display() {
         let err = LookupError::InvalidFieldPath;
         assert_eq!(err.to_string(), "Invalid external ID field path");
+    }
+
+    #[test]
+    fn test_lookup_request_deserialize() {
+        let json = r#"{"collection": "games.example.game", "external_id_field": "externalIds.steam", "external_id_value": "123"}"#;
+        let req: LookupRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.collection, "games.example.game");
+        assert_eq!(req.external_id_field, "externalIds.steam");
+        assert_eq!(req.external_id_value, "123");
     }
 }

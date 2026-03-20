@@ -74,6 +74,9 @@ pub struct SyncRecord {
     pub record: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dedup_key: Option<String>,
+    /// Whether HappyView should add an attestation signature to this record
+    #[serde(default)]
+    pub sign: bool,
 }
 
 /// Strong reference to an AT Protocol record

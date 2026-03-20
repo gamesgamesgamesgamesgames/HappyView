@@ -176,6 +176,26 @@ async fn main() {
     // Initialize plugin registry
     let plugin_registry = Arc::new(happyview::plugin::PluginRegistry::new());
 
+    // Initialize WASM runtime
+    let wasm_runtime =
+        Arc::new(happyview::plugin::WasmRuntime::new().expect("Failed to create WASM runtime"));
+
+    // Initialize attestation signer (optional)
+    let attestation_signer = match happyview::plugin::attestation::load_from_env() {
+        Ok(Some(signer)) => {
+            tracing::info!("Attestation signing enabled");
+            Some(Arc::new(signer))
+        }
+        Ok(None) => {
+            tracing::info!("Attestation signing disabled (no ATTESTATION_PRIVATE_KEY)");
+            None
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to load attestation signer");
+            None
+        }
+    };
+
     // Load plugins from PLUGIN_URLS env var
     if let Ok(urls) = std::env::var("PLUGIN_URLS") {
         for (id, url, sha256) in happyview::plugin::loader::parse_plugin_urls(&urls) {
@@ -319,6 +339,8 @@ async fn main() {
         oauth: Arc::new(oauth_client),
         cookie_key,
         plugin_registry,
+        wasm_runtime,
+        attestation_signer,
     };
 
     // Sync initial collections to Tap on startup.

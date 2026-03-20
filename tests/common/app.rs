@@ -131,6 +131,10 @@ impl TestApp {
                 b"test-secret-that-is-at-least-32-bytes-long",
             ),
             plugin_registry: std::sync::Arc::new(happyview::plugin::PluginRegistry::new()),
+            wasm_runtime: std::sync::Arc::new(
+                happyview::plugin::WasmRuntime::new().expect("wasm runtime"),
+            ),
+            attestation_signer: None,
         };
 
         let router = server::router(state.clone());

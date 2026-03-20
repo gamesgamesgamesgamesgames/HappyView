@@ -5,9 +5,15 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::AppState;
+use crate::auth::Claims;
 use crate::error::AppError;
+use crate::external_auth::{pds_write, state, tokens};
+use crate::plugin::PluginExecutor;
+use crate::plugin::sync::SyncProcessor;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -48,11 +54,12 @@ struct AuthorizeQuery {
 }
 
 async fn authorize(
-    State(state): State<AppState>,
+    State(app_state): State<AppState>,
     Path(plugin_id): Path<String>,
     Query(query): Query<AuthorizeQuery>,
+    claims: Claims,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let _plugin = state
+    let _plugin = app_state
         .plugin_registry
         .get(&plugin_id)
         .await
@@ -61,12 +68,46 @@ async fn authorize(
     // Generate state parameter for CSRF protection
     let state_param = uuid::Uuid::new_v4().to_string();
 
-    // TODO: Store state in KV, call plugin's get_authorize_url()
-    // For now, return placeholder
-    let _ = query.redirect_uri;
+    // Store state -> user mapping for callback validation
+    state::store_state(
+        &app_state.db,
+        app_state.db_backend,
+        &state_param,
+        claims.did(),
+        &plugin_id,
+        &query.redirect_uri,
+    )
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Get plugin config (empty for now, could come from DB)
+    let config = serde_json::Value::Null;
+
+    // Load secrets from environment
+    let secrets = load_plugin_secrets(&plugin_id);
+
+    // Create executor and instance
+    let executor = PluginExecutor::new(
+        app_state.wasm_runtime.clone(),
+        app_state.plugin_registry.clone(),
+        app_state.db.clone(),
+        app_state.db_backend,
+        app_state.http.clone(),
+        Arc::new(app_state.lexicons.clone()),
+    );
+
+    let mut instance = executor
+        .instantiate(&plugin_id, &state_param, secrets, config.clone())
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let authorize_url = instance
+        .call_get_authorize_url(&state_param, &query.redirect_uri, &config)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(Json(serde_json::json!({
-        "authorize_url": format!("https://example.com/oauth?state={}", state_param),
+        "authorize_url": authorize_url,
         "state": state_param
     })))
 }
@@ -80,35 +121,166 @@ struct CallbackQuery {
 }
 
 async fn callback(
-    State(_state): State<AppState>,
-    Path(_plugin_id): Path<String>,
-    Query(_query): Query<CallbackQuery>,
+    State(app_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+    Query(query): Query<CallbackQuery>,
 ) -> Result<Redirect, AppError> {
-    // TODO: Validate state, call plugin's handle_callback(), store tokens
+    // Validate required parameters
+    let code = query.code.ok_or_else(|| {
+        AppError::BadRequest(query.error.unwrap_or_else(|| "Missing code".into()))
+    })?;
+    let state_param = query
+        .state
+        .ok_or_else(|| AppError::BadRequest("Missing state".into()))?;
 
-    // For now, redirect to a placeholder
-    Ok(Redirect::to("/"))
+    // Validate state and get user DID + redirect_uri
+    let stored_state = state::consume_state(&app_state.db, app_state.db_backend, &state_param)
+        .await
+        .map_err(|_| AppError::BadRequest("Invalid or expired state".into()))?;
+
+    // Verify plugin_id matches
+    if stored_state.plugin_id != plugin_id {
+        return Err(AppError::BadRequest("Plugin ID mismatch".into()));
+    }
+
+    let config = serde_json::Value::Null;
+    let secrets = load_plugin_secrets(&plugin_id);
+
+    let executor = PluginExecutor::new(
+        app_state.wasm_runtime.clone(),
+        app_state.plugin_registry.clone(),
+        app_state.db.clone(),
+        app_state.db_backend,
+        app_state.http.clone(),
+        Arc::new(app_state.lexicons.clone()),
+    );
+
+    let mut instance = executor
+        .instantiate(&plugin_id, &stored_state.did, secrets, config.clone())
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let token_set = instance
+        .call_handle_callback(&code, &state_param, &config)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Get profile to get the account_id
+    let profile = instance
+        .call_get_profile(&token_set.access_token, &config)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Format expires_at as RFC3339 string
+    let expires_at = token_set.expires_at.map(|dt| dt.to_rfc3339());
+
+    // Store encrypted tokens
+    tokens::store_tokens(
+        &app_state.db,
+        app_state.db_backend,
+        app_state.config.token_encryption_key.as_ref(),
+        &stored_state.did,
+        &plugin_id,
+        &profile.account_id,
+        &token_set.access_token,
+        token_set.refresh_token.as_deref(),
+        Some(&token_set.token_type),
+        None, // scope not in TokenSet
+        expires_at.as_deref(),
+    )
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Redirect to the original redirect_uri
+    Ok(Redirect::to(&stored_state.redirect_uri))
 }
 
 async fn sync(
-    State(_state): State<AppState>,
-    Path(_plugin_id): Path<String>,
+    State(app_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+    claims: Claims,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // TODO: Call plugin's sync_account(), process SyncRecords
+    let user_did = claims.did();
+
+    let config = serde_json::Value::Null;
+    let secrets = load_plugin_secrets(&plugin_id);
+
+    let executor = PluginExecutor::new(
+        app_state.wasm_runtime.clone(),
+        app_state.plugin_registry.clone(),
+        app_state.db.clone(),
+        app_state.db_backend,
+        app_state.http.clone(),
+        Arc::new(app_state.lexicons.clone()),
+    );
+
+    let mut instance = executor
+        .instantiate(&plugin_id, user_did, secrets, config.clone())
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Get decrypted access token from DB
+    let stored = tokens::get_tokens(
+        &app_state.db,
+        app_state.db_backend,
+        app_state.config.token_encryption_key.as_ref(),
+        user_did,
+        &plugin_id,
+    )
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let mut records = instance
+        .call_sync_account(&stored.access_token, &config)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Resolve game references from database
+    crate::plugin::sync::resolve_game_references(&app_state.db, app_state.db_backend, &mut records)
+        .await;
+
+    // Process records: sign those with sign=true
+    let signer = app_state.attestation_signer.as_deref();
+    let processor = SyncProcessor::new(signer, user_did.to_string());
+    let processed = processor
+        .process_records(records)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let processed_count = processed.len();
+
+    // Write processed records to user's PDS
+    let write_results = pds_write::write_records_to_pds(&app_state, user_did, processed).await?;
 
     Ok(Json(serde_json::json!({
         "status": "ok",
-        "synced": 0
+        "processed": processed_count,
+        "written": write_results.len()
     })))
 }
 
 async fn unlink(
-    State(_state): State<AppState>,
-    Path(_plugin_id): Path<String>,
+    State(app_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+    claims: Claims,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // TODO: Delete tokens, delete accountLink record
+    let user_did = claims.did();
+
+    // Delete tokens
+    let deleted = tokens::delete_tokens(&app_state.db, app_state.db_backend, user_did, &plugin_id)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // TODO: Delete accountLink record from user's PDS
 
     Ok(Json(serde_json::json!({
-        "status": "ok"
+        "status": "ok",
+        "was_linked": deleted
     })))
+}
+
+fn load_plugin_secrets(plugin_id: &str) -> HashMap<String, String> {
+    let prefix = format!("PLUGIN_{}_", plugin_id.to_uppercase());
+    std::env::vars()
+        .filter_map(|(k, v)| k.strip_prefix(&prefix).map(|name| (name.to_string(), v)))
+        .collect()
 }
