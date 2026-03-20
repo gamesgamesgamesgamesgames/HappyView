@@ -173,6 +173,68 @@ async fn main() {
         );
     }
 
+    // Initialize plugin registry (with DB for persistence)
+    let plugin_registry = Arc::new(happyview::plugin::PluginRegistry::with_db(
+        db_pool.clone(),
+        db_backend,
+    ));
+
+    // Initialize WASM runtime
+    let wasm_runtime =
+        Arc::new(happyview::plugin::WasmRuntime::new().expect("Failed to create WASM runtime"));
+
+    // Initialize attestation signer (optional)
+    let attestation_signer = match happyview::plugin::attestation::load_from_env() {
+        Ok(Some(signer)) => {
+            tracing::info!("Attestation signing enabled");
+            Some(Arc::new(signer))
+        }
+        Ok(None) => {
+            tracing::info!("Attestation signing disabled (no ATTESTATION_PRIVATE_KEY)");
+            None
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to load attestation signer");
+            None
+        }
+    };
+
+    // Load plugins from PLUGIN_URLS env var
+    if let Ok(urls) = std::env::var("PLUGIN_URLS") {
+        for (id, url, sha256) in happyview::plugin::loader::parse_plugin_urls(&urls) {
+            match happyview::plugin::loader::load_from_url(&http, &url, sha256.as_deref()).await {
+                Ok(plugin) => {
+                    tracing::info!(id = %id, "Loaded plugin from URL");
+                    plugin_registry.register(plugin).await;
+                }
+                Err(e) => {
+                    tracing::error!(id = %id, error = %e, "Failed to load plugin");
+                }
+            }
+        }
+    }
+
+    // Load plugins from directory
+    let plugin_dir = std::path::Path::new("./plugins");
+    if plugin_dir.exists()
+        && let Ok(entries) = std::fs::read_dir(plugin_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                match happyview::plugin::loader::load_from_file(&path).await {
+                    Ok(plugin) => {
+                        tracing::info!(id = %plugin.info.id, "Loaded plugin from file");
+                        plugin_registry.register(plugin).await;
+                    }
+                    Err(e) => {
+                        tracing::error!(path = %path.display(), error = %e, "Failed to load plugin");
+                    }
+                }
+            }
+        }
+    }
+
     // Initialize rate limiter from DB.
     let rl_state = RateLimiter::load_from_db(&db_pool).await;
     let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global, rl_state.allowlist);
@@ -279,6 +341,9 @@ async fn main() {
         rate_limiter,
         oauth: Arc::new(oauth_client),
         cookie_key,
+        plugin_registry,
+        wasm_runtime,
+        attestation_signer,
     };
 
     // Sync initial collections to Tap on startup.

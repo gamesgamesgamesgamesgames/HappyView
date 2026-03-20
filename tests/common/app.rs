@@ -51,6 +51,7 @@ impl TestApp {
             logo_uri: None,
             tos_uri: None,
             policy_uri: None,
+            token_encryption_key: None,
         };
 
         let sql = adapt_sql(
@@ -129,6 +130,11 @@ impl TestApp {
             cookie_key: axum_extra::extract::cookie::Key::derive_from(
                 b"test-secret-that-is-at-least-32-bytes-long",
             ),
+            plugin_registry: std::sync::Arc::new(happyview::plugin::PluginRegistry::new()),
+            wasm_runtime: std::sync::Arc::new(
+                happyview::plugin::WasmRuntime::new().expect("wasm runtime"),
+            ),
+            attestation_signer: None,
         };
 
         let router = server::router(state.clone());

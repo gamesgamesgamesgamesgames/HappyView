@@ -14,6 +14,7 @@ import {
   IconTag,
   IconChevronRight,
   IconShield,
+  IconLink,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -51,6 +52,7 @@ const navItems = [
 
 const settingsSubItems = [
   { title: "Users", url: "/dashboard/settings/users", icon: IconUsers, requiredPermissions: ["users:read"] },
+  { title: "Linked Accounts", url: "/dashboard/settings/accounts", icon: IconLink, requiredPermissions: [] as string[] },
   { title: "ENV Variables", url: "/dashboard/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
   { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
   { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
@@ -70,6 +72,7 @@ export function AppSidebar({
   })
 
   const visibleSettingsItems = settingsSubItems.filter((item) =>
+    item.requiredPermissions.length === 0 ||
     item.requiredPermissions.some((perm) => hasPermission(perm))
   )
 

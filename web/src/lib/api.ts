@@ -10,6 +10,14 @@ import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
 import type { LabelerSummary } from "@/types/labelers"
 import type { RateLimitsResponse } from "@/types/rate-limits"
+import type {
+  ExternalProvider,
+  LinkedAccount,
+  AuthorizeResponse,
+  SyncResponse,
+  UnlinkResponse,
+  ConnectResponse,
+} from "@/types/external-accounts"
 
 export type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 export type { CollectionStat, StatsResponse } from "@/types/stats"
@@ -24,6 +32,16 @@ export type { ScriptVariableSummary } from "@/types/script-variables"
 export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
 export type { AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
+export type {
+  ExternalProvider,
+  LinkedAccount,
+  AuthorizeResponse,
+  SyncResponse,
+  UnlinkResponse,
+  ConnectResponse,
+  ConfigSchema,
+  ConfigProperty,
+} from "@/types/external-accounts"
 
 export class ApiError extends Error {
   status: number
@@ -372,5 +390,42 @@ export function getEvents(
   const qs = searchParams.toString()
   return apiFetch<EventsListResponse>(
     `/admin/events${qs ? `?${qs}` : ""}`,
+  )
+}
+
+// External Accounts
+export function getExternalProviders() {
+  return apiFetch<ExternalProvider[]>("/external-auth/providers")
+}
+
+export function getLinkedAccounts() {
+  return apiFetch<LinkedAccount[]>("/external-auth/accounts")
+}
+
+export function authorizeExternal(pluginId: string, redirectUri: string) {
+  const params = new URLSearchParams({ redirect_uri: redirectUri })
+  return apiFetch<AuthorizeResponse>(
+    `/external-auth/${encodeURIComponent(pluginId)}/authorize?${params}`,
+  )
+}
+
+export function syncExternal(pluginId: string) {
+  return apiFetch<SyncResponse>(
+    `/external-auth/${encodeURIComponent(pluginId)}/sync`,
+    { method: "POST" },
+  )
+}
+
+export function unlinkExternal(pluginId: string) {
+  return apiFetch<UnlinkResponse>(
+    `/external-auth/${encodeURIComponent(pluginId)}/unlink`,
+    { method: "POST" },
+  )
+}
+
+export function connectWithConfig(pluginId: string, config: Record<string, unknown>) {
+  return apiFetch<ConnectResponse>(
+    `/external-auth/${encodeURIComponent(pluginId)}/connect`,
+    { method: "POST", body: JSON.stringify({ config }) },
   )
 }

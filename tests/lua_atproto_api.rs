@@ -33,6 +33,7 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
         logo_uri: None,
         tos_uri: None,
         policy_uri: None,
+        token_encryption_key: None,
     };
     let (tx, _) = watch::channel(vec![]);
     let (labeler_tx, _) = watch::channel(());
@@ -83,6 +84,11 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
         ),
         oauth: std::sync::Arc::new(oauth),
         cookie_key: axum_extra::extract::cookie::Key::derive_from(b"test-secret"),
+        plugin_registry: std::sync::Arc::new(happyview::plugin::PluginRegistry::new()),
+        wasm_runtime: std::sync::Arc::new(
+            happyview::plugin::WasmRuntime::new().expect("wasm runtime"),
+        ),
+        attestation_signer: None,
     }
 }
 

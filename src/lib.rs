@@ -5,9 +5,11 @@ pub mod db;
 pub mod dns;
 pub mod error;
 pub mod event_log;
+pub mod external_auth;
 pub mod labeler;
 pub mod lexicon;
 pub mod lua;
+pub mod plugin;
 pub mod profile;
 pub mod rate_limit;
 pub mod record_refs;
@@ -56,6 +58,9 @@ pub struct AppState {
     pub rate_limiter: Arc<RateLimiter>,
     pub oauth: Arc<HappyViewOAuthClient>,
     pub cookie_key: axum_extra::extract::cookie::Key,
+    pub plugin_registry: Arc<plugin::PluginRegistry>,
+    pub wasm_runtime: Arc<plugin::WasmRuntime>,
+    pub attestation_signer: Option<Arc<plugin::attestation::AttestationSigner>>,
 }
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {
