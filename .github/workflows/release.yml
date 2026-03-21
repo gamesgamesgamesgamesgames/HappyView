@@ -39,7 +39,7 @@ jobs:
             rust-build-${{ runner.os }}-
 
       - name: Build all targets
-        run: cargo build --all-targets
+        run: cargo test --no-run --all-targets
 
   unit-tests:
     needs: [build]
