@@ -18,54 +18,29 @@ on:
 
 env:
   SQLX_OFFLINE: true
-  CACHE_VERSION: v2
 
 jobs:
-  build:
+  unit-tests:
     runs-on: depot-ubuntu-24.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache Rust build
+      - name: Cache cargo dependencies
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
-
-      - name: Build all targets
-        run: cargo build --all-targets
-
-  unit-tests:
-    needs: [build]
-    runs-on: depot-ubuntu-24.04
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
+            cargo-deps-${{ runner.os }}-
 
       - name: Run unit tests
         run: cargo test --lib
 
   e2e-tests:
-    needs: [build]
     runs-on: depot-ubuntu-24.04
 
     services:
@@ -87,16 +62,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
+            cargo-deps-${{ runner.os }}-
 
       - name: Add WASM target
         run: rustup target add wasm32-unknown-unknown
@@ -126,23 +100,21 @@ jobs:
         run: npm ci && npm run build
 
   lint:
-    needs: [build]
     runs-on: depot-ubuntu-24.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
+            cargo-deps-${{ runner.os }}-
 
       - name: Check formatting
         run: cargo fmt -- --check
