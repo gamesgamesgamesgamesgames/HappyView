@@ -98,6 +98,12 @@ jobs:
           restore-keys: |
             rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
 
+      - name: Add WASM target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Build test plugin
+        run: cargo build --manifest-path tests/fixtures/test_plugin/Cargo.toml --target wasm32-unknown-unknown --release
+
       - name: Run e2e tests
         env:
           TEST_DATABASE_URL: postgres://happyview:happyview@localhost:5432/happyview_test
