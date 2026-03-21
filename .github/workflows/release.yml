@@ -18,6 +18,7 @@ on:
 
 env:
   SQLX_OFFLINE: true
+  CACHE_VERSION: v2
 
 jobs:
   build:
@@ -34,12 +35,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ runner.os }}-
+            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
 
       - name: Build all targets
-        run: cargo test --no-run --all-targets
+        run: cargo build --all-targets
 
   unit-tests:
     needs: [build]
@@ -56,9 +57,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ runner.os }}-
+            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
 
       - name: Run unit tests
         run: cargo test --lib
@@ -93,9 +94,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ runner.os }}-
+            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
 
       - name: Run e2e tests
         env:
@@ -133,9 +134,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rust-build-${{ runner.os }}-
+            rust-build-${{ env.CACHE_VERSION }}-${{ runner.os }}-
 
       - name: Check formatting
         run: cargo fmt -- --check
