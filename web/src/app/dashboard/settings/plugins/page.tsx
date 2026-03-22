@@ -66,8 +66,8 @@ export default function PluginsPage() {
   const load = useCallback(async () => {
     try {
       const response = await getPlugins();
-      setPlugins(response.plugins);
-      setEncryptionConfigured(response.encryption_configured);
+      setPlugins(response.plugins ?? []);
+      setEncryptionConfigured(response.encryption_configured ?? false);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
