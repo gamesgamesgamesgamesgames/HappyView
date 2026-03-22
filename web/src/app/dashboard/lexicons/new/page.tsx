@@ -20,17 +20,17 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AddLexiconPage() {
-  const { hasPermission } = useCurrentUser();
+  const { hasPermission, loading } = useCurrentUser();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Redirect if the user cannot create lexicons
+  // Redirect if the user cannot create lexicons (only after loading completes)
   useEffect(() => {
-    if (!hasPermission("lexicons:create")) {
+    if (!loading && !hasPermission("lexicons:create")) {
       router.replace("/dashboard/lexicons");
     }
-  }, [hasPermission, router]);
+  }, [hasPermission, loading, router]);
 
   // Local state
   const [json, setJson] = useState(LEXICON_TEMPLATE);

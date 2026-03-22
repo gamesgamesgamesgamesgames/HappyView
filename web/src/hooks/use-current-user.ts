@@ -7,11 +7,14 @@ import type { UserSummary } from "@/types/users";
 export function useCurrentUser() {
   const { did } = useAuth();
   const [currentUser, setCurrentUser] = useState<UserSummary | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
+    setLoading(true);
     getUsers()
       .then((users) => setCurrentUser(users.find((u) => u.did === did) ?? null))
-      .catch(() => setCurrentUser(null));
+      .catch(() => setCurrentUser(null))
+      .finally(() => setLoading(false));
   }, [did]);
 
   useEffect(() => {
@@ -26,5 +29,5 @@ export function useCurrentUser() {
     [currentUser, isSuper],
   );
 
-  return { currentUser, isSuper, hasPermission, reload: load };
+  return { currentUser, isSuper, hasPermission, loading, reload: load };
 }
