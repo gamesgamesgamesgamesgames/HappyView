@@ -87,6 +87,7 @@ async fn authorize(
     let state_param = uuid::Uuid::new_v4().to_string();
 
     // Store state -> user mapping for callback validation
+    // Store the frontend's redirect_uri so we can redirect back after callback
     state::store_state(
         &app_state.db,
         app_state.db_backend,
@@ -125,8 +126,16 @@ async fn authorize(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
+    // Build the backend callback URL for OpenID/OAuth return_to
+    // This ensures the auth provider redirects back to the backend, not the frontend
+    let callback_url = format!(
+        "{}/external-auth/{}/callback",
+        app_state.config.public_url.trim_end_matches('/'),
+        plugin_id
+    );
+
     let authorize_url = instance
-        .call_get_authorize_url(&state_param, &query.redirect_uri, &config)
+        .call_get_authorize_url(&state_param, &callback_url, &config)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -134,13 +143,6 @@ async fn authorize(
         "authorize_url": authorize_url,
         "state": state_param
     })))
-}
-
-#[derive(Deserialize)]
-struct CallbackQuery {
-    code: Option<String>,
-    state: Option<String>,
-    error: Option<String>,
 }
 
 fn redirect_with_params(base_uri: &str, params: &[(&str, &str)]) -> Redirect {
@@ -156,18 +158,22 @@ fn redirect_with_params(base_uri: &str, params: &[(&str, &str)]) -> Redirect {
 async fn callback(
     State(app_state): State<AppState>,
     Path(plugin_id): Path<String>,
-    Query(query): Query<CallbackQuery>,
+    Query(query_params): Query<HashMap<String, String>>,
 ) -> Result<Redirect, AppError> {
-    // Phase 1: Extract params — errors here have no redirect target, so return HTTP errors
-    let code = query.code.ok_or_else(|| {
-        AppError::BadRequest(query.error.unwrap_or_else(|| "Missing code".into()))
-    })?;
-    let state_param = query
-        .state
+    // Phase 1: Extract state param — required for both OAuth and OpenID
+    // For OAuth: "state" param
+    // For OpenID 2.0: also "state" (we pass it via return_to query string)
+    let state_param = query_params
+        .get("state")
         .ok_or_else(|| AppError::BadRequest("Missing state".into()))?;
 
+    // Check for error param (OAuth error response)
+    if let Some(error) = query_params.get("error") {
+        return Err(AppError::BadRequest(error.clone()));
+    }
+
     // Phase 2: Consume state — after this we have a redirect_uri
-    let stored_state = state::consume_state(&app_state.db, app_state.db_backend, &state_param)
+    let stored_state = state::consume_state(&app_state.db, app_state.db_backend, state_param)
         .await
         .map_err(|_| AppError::BadRequest("Invalid or expired state".into()))?;
 
@@ -180,7 +186,7 @@ async fn callback(
     }
 
     // Phase 4: Everything after this redirects on error (never returns HTTP error)
-    match callback_inner(&app_state, &stored_state, &code, &state_param).await {
+    match callback_inner(&app_state, &stored_state, &query_params).await {
         Ok(()) => Ok(redirect_with_params(
             &stored_state.redirect_uri,
             &[("auth", "success")],
@@ -202,8 +208,7 @@ async fn callback(
 async fn callback_inner(
     app_state: &AppState,
     stored_state: &state::StoredState,
-    code: &str,
-    state_param: &str,
+    params: &HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = serde_json::Value::Null;
     let secrets = load_plugin_secrets(
@@ -232,9 +237,7 @@ async fn callback_inner(
         )
         .await?;
 
-    let token_set = instance
-        .call_handle_callback(code, state_param, &config)
-        .await?;
+    let token_set = instance.call_handle_callback(params, &config).await?;
 
     let profile = instance
         .call_get_profile(&token_set.access_token, &config)
@@ -306,16 +309,16 @@ async fn connect_with_config(
     );
 
     // For API key auth, we pass the user's config to handle_callback
-    // The "code" is empty since there's no OAuth flow
+    // The params are empty since there's no OAuth flow
     let mut instance = executor
         .instantiate(&plugin_id, user_did, secrets, body.config.clone())
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    // Call handle_callback with the config as the callback params
-    // The plugin will extract the api_key from the config
+    // Call handle_callback with empty params (for API key auth, the config contains the key)
+    let empty_params = HashMap::new();
     let token_set = instance
-        .call_handle_callback("", "", &body.config)
+        .call_handle_callback(&empty_params, &body.config)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 

@@ -116,19 +116,24 @@ impl PluginInstance {
         self.call_plugin_function("get_authorize_url", &input).await
     }
 
-    /// Call handle_callback(code, state, config)
+    /// Call handle_callback with all callback parameters
+    ///
+    /// For OAuth2: params contains "code" and "state"
+    /// For OpenID 2.0: params contains "openid.claimed_id", "openid.identity", etc.
     pub async fn call_handle_callback(
         &mut self,
-        code: &str,
-        state: &str,
+        params: &HashMap<String, String>,
         config: &serde_json::Value,
     ) -> Result<TokenSet, ExecutionError> {
-        let input = serde_json::json!({
-            "code": code,
-            "state": state,
-            "config": config
-        });
-        self.call_plugin_function("handle_callback", &input).await
+        // Build input with all params flattened at the top level
+        let mut input = serde_json::Map::new();
+        for (k, v) in params {
+            input.insert(k.clone(), serde_json::Value::String(v.clone()));
+        }
+        input.insert("config".to_string(), config.clone());
+
+        self.call_plugin_function("handle_callback", &serde_json::Value::Object(input))
+            .await
     }
 
     /// Call refresh_tokens(refresh_token, config)
@@ -445,12 +450,11 @@ mod tests {
 
         fn _check_call_handle_callback<'a>(
             inst: &'a mut PluginInstance,
-            code: &'a str,
-            state: &'a str,
+            params: &'a HashMap<String, String>,
             config: &'a serde_json::Value,
         ) -> impl std::future::Future<Output = Result<crate::plugin::TokenSet, ExecutionError>> + 'a
         {
-            inst.call_handle_callback(code, state, config)
+            inst.call_handle_callback(params, config)
         }
 
         fn _check_call_refresh_tokens<'a>(

@@ -127,8 +127,12 @@ async fn test_handle_callback() {
         .await
         .expect("Failed to instantiate");
 
+    let mut params = HashMap::new();
+    params.insert("code".to_string(), "code123".to_string());
+    params.insert("state".to_string(), "state123".to_string());
+
     let tokens = instance
-        .call_handle_callback("code123", "state123", &serde_json::Value::Null)
+        .call_handle_callback(&params, &serde_json::Value::Null)
         .await
         .expect("Failed to handle callback");
 
