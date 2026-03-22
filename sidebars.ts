@@ -94,6 +94,11 @@ const sidebars: SidebarsConfig = {
           id: "guides/event-logs",
           label: "Event Logs",
         },
+        {
+          type: "doc",
+          id: "guides/plugins",
+          label: "Plugins",
+        },
       ],
     },
     {

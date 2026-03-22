@@ -15,6 +15,7 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - 🌐 **Network Lexicons**: Fetch lexicon schemas directly from the AT Protocol network via DNS authority resolution
 - ⚡ **Hot Reloading**: Upload or update lexicons at runtime, and new endpoints are available immediately with no restart
 - 🏷️ **Label Support**: Subscribe to external [labelers](guides/labelers.md) and surface content labels on records, with self-label detection and color-coded badges in the dashboard
+- 🔌 **Plugin System**: Extend HappyView with WASM [plugins](guides/plugins.md) that integrate with external platforms like Steam, Xbox, and itch.io
 - 🛠️ **Admin Dashboard**: Manage lexicons, monitor record stats, and run backfill jobs through a built-in admin API
 
 ## Design Principles
@@ -34,4 +35,5 @@ Building an AppView from scratch means wiring up firehose connections, record st
 - [Lua Scripting](guides/scripting.md): Write custom query and procedure logic
 - [Index Hooks](guides/index-hooks.md): React to record changes in real time
 - [Labelers](guides/labelers.md): Subscribe to external labelers and manage content labels
+- [Plugins](guides/plugins.md): Integrate with external platforms using WASM plugins
 - [Event Logs](guides/event-logs.md): Monitor system activity, debug script errors, and audit admin actions

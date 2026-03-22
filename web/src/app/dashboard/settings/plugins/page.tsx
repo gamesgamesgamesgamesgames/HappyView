@@ -465,18 +465,6 @@ export default function PluginsPage() {
           </div>
         )}
 
-        <div className="rounded-lg border bg-muted/50 p-4">
-          <h3 className="font-medium">Plugin Configuration</h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Configure plugin secrets using the <Settings className="inline size-3" /> button.
-            Alternatively, set environment variables like{" "}
-            <code className="text-xs">PLUGIN_STEAM_API_KEY</code>.
-          </p>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Dashboard-configured secrets take precedence over environment variables.
-          </p>
-        </div>
-
         {/* Configure Secrets Dialog */}
         <ResponsiveDialog open={configOpen} onOpenChange={setConfigOpen}>
           <ResponsiveDialogContent>
