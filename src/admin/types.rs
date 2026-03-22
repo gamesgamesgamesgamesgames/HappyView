@@ -248,6 +248,8 @@ pub(super) struct PluginSummary {
     pub(super) enabled: bool,
     pub(super) auth_type: String,
     pub(super) required_secrets: Vec<SecretDefinition>,
+    /// Whether all required secrets have been configured
+    pub(super) secrets_configured: bool,
     pub(super) loaded_at: Option<String>,
 }
 

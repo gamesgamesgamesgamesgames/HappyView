@@ -14,6 +14,7 @@ export interface PluginSummary {
   enabled: boolean;
   auth_type: string;
   required_secrets: SecretDefinition[];
+  secrets_configured: boolean;
   loaded_at: string | null;
 }
 

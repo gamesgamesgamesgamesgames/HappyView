@@ -27,6 +27,20 @@ pub(super) async fn list(
 
     let plugins = state.plugin_registry.list().await;
 
+    // Query which plugins have secrets configured
+    let configured_plugins: std::collections::HashSet<String> = {
+        let sql = adapt_sql(
+            "SELECT plugin_id FROM plugin_configs WHERE config IS NOT NULL",
+            state.db_backend,
+        );
+        sqlx::query_scalar::<_, String>(&sql)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect()
+    };
+
     let summaries: Vec<PluginSummary> = plugins
         .into_iter()
         .map(|p| {
@@ -40,28 +54,33 @@ pub(super) async fn list(
             };
 
             // Use manifest for rich secret metadata if available, otherwise fallback to basic keys
-            let required_secrets = if let Some(manifest) = &p.manifest {
-                manifest
-                    .required_secrets
-                    .iter()
-                    .map(|s| super::types::SecretDefinition {
-                        key: s.key.clone(),
-                        name: s.name.clone(),
-                        description: s.description.clone(),
-                    })
-                    .collect()
-            } else {
-                // Legacy plugins without manifest - create minimal SecretDefinition from keys
-                p.info
-                    .required_secrets
-                    .iter()
-                    .map(|key| super::types::SecretDefinition {
-                        key: key.clone(),
-                        name: key.clone(), // Use key as name for legacy
-                        description: None,
-                    })
-                    .collect()
-            };
+            let required_secrets: Vec<super::types::SecretDefinition> =
+                if let Some(manifest) = &p.manifest {
+                    manifest
+                        .required_secrets
+                        .iter()
+                        .map(|s| super::types::SecretDefinition {
+                            key: s.key.clone(),
+                            name: s.name.clone(),
+                            description: s.description.clone(),
+                        })
+                        .collect()
+                } else {
+                    // Legacy plugins without manifest - create minimal SecretDefinition from keys
+                    p.info
+                        .required_secrets
+                        .iter()
+                        .map(|key| super::types::SecretDefinition {
+                            key: key.clone(),
+                            name: key.clone(), // Use key as name for legacy
+                            description: None,
+                        })
+                        .collect()
+                };
+
+            // Plugin is configured if it has no required secrets OR has a config entry
+            let secrets_configured =
+                required_secrets.is_empty() || configured_plugins.contains(&p.info.id);
 
             PluginSummary {
                 id: p.info.id.clone(),
@@ -73,6 +92,7 @@ pub(super) async fn list(
                 enabled: true, // Currently all loaded plugins are enabled
                 auth_type: p.info.auth_type.clone(),
                 required_secrets,
+                secrets_configured,
                 loaded_at: None, // Would need to track this in registry
             }
         })
@@ -136,28 +156,32 @@ pub(super) async fn add(
         .map_err(|e| AppError::BadRequest(format!("Failed to load plugin: {}", e)))?;
 
     // Use manifest for rich secret metadata if available
-    let required_secrets = if let Some(manifest) = &plugin.manifest {
-        manifest
-            .required_secrets
-            .iter()
-            .map(|s| super::types::SecretDefinition {
-                key: s.key.clone(),
-                name: s.name.clone(),
-                description: s.description.clone(),
-            })
-            .collect()
-    } else {
-        plugin
-            .info
-            .required_secrets
-            .iter()
-            .map(|key| super::types::SecretDefinition {
-                key: key.clone(),
-                name: key.clone(),
-                description: None,
-            })
-            .collect()
-    };
+    let required_secrets: Vec<super::types::SecretDefinition> =
+        if let Some(manifest) = &plugin.manifest {
+            manifest
+                .required_secrets
+                .iter()
+                .map(|s| super::types::SecretDefinition {
+                    key: s.key.clone(),
+                    name: s.name.clone(),
+                    description: s.description.clone(),
+                })
+                .collect()
+        } else {
+            plugin
+                .info
+                .required_secrets
+                .iter()
+                .map(|key| super::types::SecretDefinition {
+                    key: key.clone(),
+                    name: key.clone(),
+                    description: None,
+                })
+                .collect()
+        };
+
+    // Newly added plugins are not configured (unless they have no required secrets)
+    let secrets_configured = required_secrets.is_empty();
 
     let summary = PluginSummary {
         id: plugin.info.id.clone(),
@@ -169,6 +193,7 @@ pub(super) async fn add(
         enabled: true,
         auth_type: plugin.info.auth_type.clone(),
         required_secrets,
+        secrets_configured,
         loaded_at: Some(now_rfc3339()),
     };
 
@@ -272,27 +297,43 @@ pub(super) async fn reload(
         .map_err(|e| AppError::BadRequest(format!("Failed to reload plugin: {}", e)))?;
 
     // Use manifest for rich secret metadata if available
-    let required_secrets = if let Some(manifest) = &plugin.manifest {
-        manifest
-            .required_secrets
-            .iter()
-            .map(|s| super::types::SecretDefinition {
-                key: s.key.clone(),
-                name: s.name.clone(),
-                description: s.description.clone(),
-            })
-            .collect()
-    } else {
-        plugin
-            .info
-            .required_secrets
-            .iter()
-            .map(|key| super::types::SecretDefinition {
-                key: key.clone(),
-                name: key.clone(),
-                description: None,
-            })
-            .collect()
+    let required_secrets: Vec<super::types::SecretDefinition> =
+        if let Some(manifest) = &plugin.manifest {
+            manifest
+                .required_secrets
+                .iter()
+                .map(|s| super::types::SecretDefinition {
+                    key: s.key.clone(),
+                    name: s.name.clone(),
+                    description: s.description.clone(),
+                })
+                .collect()
+        } else {
+            plugin
+                .info
+                .required_secrets
+                .iter()
+                .map(|key| super::types::SecretDefinition {
+                    key: key.clone(),
+                    name: key.clone(),
+                    description: None,
+                })
+                .collect()
+        };
+
+    // Check if reloaded plugin still has its config
+    let secrets_configured = required_secrets.is_empty() || {
+        let sql = adapt_sql(
+            "SELECT 1 FROM plugin_configs WHERE plugin_id = ?",
+            state.db_backend,
+        );
+        sqlx::query_scalar::<_, i32>(&sql)
+            .bind(&plugin.info.id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .is_some()
     };
 
     let summary = PluginSummary {
@@ -305,6 +346,7 @@ pub(super) async fn reload(
         enabled: true,
         auth_type: plugin.info.auth_type.clone(),
         required_secrets,
+        secrets_configured,
         loaded_at: Some(now_rfc3339()),
     };
 

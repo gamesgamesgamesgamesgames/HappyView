@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, RefreshCw, ExternalLink, Settings, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, RefreshCw, ExternalLink, Settings, Loader2, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getPlugins, addPlugin, removePlugin, reloadPlugin, getPluginSecrets, updatePluginSecrets, previewPlugin, type PluginPreview } from "@/lib/api";
@@ -363,7 +363,7 @@ export default function PluginsPage() {
                   <TableHead>Version</TableHead>
                   <TableHead>Auth Type</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead>Required Secrets</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="w-32" />
                 </TableRow>
               </TableHeader>
@@ -402,13 +402,19 @@ export default function PluginsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {plugin.required_secrets.map((secret) => (
-                          <Badge key={secret.key} variant="outline" className="text-xs" title={secret.description || undefined}>
-                            {secret.name}
-                          </Badge>
-                        ))}
-                      </div>
+                      {plugin.required_secrets?.length === 0 ? (
+                        <span className="text-muted-foreground text-sm">No config needed</span>
+                      ) : plugin.secrets_configured ? (
+                        <div className="flex items-center gap-1.5 text-green-600">
+                          <CheckCircle2 className="size-4" />
+                          <span className="text-sm">Configured</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-amber-500">
+                          <AlertCircle className="size-4" />
+                          <span className="text-sm">Needs config</span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
