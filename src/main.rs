@@ -202,13 +202,26 @@ async fn main() {
     // Load plugins from PLUGIN_URLS env var
     if let Ok(urls) = std::env::var("PLUGIN_URLS") {
         for (id, url, sha256) in happyview::plugin::loader::parse_plugin_urls(&urls) {
-            match happyview::plugin::loader::load_from_url(&http, &url, sha256.as_deref()).await {
-                Ok(plugin) => {
-                    tracing::info!(id = %id, "Loaded plugin from URL");
-                    plugin_registry.register(plugin).await;
+            match happyview::plugin::loader::fetch_manifest(&http, &url).await {
+                Ok(preview) => {
+                    match happyview::plugin::loader::load_from_manifest(
+                        &http,
+                        &preview,
+                        sha256.as_deref(),
+                    )
+                    .await
+                    {
+                        Ok(plugin) => {
+                            tracing::info!(id = %id, "Loaded plugin from URL");
+                            plugin_registry.register(plugin).await;
+                        }
+                        Err(e) => {
+                            tracing::error!(id = %id, error = %e, "Failed to load plugin WASM");
+                        }
+                    }
                 }
                 Err(e) => {
-                    tracing::error!(id = %id, error = %e, "Failed to load plugin");
+                    tracing::error!(id = %id, error = %e, "Failed to fetch plugin manifest");
                 }
             }
         }

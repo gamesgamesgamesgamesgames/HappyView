@@ -56,6 +56,7 @@ const PERMISSION_CATEGORIES: Record<string, string[]> = {
   "API Keys": ["api-keys:create", "api-keys:read", "api-keys:delete"],
   Backfill: ["backfill:create", "backfill:read"],
   "Rate Limits": ["rate-limits:read", "rate-limits:create", "rate-limits:delete"],
+  Plugins: ["plugins:read", "plugins:create", "plugins:delete"],
   System: ["stats:read", "events:read"],
 };
 
@@ -71,7 +72,7 @@ const TEMPLATES = [
 const TEMPLATE_PERMISSIONS: Record<string, string[]> = {
   viewer: ["lexicons:read", "records:read", "script-variables:read", "users:read", "api-keys:read", "backfill:read", "stats:read", "events:read"],
   operator: ["lexicons:read", "records:read", "records:delete", "script-variables:read", "script-variables:create", "users:read", "api-keys:read", "backfill:read", "backfill:create", "stats:read", "events:read"],
-  manager: ["lexicons:create", "lexicons:read", "lexicons:delete", "records:read", "records:delete", "records:delete-collection", "script-variables:create", "script-variables:read", "script-variables:delete", "users:read", "api-keys:read", "backfill:create", "backfill:read", "stats:read", "events:read"],
+  manager: ["lexicons:create", "lexicons:read", "lexicons:delete", "records:read", "records:delete", "records:delete-collection", "script-variables:create", "script-variables:read", "script-variables:delete", "users:read", "api-keys:read", "backfill:create", "backfill:read", "stats:read", "events:read", "plugins:read", "plugins:create", "plugins:delete"],
   full_access: ALL_PERMISSIONS,
 };
 

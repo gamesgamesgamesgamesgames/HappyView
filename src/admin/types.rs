@@ -232,6 +232,12 @@ pub(super) struct TransferSuperBody {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize)]
+pub(super) struct PluginsListResponse {
+    pub(super) plugins: Vec<PluginSummary>,
+    pub(super) encryption_configured: bool,
+}
+
+#[derive(Serialize)]
 pub(super) struct PluginSummary {
     pub(super) id: String,
     pub(super) name: String,
@@ -241,7 +247,7 @@ pub(super) struct PluginSummary {
     pub(super) sha256: Option<String>,
     pub(super) enabled: bool,
     pub(super) auth_type: String,
-    pub(super) required_secrets: Vec<String>,
+    pub(super) required_secrets: Vec<SecretDefinition>,
     pub(super) loaded_at: Option<String>,
 }
 
@@ -249,6 +255,43 @@ pub(super) struct PluginSummary {
 pub(super) struct AddPluginBody {
     pub(super) url: String,
     pub(super) sha256: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct PreviewPluginBody {
+    pub(super) url: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct SecretDefinition {
+    pub(super) key: String,
+    pub(super) name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) description: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(super) struct PluginPreviewResponse {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) version: String,
+    pub(super) description: Option<String>,
+    pub(super) icon_url: Option<String>,
+    pub(super) auth_type: String,
+    pub(super) required_secrets: Vec<SecretDefinition>,
+    pub(super) manifest_url: String,
+    pub(super) wasm_url: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct PluginSecretsResponse {
+    pub(super) plugin_id: String,
+    pub(super) secrets: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpdatePluginSecretsBody {
+    pub(super) secrets: std::collections::HashMap<String, String>,
 }
 
 // ---------------------------------------------------------------------------

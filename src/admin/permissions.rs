@@ -69,6 +69,13 @@ pub enum Permission {
 
     #[serde(rename = "settings:manage")]
     SettingsManage,
+
+    #[serde(rename = "plugins:read")]
+    PluginsRead,
+    #[serde(rename = "plugins:create")]
+    PluginsCreate,
+    #[serde(rename = "plugins:delete")]
+    PluginsDelete,
 }
 
 impl Permission {
@@ -102,10 +109,13 @@ impl Permission {
             Self::RateLimitsCreate => "rate-limits:create",
             Self::RateLimitsDelete => "rate-limits:delete",
             Self::SettingsManage => "settings:manage",
+            Self::PluginsRead => "plugins:read",
+            Self::PluginsCreate => "plugins:create",
+            Self::PluginsDelete => "plugins:delete",
         }
     }
 
-    /// All 27 permissions.
+    /// All 30 permissions.
     pub fn all() -> HashSet<Permission> {
         HashSet::from([
             Self::LexiconsCreate,
@@ -135,6 +145,9 @@ impl Permission {
             Self::RateLimitsCreate,
             Self::RateLimitsDelete,
             Self::SettingsManage,
+            Self::PluginsRead,
+            Self::PluginsCreate,
+            Self::PluginsDelete,
         ])
     }
 }
@@ -183,6 +196,9 @@ impl Template {
                 perms.insert(Permission::RateLimitsCreate);
                 perms.insert(Permission::RateLimitsDelete);
                 perms.insert(Permission::SettingsManage);
+                perms.insert(Permission::PluginsRead);
+                perms.insert(Permission::PluginsCreate);
+                perms.insert(Permission::PluginsDelete);
                 perms
             }
             Self::FullAccess => Permission::all(),

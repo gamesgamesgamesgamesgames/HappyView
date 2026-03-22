@@ -58,6 +58,7 @@ fn load_test_plugin() -> LoadedPlugin {
             path: "tests/fixtures/test_plugin".into(),
         },
         wasm_bytes,
+        manifest: None,
     }
 }
 

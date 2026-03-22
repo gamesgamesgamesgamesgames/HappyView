@@ -429,3 +429,74 @@ export function connectWithConfig(pluginId: string, config: Record<string, unkno
     { method: "POST", body: JSON.stringify({ config }) },
   )
 }
+
+// Plugins
+import type { PluginSummary, PluginsListResponse } from "@/types/plugins"
+export type { PluginSummary, PluginsListResponse } from "@/types/plugins"
+
+export function getPlugins() {
+  return apiFetch<PluginsListResponse>("/admin/plugins")
+}
+
+export function addPlugin(body: { url: string; sha256?: string }) {
+  return apiFetch<PluginSummary>("/admin/plugins", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function removePlugin(id: string) {
+  return apiFetch(`/admin/plugins/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
+export function reloadPlugin(id: string) {
+  return apiFetch<PluginSummary>(
+    `/admin/plugins/${encodeURIComponent(id)}/reload`,
+    { method: "POST" },
+  )
+}
+
+export interface PluginSecretsResponse {
+  plugin_id: string
+  secrets: Record<string, string>
+}
+
+export function getPluginSecrets(id: string) {
+  return apiFetch<PluginSecretsResponse>(
+    `/admin/plugins/${encodeURIComponent(id)}/secrets`,
+  )
+}
+
+export function updatePluginSecrets(id: string, secrets: Record<string, string>) {
+  return apiFetch<void>(
+    `/admin/plugins/${encodeURIComponent(id)}/secrets`,
+    { method: "PUT", body: JSON.stringify({ secrets }) },
+  )
+}
+
+export interface SecretDefinition {
+  key: string
+  name: string
+  description: string | null
+}
+
+export interface PluginPreview {
+  id: string
+  name: string
+  version: string
+  description: string | null
+  icon_url: string | null
+  auth_type: string
+  required_secrets: SecretDefinition[]
+  manifest_url: string
+  wasm_url: string
+}
+
+export function previewPlugin(url: string) {
+  return apiFetch<PluginPreview>("/admin/plugins/preview", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  })
+}

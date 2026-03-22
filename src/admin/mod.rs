@@ -91,6 +91,11 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             put(settings::upsert).delete(settings::delete),
         )
         .route("/plugins", post(plugins::add).get(plugins::list))
+        .route("/plugins/preview", post(plugins::preview))
         .route("/plugins/{id}", delete(plugins::remove))
         .route("/plugins/{id}/reload", post(plugins::reload))
+        .route(
+            "/plugins/{id}/secrets",
+            get(plugins::get_secrets).put(plugins::update_secrets),
+        )
 }

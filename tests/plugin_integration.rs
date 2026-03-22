@@ -25,6 +25,7 @@ async fn test_plugin_registry_crud() {
             path: "/tmp/test".into(),
         },
         wasm_bytes: vec![],
+        manifest: None,
     };
 
     // Register
@@ -67,6 +68,7 @@ async fn test_plugin_registry_multiple() {
                 path: "/tmp/test".into(),
             },
             wasm_bytes: vec![],
+            manifest: None,
         };
         registry.register(plugin).await;
     }

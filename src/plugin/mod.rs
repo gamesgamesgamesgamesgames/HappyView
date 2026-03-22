@@ -72,16 +72,23 @@ impl PluginRegistry {
             PluginSource::Url { url, sha256 } => ("url", Some(url.clone()), sha256.clone()),
         };
 
+        // Serialize manifest to JSON if present
+        let manifest_json = plugin
+            .manifest
+            .as_ref()
+            .and_then(|m| serde_json::to_string(m).ok());
+
         let now = now_rfc3339();
         let sql = adapt_sql(
-            "INSERT INTO plugins (id, source, url, sha256, enabled, loaded_at, api_version)
-             VALUES (?, ?, ?, ?, 1, ?, ?)
+            "INSERT INTO plugins (id, source, url, sha256, enabled, loaded_at, api_version, manifest)
+             VALUES (?, ?, ?, ?, 1, ?, ?, ?)
              ON CONFLICT (id) DO UPDATE SET
                 source = excluded.source,
                 url = excluded.url,
                 sha256 = excluded.sha256,
                 loaded_at = excluded.loaded_at,
-                api_version = excluded.api_version",
+                api_version = excluded.api_version,
+                manifest = excluded.manifest",
             self.db_backend,
         );
 
@@ -92,6 +99,7 @@ impl PluginRegistry {
             .bind(sha256)
             .bind(&now)
             .bind(&plugin.info.api_version)
+            .bind(manifest_json)
             .execute(db)
             .await?;
 
@@ -137,14 +145,24 @@ impl PluginRegistry {
             match source.as_str() {
                 "url" => {
                     if let Some(url) = url {
-                        match loader::load_from_url(http, &url, sha256.as_deref()).await {
-                            Ok(plugin) => {
-                                tracing::info!(plugin_id = %id, "Loaded plugin from DB");
-                                self.plugins.write().await.insert(id, Arc::new(plugin));
-                                loaded += 1;
+                        // Load via manifest
+                        match loader::fetch_manifest(http, &url).await {
+                            Ok(preview) => {
+                                match loader::load_from_manifest(http, &preview, sha256.as_deref())
+                                    .await
+                                {
+                                    Ok(plugin) => {
+                                        tracing::info!(plugin_id = %id, "Loaded plugin from DB");
+                                        self.plugins.write().await.insert(id, Arc::new(plugin));
+                                        loaded += 1;
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(plugin_id = %id, error = %e, "Failed to load plugin WASM");
+                                    }
+                                }
                             }
                             Err(e) => {
-                                tracing::error!(plugin_id = %id, error = %e, "Failed to load plugin from DB");
+                                tracing::error!(plugin_id = %id, error = %e, "Failed to fetch plugin manifest");
                             }
                         }
                     }

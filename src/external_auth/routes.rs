@@ -101,8 +101,14 @@ async fn authorize(
     // Get plugin config (empty for now, could come from DB)
     let config = serde_json::Value::Null;
 
-    // Load secrets from environment
-    let secrets = load_plugin_secrets(&plugin_id);
+    // Load secrets from DB (with env var fallback)
+    let secrets = load_plugin_secrets(
+        &app_state.db,
+        app_state.db_backend,
+        app_state.config.token_encryption_key.as_ref(),
+        &plugin_id,
+    )
+    .await;
 
     // Create executor and instance
     let executor = PluginExecutor::new(
@@ -200,7 +206,13 @@ async fn callback_inner(
     state_param: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = serde_json::Value::Null;
-    let secrets = load_plugin_secrets(&stored_state.plugin_id);
+    let secrets = load_plugin_secrets(
+        &app_state.db,
+        app_state.db_backend,
+        app_state.config.token_encryption_key.as_ref(),
+        &stored_state.plugin_id,
+    )
+    .await;
 
     let executor = PluginExecutor::new(
         app_state.wasm_runtime.clone(),
@@ -276,7 +288,13 @@ async fn connect_with_config(
         ));
     }
 
-    let secrets = load_plugin_secrets(&plugin_id);
+    let secrets = load_plugin_secrets(
+        &app_state.db,
+        app_state.db_backend,
+        app_state.config.token_encryption_key.as_ref(),
+        &plugin_id,
+    )
+    .await;
 
     let executor = PluginExecutor::new(
         app_state.wasm_runtime.clone(),
@@ -342,7 +360,13 @@ async fn sync(
     let user_did = claims.did();
 
     let config = serde_json::Value::Null;
-    let secrets = load_plugin_secrets(&plugin_id);
+    let secrets = load_plugin_secrets(
+        &app_state.db,
+        app_state.db_backend,
+        app_state.config.token_encryption_key.as_ref(),
+        &plugin_id,
+    )
+    .await;
 
     let executor = PluginExecutor::new(
         app_state.wasm_runtime.clone(),
@@ -417,7 +441,54 @@ async fn unlink(
     })))
 }
 
-fn load_plugin_secrets(plugin_id: &str) -> HashMap<String, String> {
+async fn load_plugin_secrets(
+    db: &sqlx::Pool<sqlx::Any>,
+    db_backend: crate::db::DatabaseBackend,
+    encryption_key: Option<&[u8; 32]>,
+    plugin_id: &str,
+) -> HashMap<String, String> {
+    use crate::plugin::encryption::decrypt;
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
+    // Try to load from database first (if encryption key is available)
+    if let Some(key) = encryption_key {
+        let sql = crate::db::adapt_sql(
+            "SELECT config FROM plugin_configs WHERE plugin_id = ?",
+            db_backend,
+        );
+
+        if let Ok(Some((config_json,))) = sqlx::query_as::<_, (String,)>(&sql)
+            .bind(plugin_id)
+            .fetch_optional(db)
+            .await
+            && let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_json)
+            && let Some(secrets_obj) = config.get("secrets").and_then(|s| s.as_object())
+        {
+            // DB keys are full env var names (e.g., PLUGIN_STEAM_API_KEY)
+            // Strip prefix to get short names for plugin (e.g., API_KEY)
+            let prefix = format!("PLUGIN_{}_", plugin_id.to_uppercase());
+            let db_secrets: HashMap<String, String> = secrets_obj
+                .iter()
+                .filter_map(|(k, v)| {
+                    v.as_str().and_then(|encrypted_b64| {
+                        // Decode base64 and decrypt
+                        let encrypted = BASE64.decode(encrypted_b64).ok()?;
+                        let decrypted = decrypt(key, &encrypted).ok()?;
+                        let value = String::from_utf8(decrypted).ok()?;
+                        // Strip prefix from key to get short name
+                        let short_key = k.strip_prefix(&prefix).unwrap_or(k).to_string();
+                        Some((short_key, value))
+                    })
+                })
+                .collect();
+
+            if !db_secrets.is_empty() {
+                return db_secrets;
+            }
+        }
+    }
+
+    // Fall back to environment variables
     let prefix = format!("PLUGIN_{}_", plugin_id.to_uppercase());
     std::env::vars()
         .filter_map(|(k, v)| k.strip_prefix(&prefix).map(|name| (name.to_string(), v)))
