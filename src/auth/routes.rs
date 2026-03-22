@@ -122,6 +122,8 @@ async fn logout(
 
     let mut removal = Cookie::from(COOKIE_NAME);
     removal.set_path("/");
+    removal.set_same_site(axum_extra::extract::cookie::SameSite::None);
+    removal.set_secure(true);
     let jar = jar.remove(removal);
     Ok(jar)
 }
