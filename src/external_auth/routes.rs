@@ -131,11 +131,20 @@ async fn authorize(
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)] // Fields used when full OAuth flow is implemented
 struct CallbackQuery {
     code: Option<String>,
     state: Option<String>,
     error: Option<String>,
+}
+
+fn redirect_with_params(base_uri: &str, params: &[(&str, &str)]) -> Redirect {
+    let separator = if base_uri.contains('?') { "&" } else { "?" };
+    let query: String = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    Redirect::to(&format!("{}{}{}", base_uri, separator, query))
 }
 
 async fn callback(
@@ -143,7 +152,7 @@ async fn callback(
     Path(plugin_id): Path<String>,
     Query(query): Query<CallbackQuery>,
 ) -> Result<Redirect, AppError> {
-    // Validate required parameters
+    // Phase 1: Extract params — errors here have no redirect target, so return HTTP errors
     let code = query.code.ok_or_else(|| {
         AppError::BadRequest(query.error.unwrap_or_else(|| "Missing code".into()))
     })?;
@@ -151,18 +160,47 @@ async fn callback(
         .state
         .ok_or_else(|| AppError::BadRequest("Missing state".into()))?;
 
-    // Validate state and get user DID + redirect_uri
+    // Phase 2: Consume state — after this we have a redirect_uri
     let stored_state = state::consume_state(&app_state.db, app_state.db_backend, &state_param)
         .await
         .map_err(|_| AppError::BadRequest("Invalid or expired state".into()))?;
 
-    // Verify plugin_id matches
+    // Phase 3: Verify plugin_id matches — redirect on mismatch
     if stored_state.plugin_id != plugin_id {
-        return Err(AppError::BadRequest("Plugin ID mismatch".into()));
+        return Ok(redirect_with_params(
+            &stored_state.redirect_uri,
+            &[("auth", "error"), ("message", "Connection failed")],
+        ));
     }
 
+    // Phase 4: Everything after this redirects on error (never returns HTTP error)
+    match callback_inner(&app_state, &stored_state, &code, &state_param).await {
+        Ok(()) => Ok(redirect_with_params(
+            &stored_state.redirect_uri,
+            &[("auth", "success")],
+        )),
+        Err(e) => {
+            tracing::error!(
+                plugin_id = %plugin_id,
+                did = %stored_state.did,
+                "OAuth callback failed: {e:#}"
+            );
+            Ok(redirect_with_params(
+                &stored_state.redirect_uri,
+                &[("auth", "error"), ("message", "Connection failed")],
+            ))
+        }
+    }
+}
+
+async fn callback_inner(
+    app_state: &AppState,
+    stored_state: &state::StoredState,
+    code: &str,
+    state_param: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let config = serde_json::Value::Null;
-    let secrets = load_plugin_secrets(&plugin_id);
+    let secrets = load_plugin_secrets(&stored_state.plugin_id);
 
     let executor = PluginExecutor::new(
         app_state.wasm_runtime.clone(),
@@ -174,43 +212,40 @@ async fn callback(
     );
 
     let mut instance = executor
-        .instantiate(&plugin_id, &stored_state.did, secrets, config.clone())
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .instantiate(
+            &stored_state.plugin_id,
+            &stored_state.did,
+            secrets,
+            config.clone(),
+        )
+        .await?;
 
     let token_set = instance
-        .call_handle_callback(&code, &state_param, &config)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .call_handle_callback(code, state_param, &config)
+        .await?;
 
-    // Get profile to get the account_id
     let profile = instance
         .call_get_profile(&token_set.access_token, &config)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .await?;
 
-    // Format expires_at as RFC3339 string
     let expires_at = token_set.expires_at.map(|dt| dt.to_rfc3339());
 
-    // Store encrypted tokens
     tokens::store_tokens(
         &app_state.db,
         app_state.db_backend,
         app_state.config.token_encryption_key.as_ref(),
         &stored_state.did,
-        &plugin_id,
+        &stored_state.plugin_id,
         &profile.account_id,
         &token_set.access_token,
         token_set.refresh_token.as_deref(),
         Some(&token_set.token_type),
-        None, // scope not in TokenSet
+        None,
         expires_at.as_deref(),
     )
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?;
+    .await?;
 
-    // Redirect to the original redirect_uri
-    Ok(Redirect::to(&stored_state.redirect_uri))
+    Ok(())
 }
 
 /// Connect with user-provided config (for API key auth type)
