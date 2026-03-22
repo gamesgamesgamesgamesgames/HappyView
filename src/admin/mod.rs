@@ -6,6 +6,7 @@ mod labelers;
 mod lexicons;
 mod network_lexicons;
 pub(crate) mod permissions;
+mod plugins;
 mod rate_limits;
 mod records;
 mod script_variables;
@@ -89,4 +90,7 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/settings/{key}",
             put(settings::upsert).delete(settings::delete),
         )
+        .route("/plugins", post(plugins::add).get(plugins::list))
+        .route("/plugins/{id}", delete(plugins::remove))
+        .route("/plugins/{id}/reload", post(plugins::reload))
 }

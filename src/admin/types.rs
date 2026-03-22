@@ -228,6 +228,30 @@ pub(super) struct TransferSuperBody {
 }
 
 // ---------------------------------------------------------------------------
+// Plugin types
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub(super) struct PluginSummary {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) version: String,
+    pub(super) source: String,
+    pub(super) url: Option<String>,
+    pub(super) sha256: Option<String>,
+    pub(super) enabled: bool,
+    pub(super) auth_type: String,
+    pub(super) required_secrets: Vec<String>,
+    pub(super) loaded_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct AddPluginBody {
+    pub(super) url: String,
+    pub(super) sha256: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
 // Rate limit types
 // ---------------------------------------------------------------------------
 

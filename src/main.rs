@@ -235,6 +235,17 @@ async fn main() {
         }
     }
 
+    // Load plugins from database (added via admin UI)
+    match plugin_registry.load_from_db(&http).await {
+        Ok(count) if count > 0 => {
+            tracing::info!(count = count, "Loaded plugins from database");
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to load plugins from database");
+        }
+    }
+
     // Initialize rate limiter from DB.
     let rl_state = RateLimiter::load_from_db(&db_pool).await;
     let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global, rl_state.allowlist);

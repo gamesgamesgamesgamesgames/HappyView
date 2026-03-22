@@ -109,4 +109,67 @@ impl PluginRegistry {
     pub async fn remove(&self, id: &str) -> Option<Arc<LoadedPlugin>> {
         self.plugins.write().await.remove(id)
     }
+
+    /// Load all plugins from the database
+    pub async fn load_from_db(&self, http: &reqwest::Client) -> Result<usize, String> {
+        let Some(db) = &self.db else {
+            return Err("No database configured".into());
+        };
+
+        let sql = adapt_sql(
+            "SELECT id, source, url, sha256 FROM plugins WHERE enabled = true",
+            self.db_backend,
+        );
+
+        let rows: Vec<(String, String, Option<String>, Option<String>)> = sqlx::query_as(&sql)
+            .fetch_all(db)
+            .await
+            .map_err(|e| format!("Failed to load plugins from DB: {}", e))?;
+
+        let mut loaded = 0;
+
+        for (id, source, url, sha256) in rows {
+            // Skip if already loaded
+            if self.plugins.read().await.contains_key(&id) {
+                continue;
+            }
+
+            match source.as_str() {
+                "url" => {
+                    if let Some(url) = url {
+                        match loader::load_from_url(http, &url, sha256.as_deref()).await {
+                            Ok(plugin) => {
+                                tracing::info!(plugin_id = %id, "Loaded plugin from DB");
+                                self.plugins.write().await.insert(id, Arc::new(plugin));
+                                loaded += 1;
+                            }
+                            Err(e) => {
+                                tracing::error!(plugin_id = %id, error = %e, "Failed to load plugin from DB");
+                            }
+                        }
+                    }
+                }
+                "file" => {
+                    if let Some(path) = url {
+                        let path = std::path::Path::new(&path);
+                        match loader::load_from_file(path).await {
+                            Ok(plugin) => {
+                                tracing::info!(plugin_id = %id, "Loaded plugin from DB (file)");
+                                self.plugins.write().await.insert(id, Arc::new(plugin));
+                                loaded += 1;
+                            }
+                            Err(e) => {
+                                tracing::error!(plugin_id = %id, error = %e, "Failed to load plugin from DB");
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    tracing::warn!(plugin_id = %id, source = %source, "Unknown plugin source type");
+                }
+            }
+        }
+
+        Ok(loaded)
+    }
 }
