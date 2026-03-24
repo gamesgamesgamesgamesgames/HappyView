@@ -3,6 +3,7 @@ use regex::Regex;
 use serde::Deserialize;
 use sqlx::AnyPool;
 use sqlx::migrate::Migrator;
+use sqlx::pool::PoolOptions;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -202,7 +203,19 @@ pub async fn connect(url: &str, backend: DatabaseBackend) -> AnyPool {
         }
     }
 
-    let pool = AnyPool::connect(url)
+    let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(match backend {
+            DatabaseBackend::Sqlite => 16,
+            DatabaseBackend::Postgres => 32,
+        });
+
+    let pool = PoolOptions::<sqlx::Any>::new()
+        .max_connections(max_connections)
+        .acquire_timeout(std::time::Duration::from_secs(10))
+        .idle_timeout(std::time::Duration::from_secs(300))
+        .connect(url)
         .await
         .expect("Failed to connect to database");
 
