@@ -29,7 +29,9 @@ You can define helper functions and variables outside `handle()`. They're evalua
 
 Scripts run in a restricted environment. The following standard Lua modules are **removed** and unavailable:
 
-`os`, `io`, `debug`, `package`, `require`, `dofile`, `loadfile`, `load`, `collectgarbage`
+`io`, `debug`, `package`, `require`, `dofile`, `loadfile`, `load`, `collectgarbage`
+
+The `os` module is replaced with a safe subset exposing only `os.time`, `os.date`, `os.difftime`, and `os.clock`. Dangerous functions like `os.execute`, `os.remove`, `os.rename`, and `os.exit` are not available.
 
 An instruction limit of 1,000,000 prevents infinite loops. Exceeding it terminates the script with an error.
 

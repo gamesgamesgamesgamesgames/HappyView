@@ -6,14 +6,25 @@ const INSTRUCTION_LIMIT: u32 = 1_000_000;
 
 /// Create a fresh sandboxed Lua VM.
 ///
-/// - Dangerous globals (`os`, `io`, `debug`, `package`, `require`, `dofile`, `loadfile`, `load`) are removed.
+/// - Dangerous globals (`io`, `debug`, `package`, `require`, `dofile`, `loadfile`, `load`) are removed.
+/// - `os` is replaced with a safe subset exposing only `time`, `date`, `difftime`, and `clock`.
 /// - An instruction-count hook prevents infinite loops.
 /// - Utility globals `now()` and `log()` are injected.
 pub fn create_sandbox() -> LuaResult<Lua> {
     let lua = Lua::new();
 
-    // Remove dangerous globals
+    // Preserve safe os functions before removing the full os table
     let globals = lua.globals();
+    let safe_os = lua.create_table()?;
+    if let Ok(os_table) = globals.get::<mlua::Table>("os") {
+        for name in &["time", "date", "difftime", "clock"] {
+            if let Ok(func) = os_table.get::<mlua::Function>(*name) {
+                safe_os.set(*name, func)?;
+            }
+        }
+    }
+
+    // Remove dangerous globals
     for name in &[
         "os",
         "io",
@@ -27,6 +38,9 @@ pub fn create_sandbox() -> LuaResult<Lua> {
     ] {
         globals.raw_set(*name, mlua::Value::Nil)?;
     }
+
+    // Re-add os with only safe functions (time, date, difftime, clock)
+    globals.set("os", safe_os)?;
 
     // Instruction limit to prevent infinite loops
     lua.set_hook(
@@ -120,11 +134,25 @@ mod tests {
     fn sandbox_removes_dangerous_globals() {
         let lua = create_sandbox().unwrap();
         let globals = lua.globals();
-        assert!(globals.get::<mlua::Value>("os").unwrap().is_nil());
         assert!(globals.get::<mlua::Value>("io").unwrap().is_nil());
         assert!(globals.get::<mlua::Value>("debug").unwrap().is_nil());
         assert!(globals.get::<mlua::Value>("package").unwrap().is_nil());
         assert!(globals.get::<mlua::Value>("require").unwrap().is_nil());
+    }
+
+    #[test]
+    fn sandbox_provides_safe_os_subset() {
+        let lua = create_sandbox().unwrap();
+        let os_table: mlua::Table = lua.globals().get("os").unwrap();
+        assert!(os_table.get::<mlua::Function>("time").is_ok());
+        assert!(os_table.get::<mlua::Function>("date").is_ok());
+        assert!(os_table.get::<mlua::Function>("difftime").is_ok());
+        assert!(os_table.get::<mlua::Function>("clock").is_ok());
+        // Dangerous os functions should not be present
+        assert!(os_table.get::<mlua::Value>("execute").unwrap().is_nil());
+        assert!(os_table.get::<mlua::Value>("remove").unwrap().is_nil());
+        assert!(os_table.get::<mlua::Value>("rename").unwrap().is_nil());
+        assert!(os_table.get::<mlua::Value>("exit").unwrap().is_nil());
     }
 
     #[test]
