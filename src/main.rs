@@ -7,7 +7,7 @@ use happyview::dns::NativeDnsResolver;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
 use happyview::rate_limit::RateLimiter;
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
-use happyview::{AppState, labeler, server, tap};
+use happyview::{AppState, jetstream, labeler, server};
 use tokio::sync::watch;
 use tracing::{info, warn};
 
@@ -21,6 +21,9 @@ use atrium_oauth::{
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
+
+    // Install rustls crypto provider early so all TLS users (jetstream, labeler, etc.) can find it.
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -350,7 +353,6 @@ async fn main() {
         axum_extra::extract::cookie::Key::derive_from(config.session_secret.as_bytes());
 
     let initial_collections = lexicons.get_record_collections().await;
-    let initial_collections_for_sync = initial_collections.clone();
     let (collections_tx, collections_rx) = watch::channel(initial_collections);
     let (labeler_subscriptions_tx, labeler_subscriptions_rx) = watch::channel(());
 
@@ -370,25 +372,7 @@ async fn main() {
         attestation_signer,
     };
 
-    // Sync initial collections to Tap on startup.
-    {
-        let mut wanted = initial_collections_for_sync;
-        if !wanted.contains(&"com.atproto.lexicon.schema".to_string()) {
-            wanted.push("com.atproto.lexicon.schema".to_string());
-        }
-        if let Err(e) = tap::sync_collections(
-            &state.http,
-            &config.tap_url,
-            config.tap_admin_password.as_deref(),
-            &wanted,
-        )
-        .await
-        {
-            warn!("failed to sync initial collections to tap: {e}");
-        }
-    }
-
-    tap::spawn(state.clone(), collections_rx);
+    jetstream::spawn(state.clone(), collections_rx);
 
     labeler::spawn(state.clone(), labeler_subscriptions_rx);
     tokio::spawn(labeler::spawn_label_gc(state.db.clone(), state.db_backend));

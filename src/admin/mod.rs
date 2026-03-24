@@ -12,7 +12,6 @@ mod records;
 mod script_variables;
 pub(crate) mod settings;
 mod stats;
-mod tap_stats;
 mod types;
 mod users;
 
@@ -55,7 +54,6 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/records/collection",
             delete(records::delete_collection_records),
         )
-        .route("/tap/stats", get(tap_stats::tap_stats))
         .route(
             "/network-lexicons",
             post(network_lexicons::add).get(network_lexicons::list),

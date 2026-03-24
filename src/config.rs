@@ -11,8 +11,7 @@ pub struct Config {
     pub database_backend: DatabaseBackend,
     pub public_url: String,
     pub session_secret: String,
-    pub tap_url: String,
-    pub tap_admin_password: Option<String>,
+    pub jetstream_url: String,
     pub relay_url: String,
     pub plc_url: String,
     pub static_dir: String,
@@ -43,8 +42,8 @@ impl Config {
             public_url: env::var("PUBLIC_URL").expect("PUBLIC_URL must be set"),
             session_secret: env::var("SESSION_SECRET")
                 .unwrap_or_else(|_| "change-me-in-production-not-secure".into()),
-            tap_url: env::var("TAP_URL").unwrap_or_else(|_| "http://localhost:2480".into()),
-            tap_admin_password: env::var("TAP_ADMIN_PASSWORD").ok(),
+            jetstream_url: env::var("JETSTREAM_URL")
+                .unwrap_or_else(|_| "wss://jetstream1.us-east.bsky.network".into()),
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
             plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
             static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| "./web/out".into()),
@@ -86,8 +85,7 @@ mod tests {
             "DATABASE_BACKEND",
             "PUBLIC_URL",
             "SESSION_SECRET",
-            "TAP_URL",
-            "TAP_ADMIN_PASSWORD",
+            "JETSTREAM_URL",
             "RELAY_URL",
             "PLC_URL",
             "EVENT_LOG_RETENTION_DAYS",
@@ -118,8 +116,7 @@ mod tests {
             database_backend: DatabaseBackend::Postgres,
             public_url: String::new(),
             session_secret: String::new(),
-            tap_url: String::new(),
-            tap_admin_password: None,
+            jetstream_url: String::new(),
             relay_url: String::new(),
             plc_url: String::new(),
             static_dir: String::new(),
@@ -158,8 +155,10 @@ mod tests {
         let config = Config::from_env();
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 3000);
-        assert_eq!(config.tap_url, "http://localhost:2480");
-        assert!(config.tap_admin_password.is_none());
+        assert_eq!(
+            config.jetstream_url,
+            "wss://jetstream1.us-east.bsky.network"
+        );
         assert_eq!(config.relay_url, "https://bsky.network");
         assert_eq!(config.plc_url, "https://plc.directory");
     }

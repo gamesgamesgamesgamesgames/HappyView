@@ -62,7 +62,7 @@ pub(super) struct CollectionStat {
 // Backfill types
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub(super) struct CreateBackfillBody {
     pub(super) collection: Option<String>,
     pub(super) did: Option<String>,
