@@ -534,14 +534,12 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     db_table.set("backlinks", backlinks_fn)?;
 
     // db.raw(sql, params?) -> rows[]
-    let state_raw = state;
+    let state_raw = state.clone();
     let raw_fn =
         lua.create_async_function(move |lua, (sql, params): (String, Option<mlua::Table>)| {
             let state = state_raw.clone();
             async move {
-                let backend = state.db_backend;
-                let adapted = adapt_sql(&sql, backend);
-                let mut query = sqlx::query(&adapted);
+                let mut query = sqlx::query(&sql);
                 if let Some(ref params_table) = params {
                     for value in params_table.sequence_values::<mlua::Value>() {
                         let value = value?;
@@ -599,6 +597,16 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             }
         })?;
     db_table.set("raw", raw_fn)?;
+
+    // db.backend() -> "sqlite" | "postgres"
+    let backend = state.db_backend;
+    let backend_fn = lua.create_function(move |_, ()| {
+        Ok(match backend {
+            DatabaseBackend::Sqlite => "sqlite",
+            DatabaseBackend::Postgres => "postgres",
+        })
+    })?;
+    db_table.set("backend", backend_fn)?;
 
     lua.globals().set("db", db_table)?;
     Ok(())

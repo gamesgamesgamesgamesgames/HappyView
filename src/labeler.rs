@@ -469,10 +469,14 @@ pub async fn spawn_label_gc(db: sqlx::AnyPool, backend: DatabaseBackend) {
     let interval = tokio::time::Duration::from_secs(3600); // 1 hour
 
     // Build database-specific cleanup query for expired labels
-    let expired_sql = adapt_sql(
-        "DELETE FROM labels WHERE exp IS NOT NULL AND exp < datetime('now')",
-        backend,
-    );
+    let expired_sql = match backend {
+        DatabaseBackend::Sqlite => {
+            "DELETE FROM labels WHERE exp IS NOT NULL AND exp < datetime('now')".to_string()
+        }
+        DatabaseBackend::Postgres => {
+            "DELETE FROM labels WHERE exp IS NOT NULL AND exp < NOW()".to_string()
+        }
+    };
 
     loop {
         tokio::time::sleep(interval).await;
