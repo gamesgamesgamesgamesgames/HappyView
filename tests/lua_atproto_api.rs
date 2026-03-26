@@ -65,7 +65,7 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
     AppState {
         config,
         http: reqwest::Client::new(),
-        db: pool,
+        db: pool.clone(),
         db_backend: backend,
         lexicons: LexiconRegistry::new(),
         collections_tx: tx,
@@ -82,6 +82,7 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
             vec![],
         ),
         oauth: std::sync::Arc::new(oauth),
+        oauth_state_store: happyview::auth::oauth_store::DbStateStore::new(pool.clone(), backend),
         cookie_key: axum_extra::extract::cookie::Key::derive_from(b"test-secret"),
         plugin_registry: std::sync::Arc::new(happyview::plugin::PluginRegistry::new()),
         wasm_runtime: std::sync::Arc::new(

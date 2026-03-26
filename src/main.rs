@@ -282,8 +282,9 @@ async fn main() {
         http_client: Arc::clone(&atrium_http),
     });
 
-    let is_loopback =
-        config.public_url.contains("127.0.0.1") || config.public_url.contains("[::1]");
+    let is_loopback = config.public_url.contains("127.0.0.1")
+        || config.public_url.contains("[::1]")
+        || config.public_url.contains("localhost");
 
     let resolver_config = OAuthResolverConfig {
         did_resolver,
@@ -291,6 +292,8 @@ async fn main() {
         authorization_server_metadata: Default::default(),
         protected_resource_metadata: Default::default(),
     };
+
+    let oauth_state_store = DbStateStore::new(db_pool.clone(), db_backend);
 
     let oauth_client = if is_loopback {
         info!("Using loopback OAuth client metadata (local development)");
@@ -303,7 +306,7 @@ async fn main() {
                 ]),
             },
             keys: None,
-            state_store: DbStateStore::new(db_pool.clone(), db_backend),
+            state_store: oauth_state_store.clone(),
             session_store: DbSessionStore::new(db_pool.clone(), db_backend),
             resolver: resolver_config,
         })
@@ -327,7 +330,7 @@ async fn main() {
                 token_endpoint_auth_signing_alg: None,
             },
             keys: None,
-            state_store: DbStateStore::new(db_pool.clone(), db_backend),
+            state_store: oauth_state_store.clone(),
             session_store: DbSessionStore::new(db_pool.clone(), db_backend),
             resolver: resolver_config,
         })
@@ -366,6 +369,7 @@ async fn main() {
         labeler_subscriptions_tx,
         rate_limiter,
         oauth: Arc::new(oauth_client),
+        oauth_state_store,
         cookie_key,
         plugin_registry,
         wasm_runtime,

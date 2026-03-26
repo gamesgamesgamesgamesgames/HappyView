@@ -109,7 +109,7 @@ impl TestApp {
         let state = AppState {
             config,
             http: reqwest::Client::new(),
-            db: pool,
+            db: pool.clone(),
             db_backend: backend,
             lexicons,
             collections_tx,
@@ -126,6 +126,10 @@ impl TestApp {
                 vec![],
             ),
             oauth: std::sync::Arc::new(oauth),
+            oauth_state_store: happyview::auth::oauth_store::DbStateStore::new(
+                pool.clone(),
+                backend,
+            ),
             cookie_key: axum_extra::extract::cookie::Key::derive_from(
                 b"test-secret-that-is-at-least-32-bytes-long",
             ),

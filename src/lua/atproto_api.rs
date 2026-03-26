@@ -267,7 +267,7 @@ mod tests {
         AppState {
             config,
             http: reqwest::Client::new(),
-            db: test_db,
+            db: test_db.clone(),
             db_backend: DatabaseBackend::Sqlite,
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
@@ -284,6 +284,10 @@ mod tests {
                 vec![],
             ),
             oauth: std::sync::Arc::new(oauth),
+            oauth_state_store: crate::auth::oauth_store::DbStateStore::new(
+                test_db.clone(),
+                crate::db::DatabaseBackend::Sqlite,
+            ),
             cookie_key: axum_extra::extract::cookie::Key::derive_from(
                 b"test-secret-for-tests-only-not-production",
             ),

@@ -4,6 +4,7 @@ use atrium_oauth::store::session::{Session, SessionStore};
 use atrium_oauth::store::state::{InternalStateData, StateStore};
 use sqlx::AnyPool;
 use std::fmt;
+use std::sync::{Arc, Mutex};
 
 use crate::db::{DatabaseBackend, adapt_sql};
 
@@ -116,11 +117,27 @@ impl SessionStore for DbSessionStore {}
 pub struct DbStateStore {
     pool: AnyPool,
     backend: DatabaseBackend,
+    /// Captures the most recently stored state key so callers can associate
+    /// additional data (e.g., redirect URIs) with the OAuth state.
+    last_state_key: Arc<Mutex<Option<String>>>,
+    /// Serializes authorize() + take_last_state_key() pairs so concurrent
+    /// logins cannot interleave and swap each other's state keys.
+    pub authorize_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl DbStateStore {
     pub fn new(pool: AnyPool, backend: DatabaseBackend) -> Self {
-        Self { pool, backend }
+        Self {
+            pool,
+            backend,
+            last_state_key: Arc::new(Mutex::new(None)),
+            authorize_lock: Arc::new(tokio::sync::Mutex::new(())),
+        }
+    }
+
+    /// Returns the state key from the most recent `set()` call, clearing it.
+    pub fn take_last_state_key(&self) -> Option<String> {
+        self.last_state_key.lock().unwrap().take()
     }
 }
 
@@ -153,6 +170,7 @@ impl Store<String, InternalStateData> for DbStateStore {
         .bind(&json)
         .execute(&self.pool)
         .await?;
+        *self.last_state_key.lock().unwrap() = Some(key);
         Ok(())
     }
 

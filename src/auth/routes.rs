@@ -41,25 +41,31 @@ async fn login(
     jar: SignedCookieJar<Key>,
     Query(query): Query<LoginQuery>,
 ) -> Result<(SignedCookieJar<Key>, Json<serde_json::Value>), AppError> {
+    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, "login request");
+
+    // Hold the authorize lock so that authorize() + take_last_state_key() are atomic.
+    // This prevents concurrent logins from swapping each other's state keys.
+    let _authorize_guard = state.oauth_state_store.authorize_lock.lock().await;
+
     let url = state
         .oauth
         .authorize(&query.handle, Default::default())
         .await
         .map_err(|e| AppError::Internal(format!("OAuth authorize failed: {e}")))?;
 
+    // Capture the state key immediately after authorize(). We can't parse it from the URL
+    // because atrium uses PAR (Pushed Authorization Requests), so the state is embedded
+    // in the pushed request, not visible in the URL.
+    let oauth_state = state.oauth_state_store.take_last_state_key();
+
+    drop(_authorize_guard);
+
+    tracing::debug!(authorize_url = %url, "authorize URL generated");
+
     // Store the redirect URI in the database, keyed by the OAuth state parameter.
     // This avoids third-party cookie issues when Pentaract (cross-origin) calls this endpoint.
     if let Some(redirect_uri) = &query.redirect_uri {
-        // Extract the state param from the authorize URL query string
-        let oauth_state = url
-            .split('?')
-            .nth(1)
-            .and_then(|qs| qs.split('&').find_map(|pair| pair.strip_prefix("state=")))
-            .map(|s| {
-                urlencoding::decode(s)
-                    .unwrap_or_else(|_| s.into())
-                    .to_string()
-            });
+        tracing::debug!(oauth_state = ?oauth_state, redirect_uri = %redirect_uri, "storing redirect for state");
 
         if let Some(oauth_state) = oauth_state {
             let now = now_rfc3339();
@@ -75,6 +81,8 @@ async fn login(
                 .bind(&expires_at)
                 .execute(&state.db)
                 .await;
+        } else {
+            tracing::warn!("no state key captured from OAuth authorize — redirect will be lost");
         }
     }
 
@@ -86,6 +94,8 @@ async fn callback(
     jar: SignedCookieJar<Key>,
     Query(query): Query<CallbackQuery>,
 ) -> Result<(SignedCookieJar<Key>, Redirect), AppError> {
+    tracing::debug!(state = ?query.state, "callback received");
+
     // Look up the redirect URI from the database before the OAuth library consumes the state
     let redirect_url = if let Some(oauth_state) = &query.state {
         let sql = adapt_sql(
@@ -112,8 +122,10 @@ async fn callback(
                 .await;
         }
 
+        tracing::debug!(found_redirect = ?row, "redirect lookup result");
         row.map(|(uri,)| uri)
     } else {
+        tracing::debug!("no state in callback query");
         None
     };
 
@@ -137,6 +149,7 @@ async fn callback(
 
     // Use DB-stored redirect, or default to "/"
     let redirect_url = redirect_url.unwrap_or_else(|| "/".to_string());
+    tracing::debug!(redirect_url = %redirect_url, "redirecting after callback");
 
     // Set the session cookie
     // Must use SameSite=None for cross-origin requests (e.g., Pentaract calling HappyView)
