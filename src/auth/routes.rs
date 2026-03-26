@@ -1,3 +1,7 @@
+use crate::AppState;
+use crate::auth::COOKIE_NAME;
+use crate::db::{adapt_sql, now_rfc3339};
+use crate::error::AppError;
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -6,10 +10,6 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, Key, SignedCookieJar};
 use serde::Deserialize;
-use crate::AppState;
-use crate::auth::COOKIE_NAME;
-use crate::db::{adapt_sql, now_rfc3339};
-use crate::error::AppError;
 
 /// Legacy cookie name from the old cookie-based redirect approach.
 /// Detected and removed in the callback to clean up stale cookies.
@@ -54,11 +54,12 @@ async fn login(
         let oauth_state = url
             .split('?')
             .nth(1)
-            .and_then(|qs| {
-                qs.split('&')
-                    .find_map(|pair| pair.strip_prefix("state="))
-            })
-            .map(|s| urlencoding::decode(s).unwrap_or_else(|_| s.into()).to_string());
+            .and_then(|qs| qs.split('&').find_map(|pair| pair.strip_prefix("state=")))
+            .map(|s| {
+                urlencoding::decode(s)
+                    .unwrap_or_else(|_| s.into())
+                    .to_string()
+            });
 
         if let Some(oauth_state) = oauth_state {
             let now = now_rfc3339();
@@ -101,8 +102,14 @@ async fn callback(
 
         // Clean up the row (one-time use)
         if row.is_some() {
-            let delete_sql = adapt_sql("DELETE FROM auth_login_redirects WHERE state = ?", state.db_backend);
-            let _ = sqlx::query(&delete_sql).bind(oauth_state).execute(&state.db).await;
+            let delete_sql = adapt_sql(
+                "DELETE FROM auth_login_redirects WHERE state = ?",
+                state.db_backend,
+            );
+            let _ = sqlx::query(&delete_sql)
+                .bind(oauth_state)
+                .execute(&state.db)
+                .await;
         }
 
         row.map(|(uri,)| uri)
