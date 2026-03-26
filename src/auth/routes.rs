@@ -6,13 +6,14 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, Key, SignedCookieJar};
 use serde::Deserialize;
-
 use crate::AppState;
 use crate::auth::COOKIE_NAME;
-use crate::db::adapt_sql;
+use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 
-const REDIRECT_COOKIE_NAME: &str = "happyview_redirect";
+/// Legacy cookie name from the old cookie-based redirect approach.
+/// Detected and removed in the callback to clean up stale cookies.
+const LEGACY_REDIRECT_COOKIE: &str = "happyview_redirect";
 
 #[derive(Deserialize)]
 pub struct LoginQuery {
@@ -46,18 +47,35 @@ async fn login(
         .await
         .map_err(|e| AppError::Internal(format!("OAuth authorize failed: {e}")))?;
 
-    // Store the redirect URI in a cookie if provided
-    // Must use SameSite=None for cross-origin requests (e.g., Pentaract calling HappyView)
-    let jar = if let Some(redirect_uri) = query.redirect_uri {
-        let mut cookie = Cookie::new(REDIRECT_COOKIE_NAME, redirect_uri);
-        cookie.set_path("/");
-        cookie.set_http_only(true);
-        cookie.set_same_site(axum_extra::extract::cookie::SameSite::None);
-        cookie.set_secure(true); // Required when SameSite=None
-        jar.add(cookie)
-    } else {
-        jar
-    };
+    // Store the redirect URI in the database, keyed by the OAuth state parameter.
+    // This avoids third-party cookie issues when Pentaract (cross-origin) calls this endpoint.
+    if let Some(redirect_uri) = &query.redirect_uri {
+        // Extract the state param from the authorize URL query string
+        let oauth_state = url
+            .split('?')
+            .nth(1)
+            .and_then(|qs| {
+                qs.split('&')
+                    .find_map(|pair| pair.strip_prefix("state="))
+            })
+            .map(|s| urlencoding::decode(s).unwrap_or_else(|_| s.into()).to_string());
+
+        if let Some(oauth_state) = oauth_state {
+            let now = now_rfc3339();
+            let expires_at = (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
+            let sql = adapt_sql(
+                "INSERT INTO auth_login_redirects (state, redirect_uri, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                state.db_backend,
+            );
+            let _ = sqlx::query(&sql)
+                .bind(&oauth_state)
+                .bind(redirect_uri)
+                .bind(&now)
+                .bind(&expires_at)
+                .execute(&state.db)
+                .await;
+        }
+    }
 
     Ok((jar, Json(serde_json::json!({ "url": url }))))
 }
@@ -67,6 +85,31 @@ async fn callback(
     jar: SignedCookieJar<Key>,
     Query(query): Query<CallbackQuery>,
 ) -> Result<(SignedCookieJar<Key>, Redirect), AppError> {
+    // Look up the redirect URI from the database before the OAuth library consumes the state
+    let redirect_url = if let Some(oauth_state) = &query.state {
+        let sql = adapt_sql(
+            "SELECT redirect_uri FROM auth_login_redirects WHERE state = ? AND expires_at > ?",
+            state.db_backend,
+        );
+        let now = now_rfc3339();
+        let row: Option<(String,)> = sqlx::query_as(&sql)
+            .bind(oauth_state)
+            .bind(&now)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+
+        // Clean up the row (one-time use)
+        if row.is_some() {
+            let delete_sql = adapt_sql("DELETE FROM auth_login_redirects WHERE state = ?", state.db_backend);
+            let _ = sqlx::query(&delete_sql).bind(oauth_state).execute(&state.db).await;
+        }
+
+        row.map(|(uri,)| uri)
+    } else {
+        None
+    };
+
     let params = atrium_oauth::CallbackParams {
         code: query.code,
         state: query.state,
@@ -85,11 +128,8 @@ async fn callback(
         .await
         .ok_or_else(|| AppError::Internal("no DID in OAuth session".into()))?;
 
-    // Get the redirect URL from cookie, defaulting to "/"
-    let redirect_url = jar
-        .get(REDIRECT_COOKIE_NAME)
-        .map(|c| c.value().to_string())
-        .unwrap_or_else(|| "/".to_string());
+    // Use DB-stored redirect, or default to "/"
+    let redirect_url = redirect_url.unwrap_or_else(|| "/".to_string());
 
     // Set the session cookie
     // Must use SameSite=None for cross-origin requests (e.g., Pentaract calling HappyView)
@@ -99,13 +139,17 @@ async fn callback(
     session_cookie.set_same_site(axum_extra::extract::cookie::SameSite::None);
     session_cookie.set_secure(true); // Required when SameSite=None
 
-    // Remove the redirect cookie (must match attributes from login)
-    let mut redirect_removal = Cookie::from(REDIRECT_COOKIE_NAME);
-    redirect_removal.set_path("/");
-    redirect_removal.set_same_site(axum_extra::extract::cookie::SameSite::None);
-    redirect_removal.set_secure(true);
+    // Remove the legacy redirect cookie if present (old cookie-based approach)
+    let jar = if jar.get(LEGACY_REDIRECT_COOKIE).is_some() {
+        let mut removal = Cookie::from(LEGACY_REDIRECT_COOKIE);
+        removal.set_path("/");
+        removal.set_same_site(axum_extra::extract::cookie::SameSite::None);
+        removal.set_secure(true);
+        jar.add(session_cookie).remove(removal)
+    } else {
+        jar.add(session_cookie)
+    };
 
-    let jar = jar.add(session_cookie).remove(redirect_removal);
     Ok((jar, Redirect::to(&redirect_url)))
 }
 
