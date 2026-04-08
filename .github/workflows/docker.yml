@@ -86,16 +86,3 @@ jobs:
             docker buildx imagetools create $ATCR_TAGS \
               ${{ env.ATCR_IMAGE }}@${{ steps.build.outputs.digest }}
           fi
-
-  trigger-deploy:
-    if: github.event_name == 'release'
-    needs: [happyview]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger deploy in appview-infra
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.DISPATCH_GH_TOKEN }}
-          repository: gamesgamesgamesgamesgames/appview-infra
-          event-type: deploy
-          client-payload: '{"image_tag": "${{ github.event.release.tag_name }}"}'
