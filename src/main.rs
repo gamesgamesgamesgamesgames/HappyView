@@ -186,18 +186,20 @@ async fn main() {
     let wasm_runtime =
         Arc::new(happyview::plugin::WasmRuntime::new().expect("Failed to create WASM runtime"));
 
-    // Initialize attestation signer (optional)
-    let attestation_signer = match happyview::plugin::attestation::load_from_env() {
-        Ok(Some(signer)) => {
+    // Initialize attestation signer (auto-generates key if none exists)
+    let attestation_signer = match happyview::plugin::attestation::load_or_generate(
+        &db_pool,
+        db_backend,
+        &config.public_url,
+    )
+    .await
+    {
+        Ok(signer) => {
             tracing::info!("Attestation signing enabled");
             Some(Arc::new(signer))
         }
-        Ok(None) => {
-            tracing::info!("Attestation signing disabled (no ATTESTATION_PRIVATE_KEY)");
-            None
-        }
         Err(e) => {
-            tracing::error!(error = %e, "Failed to load attestation signer");
+            tracing::error!(error = %e, "Failed to initialize attestation signer");
             None
         }
     };

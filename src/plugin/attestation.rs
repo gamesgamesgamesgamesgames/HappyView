@@ -302,11 +302,13 @@ fn json_to_cbor(value: &Value) -> ciborium::Value {
 /// Shared attestation signer for the application
 pub type SharedAttestationSigner = Arc<AttestationSigner>;
 
-/// Load attestation signer from environment variables
+/// Load attestation signer from environment variables.
+///
+/// Returns `Ok(None)` when no `ATTESTATION_PRIVATE_KEY` is set.
 pub fn load_from_env() -> Result<Option<AttestationSigner>, AttestationError> {
     let private_key = match std::env::var("ATTESTATION_PRIVATE_KEY") {
         Ok(k) => k,
-        Err(_) => return Ok(None), // No key configured, attestation disabled
+        Err(_) => return Ok(None),
     };
 
     let key_id = std::env::var("ATTESTATION_KEY_ID")
@@ -320,6 +322,114 @@ pub fn load_from_env() -> Result<Option<AttestationSigner>, AttestationError> {
         key_id,
         sig_type,
     )?))
+}
+
+/// Load or auto-generate the attestation signer.
+///
+/// Priority order:
+/// 1. Environment variables (`ATTESTATION_PRIVATE_KEY`, etc.)
+/// 2. `instance_settings` table in the database
+/// 3. Generate a fresh key, persist it to `instance_settings`, and use it
+///
+/// `key_id` is derived from `public_url` when not explicitly set:
+/// `did:web:{host}#attestation`
+pub async fn load_or_generate(
+    db: &sqlx::AnyPool,
+    backend: crate::db::DatabaseBackend,
+    public_url: &str,
+) -> Result<AttestationSigner, AttestationError> {
+    use crate::db::adapt_sql;
+
+    // 1. Try env vars first (explicit override)
+    if let Some(signer) = load_from_env()? {
+        tracing::info!("Attestation signer loaded from environment variables");
+        return Ok(signer);
+    }
+
+    // Derive default key_id from public_url (extract host without adding a url crate dep)
+    let host = public_url
+        .strip_prefix("https://")
+        .or_else(|| public_url.strip_prefix("http://"))
+        .unwrap_or(public_url)
+        .split('/')
+        .next()
+        .unwrap_or("localhost")
+        .split(':')
+        .next()
+        .unwrap_or("localhost")
+        .to_string();
+    let default_key_id = format!("did:web:{host}#attestation");
+    let default_sig_type = "games.gamesgamesgamesgames.attestation".to_string();
+
+    // 2. Try loading from instance_settings
+    let sql = adapt_sql(
+        "SELECT value FROM instance_settings WHERE key = ?",
+        backend,
+    );
+    let existing: Option<(String,)> = sqlx::query_as(&sql)
+        .bind("attestation_private_key")
+        .fetch_optional(db)
+        .await
+        .map_err(|e| AttestationError::Encoding(format!("db query failed: {e}")))?;
+
+    if let Some((hex_key,)) = existing {
+        // Load key_id and sig_type from DB too (or use defaults)
+        let key_id: Option<(String,)> = sqlx::query_as(&sql)
+            .bind("attestation_key_id")
+            .fetch_optional(db)
+            .await
+            .map_err(|e| AttestationError::Encoding(format!("db query failed: {e}")))?;
+        let sig_type: Option<(String,)> = sqlx::query_as(&sql)
+            .bind("attestation_sig_type")
+            .fetch_optional(db)
+            .await
+            .map_err(|e| AttestationError::Encoding(format!("db query failed: {e}")))?;
+
+        tracing::info!("Attestation signer loaded from database");
+        return AttestationSigner::from_hex(
+            &hex_key,
+            key_id.map(|r| r.0).unwrap_or(default_key_id),
+            sig_type.map(|r| r.0).unwrap_or(default_sig_type),
+        );
+    }
+
+    // 3. Generate a new key and persist it
+    tracing::info!("Generating new attestation signing key");
+    let hex_key = {
+        // Generate 32 random bytes for a K-256 private key
+        use rand::RngCore;
+        let mut key_bytes = [0u8; 32];
+        rand::rng().fill_bytes(&mut key_bytes);
+        // Validate it's a valid K-256 scalar by trying to construct a SigningKey
+        let _ = SigningKey::from_bytes((&key_bytes[..]).into())
+            .map_err(|e| AttestationError::InvalidKey(format!("generated invalid key: {e}")))?;
+        hex::encode(key_bytes)
+    };
+
+    let upsert_sql = adapt_sql(
+        "INSERT INTO instance_settings (key, value, updated_at) VALUES (?, ?, ?) \
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        backend,
+    );
+    let now = crate::db::now_rfc3339();
+
+    for (k, v) in [
+        ("attestation_private_key", hex_key.as_str()),
+        ("attestation_key_id", default_key_id.as_str()),
+        ("attestation_sig_type", default_sig_type.as_str()),
+    ] {
+        sqlx::query(&upsert_sql)
+            .bind(k)
+            .bind(v)
+            .bind(&now)
+            .execute(db)
+            .await
+            .map_err(|e| AttestationError::Encoding(format!("failed to persist key: {e}")))?;
+    }
+
+    tracing::info!(key_id = %default_key_id, "Attestation signing key generated and persisted");
+
+    AttestationSigner::from_hex(&hex_key, default_key_id, default_sig_type)
 }
 
 #[cfg(test)]
@@ -476,6 +586,85 @@ mod tests {
         assert!(
             !signer
                 .verify_record_signature(&record, &sig, "did:plc:test")
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_load_or_generate_creates_key() {
+        sqlx::any::install_default_drivers();
+        let pool = sqlx::pool::PoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE instance_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT '')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let signer = load_or_generate(
+            &pool,
+            crate::db::DatabaseBackend::Sqlite,
+            "https://happyview.example.com",
+        )
+        .await
+        .expect("should generate a key");
+
+        // Key ID should be derived from public_url
+        assert_eq!(signer.key_id, "did:web:happyview.example.com#attestation");
+
+        // Should be persisted — loading again returns the same key
+        let signer2 = load_or_generate(
+            &pool,
+            crate::db::DatabaseBackend::Sqlite,
+            "https://happyview.example.com",
+        )
+        .await
+        .expect("should load from DB");
+
+        // Same key → same public key bytes
+        assert_eq!(signer.public_key_bytes(), signer2.public_key_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_load_or_generate_sign_verify_roundtrip() {
+        sqlx::any::install_default_drivers();
+        let pool = sqlx::pool::PoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE instance_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT '')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let signer = load_or_generate(
+            &pool,
+            crate::db::DatabaseBackend::Sqlite,
+            "https://example.com",
+        )
+        .await
+        .unwrap();
+
+        let mut record = serde_json::json!({
+            "contributionType": "correction",
+            "changes": {"name": "Test"},
+        });
+
+        signer
+            .sign_record(&mut record, "did:plc:user123")
+            .unwrap();
+
+        let sig = &record["signatures"].as_array().unwrap()[0];
+        assert!(
+            signer
+                .verify_record_signature(&record, sig, "did:plc:user123")
                 .unwrap()
         );
     }
