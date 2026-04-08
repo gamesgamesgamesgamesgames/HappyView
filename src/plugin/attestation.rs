@@ -188,6 +188,68 @@ impl AttestationSigner {
 
         Ok(signature.to_bytes().to_vec())
     }
+
+    /// Verify that a signature in a record was produced by this signer.
+    ///
+    /// Recomputes the CID from the record (same process as signing) and verifies
+    /// the ECDSA signature using our public key.
+    pub fn verify_record_signature(
+        &self,
+        record: &Value,
+        signature_obj: &Value,
+        repository_did: &str,
+    ) -> Result<bool, AttestationError> {
+        use k256::ecdsa::{VerifyingKey, signature::Verifier};
+
+        // Check key ID matches
+        let key = signature_obj
+            .get("key")
+            .and_then(|k| k.as_str())
+            .ok_or_else(|| AttestationError::MissingField("signature.key".into()))?;
+
+        if key != self.key_id {
+            return Ok(false);
+        }
+
+        // Extract signature bytes
+        let sig_bytes_b64 = signature_obj
+            .get("signature")
+            .and_then(|s| s.get("$bytes"))
+            .and_then(|b| b.as_str())
+            .ok_or_else(|| AttestationError::MissingField("signature.signature.$bytes".into()))?;
+
+        let sig_bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            sig_bytes_b64,
+        )
+        .map_err(|e| AttestationError::Encoding(format!("invalid base64: {e}")))?;
+
+        let signature = Signature::from_bytes((&sig_bytes[..]).into())
+            .map_err(|e| AttestationError::Signing(format!("invalid signature bytes: {e}")))?;
+
+        // Recompute CID from record (same as signing)
+        let mut obj = record
+            .as_object()
+            .ok_or_else(|| AttestationError::Encoding("record must be an object".into()))?
+            .clone();
+
+        // Remove signatures for CID computation
+        obj.remove("signatures");
+
+        // Inject $sig metadata
+        let sig_metadata = serde_json::json!({
+            "$type": &self.sig_type,
+            "repository": repository_did,
+        });
+        obj.insert("$sig".to_string(), sig_metadata);
+
+        let cbor_bytes = self.encode_dag_cbor(&obj)?;
+        let cid = self.compute_cid(&cbor_bytes);
+
+        // Verify
+        let verifying_key = VerifyingKey::from(&self.signing_key);
+        Ok(verifying_key.verify(&cid.to_bytes(), &signature).is_ok())
+    }
 }
 
 /// Convert JSON Value to ciborium Value with deterministic ordering
@@ -327,5 +389,88 @@ mod tests {
         // Actually the CIDs should be the same since they're computed before signing
         // and the key ordering is normalized
         assert_eq!(cid1, cid2);
+    }
+
+    #[test]
+    fn test_verify_record_signature() {
+        let signer = AttestationSigner::for_testing(
+            "did:web:test.example#signing".to_string(),
+            "test.signature".to_string(),
+        );
+
+        let original = serde_json::json!({
+            "$type": "games.gamesgamesgamesgames.contribution",
+            "contributionType": "correction",
+            "changes": {"name": "Fixed Name"},
+            "createdAt": "2024-01-01T00:00:00Z"
+        });
+
+        let mut record = original.clone();
+        signer
+            .sign_record(&mut record, "did:plc:contributor")
+            .expect("signing should succeed");
+
+        let sig = &record["signatures"].as_array().unwrap()[0];
+
+        // Verification should succeed with correct DID
+        assert!(signer
+            .verify_record_signature(&record, sig, "did:plc:contributor")
+            .unwrap());
+
+        // Verification should fail with wrong DID (replay protection)
+        assert!(!signer
+            .verify_record_signature(&record, sig, "did:plc:wrong")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_verify_rejects_wrong_key_id() {
+        let signer = AttestationSigner::for_testing(
+            "did:web:test.example#signing".to_string(),
+            "test.signature".to_string(),
+        );
+
+        let forged_sig = serde_json::json!({
+            "$type": "test.signature",
+            "key": "did:web:evil.example#signing",
+            "signature": { "$bytes": "AAAA" }
+        });
+
+        let record = serde_json::json!({
+            "contributionType": "correction",
+            "changes": {"name": "test"}
+        });
+
+        assert!(!signer
+            .verify_record_signature(&record, &forged_sig, "did:plc:test")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_verify_rejects_tampered_record() {
+        let signer = AttestationSigner::for_testing(
+            "did:web:test.example#signing".to_string(),
+            "test.signature".to_string(),
+        );
+
+        let mut record = serde_json::json!({
+            "contributionType": "correction",
+            "changes": {"name": "Original"},
+            "createdAt": "2024-01-01T00:00:00Z"
+        });
+
+        signer
+            .sign_record(&mut record, "did:plc:test")
+            .expect("signing should succeed");
+
+        let sig = record["signatures"].as_array().unwrap()[0].clone();
+
+        // Tamper with the record
+        record["changes"]["name"] = serde_json::json!("Tampered");
+
+        // Verification should fail
+        assert!(!signer
+            .verify_record_signature(&record, &sig, "did:plc:test")
+            .unwrap());
     }
 }

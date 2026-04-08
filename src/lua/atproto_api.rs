@@ -1,4 +1,4 @@
-use mlua::{Lua, Result as LuaResult};
+use mlua::{Lua, LuaSerdeExt, Result as LuaResult};
 use std::sync::Arc;
 
 use crate::AppState;
@@ -6,7 +6,14 @@ use crate::db::{adapt_sql, now_rfc3339};
 use crate::profile;
 
 /// Register the `atproto` table with AT Protocol utility functions.
-pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
+///
+/// When `caller_did` is provided, the `atproto.sign(record)` function is
+/// available for inline attestation signing.
+pub fn register_atproto_api(
+    lua: &Lua,
+    state: Arc<AppState>,
+    caller_did: Option<&str>,
+) -> LuaResult<()> {
     let atproto_table = lua.create_table()?;
 
     let state_clone = state.clone();
@@ -192,6 +199,64 @@ pub fn register_atproto_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
     })?;
     atproto_table.set("get_labels_batch", get_labels_batch_fn)?;
 
+    // atproto.sign(record_table) -> inline signature object or nil
+    //
+    // Signs a record using the attestation signer and returns the inline
+    // signature object ({ $type, key, signature: { $bytes } }).
+    // Returns nil if no signer is configured.
+    if let Some(signer) = &state.attestation_signer {
+        let signer = signer.clone();
+        let did = caller_did.unwrap_or("").to_string();
+        let sign_fn = lua.create_function(move |lua, table: mlua::Value| {
+            let mut record: serde_json::Value = lua
+                .from_value(table)
+                .map_err(|e| mlua::Error::runtime(format!("atproto.sign: {e}")))?;
+
+            signer
+                .sign_record(&mut record, &did)
+                .map_err(|e| mlua::Error::runtime(format!("atproto.sign: {e}")))?;
+
+            // Extract the last signature (the one we just added)
+            let sig = record
+                .get("signatures")
+                .and_then(|s| s.as_array())
+                .and_then(|arr| arr.last())
+                .cloned()
+                .ok_or_else(|| mlua::Error::runtime("atproto.sign: no signature produced"))?;
+
+            lua.to_value(&sig)
+                .map_err(|e| mlua::Error::runtime(format!("atproto.sign: {e}")))
+        })?;
+        atproto_table.set("sign", sign_fn)?;
+    }
+
+    // atproto.verify_signature(record_table, sig_table, repository_did) -> boolean
+    //
+    // Verifies that an inline signature was produced by this HappyView instance.
+    // Recomputes the CID and verifies the ECDSA signature.
+    if let Some(signer) = &state.attestation_signer {
+        let signer = signer.clone();
+        let verify_fn = lua.create_function(
+            move |lua, (record, sig, repo_did): (mlua::Value, mlua::Value, String)| {
+                let record_json: serde_json::Value = lua
+                    .from_value(record)
+                    .map_err(|e| mlua::Error::runtime(format!("atproto.verify_signature: {e}")))?;
+                let sig_json: serde_json::Value = lua
+                    .from_value(sig)
+                    .map_err(|e| mlua::Error::runtime(format!("atproto.verify_signature: {e}")))?;
+
+                match signer.verify_record_signature(&record_json, &sig_json, &repo_did) {
+                    Ok(valid) => Ok(valid),
+                    Err(e) => {
+                        tracing::debug!(error = %e, "atproto.verify_signature failed");
+                        Ok(false)
+                    }
+                }
+            },
+        )?;
+        atproto_table.set("verify_signature", verify_fn)?;
+    }
+
     lua.globals().set("atproto", atproto_table)?;
     Ok(())
 }
@@ -321,7 +386,7 @@ mod tests {
 
         let state = test_state_with_plc(&mock.uri());
         let lua = mlua::Lua::new();
-        register_atproto_api(&lua, Arc::new(state)).unwrap();
+        register_atproto_api(&lua, Arc::new(state), None).unwrap();
 
         let chunk = r#"return atproto.resolve_service_endpoint("did:plc:test123")"#;
         let result: String = lua.load(chunk).eval_async().await.unwrap();
@@ -340,7 +405,7 @@ mod tests {
 
         let state = test_state_with_plc(&mock.uri());
         let lua = mlua::Lua::new();
-        register_atproto_api(&lua, Arc::new(state)).unwrap();
+        register_atproto_api(&lua, Arc::new(state), None).unwrap();
 
         let chunk = r#"return atproto.resolve_service_endpoint("did:plc:unknown")"#;
         let result: mlua::Value = lua.load(chunk).eval_async().await.unwrap();
@@ -353,10 +418,94 @@ mod tests {
 
         let state = test_state_with_plc(&mock.uri());
         let lua = mlua::Lua::new();
-        register_atproto_api(&lua, Arc::new(state)).unwrap();
+        register_atproto_api(&lua, Arc::new(state), None).unwrap();
 
         let chunk = r#"return type(atproto.resolve_service_endpoint)"#;
         let result: String = lua.load(chunk).eval_async().await.unwrap();
         assert_eq!(result, "function");
+    }
+
+    fn test_state_with_signer(plc_url: &str) -> AppState {
+        let mut state = test_state_with_plc(plc_url);
+        state.attestation_signer = Some(Arc::new(
+            crate::plugin::attestation::AttestationSigner::for_testing(
+                "did:web:test.example#signing".to_string(),
+                "test.signature".to_string(),
+            ),
+        ));
+        state
+    }
+
+    #[tokio::test]
+    async fn sign_returns_signature_object() {
+        let state = test_state_with_signer("");
+        let lua = mlua::Lua::new();
+        register_atproto_api(&lua, Arc::new(state), Some("did:plc:caller")).unwrap();
+
+        let chunk = r#"
+            local record = { contributionType = "correction", changes = { name = "Test" } }
+            local sig = atproto.sign(record)
+            return sig.key
+        "#;
+        let result: String = lua.load(chunk).eval_async().await.unwrap();
+        assert_eq!(result, "did:web:test.example#signing");
+    }
+
+    #[tokio::test]
+    async fn sign_returns_nil_without_signer() {
+        let state = test_state_with_plc("");
+        let lua = mlua::Lua::new();
+        register_atproto_api(&lua, Arc::new(state), Some("did:plc:caller")).unwrap();
+
+        let chunk = r#"return atproto.sign ~= nil"#;
+        let result: bool = lua.load(chunk).eval_async().await.unwrap();
+        // sign should not be registered when no signer is configured
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn verify_signature_roundtrip() {
+        let state = test_state_with_signer("");
+        let lua = mlua::Lua::new();
+        register_atproto_api(&lua, Arc::new(state), Some("did:plc:caller")).unwrap();
+
+        let chunk = r#"
+            local record = { contributionType = "correction", changes = { name = "Test" } }
+            local sig = atproto.sign(record)
+            return atproto.verify_signature(record, sig, "did:plc:caller")
+        "#;
+        let result: bool = lua.load(chunk).eval_async().await.unwrap();
+        assert!(result);
+    }
+
+    #[tokio::test]
+    async fn verify_signature_rejects_wrong_did() {
+        let state = test_state_with_signer("");
+        let lua = mlua::Lua::new();
+        register_atproto_api(&lua, Arc::new(state), Some("did:plc:caller")).unwrap();
+
+        let chunk = r#"
+            local record = { contributionType = "correction", changes = { name = "Test" } }
+            local sig = atproto.sign(record)
+            return atproto.verify_signature(record, sig, "did:plc:wrong")
+        "#;
+        let result: bool = lua.load(chunk).eval_async().await.unwrap();
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn verify_signature_rejects_tampered_record() {
+        let state = test_state_with_signer("");
+        let lua = mlua::Lua::new();
+        register_atproto_api(&lua, Arc::new(state), Some("did:plc:caller")).unwrap();
+
+        let chunk = r#"
+            local record = { contributionType = "correction", changes = { name = "Original" } }
+            local sig = atproto.sign(record)
+            record.changes.name = "Tampered"
+            return atproto.verify_signature(record, sig, "did:plc:caller")
+        "#;
+        let result: bool = lua.load(chunk).eval_async().await.unwrap();
+        assert!(!result);
     }
 }
