@@ -1,4 +1,4 @@
-use atrium_xrpc::{HttpClient, XrpcClient};
+use atrium_xrpc::{InputDataOrBytes, OutputDataOrBytes, XrpcClient, XrpcRequest, http::Method};
 use axum::body::Bytes;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -33,37 +33,45 @@ pub(crate) async fn forward_pds_response(resp: reqwest::Response) -> Result<Resp
 }
 
 /// POST JSON to a PDS XRPC endpoint using the OAuth session.
-/// The OAuthSession handles DPoP proof generation and nonce retry internally.
+/// Uses `send_xrpc` so the OAuthSession attaches DPoP proof and Bearer token.
 pub(crate) async fn pds_post_json_raw(
     _state: &AppState,
     session: &HappyViewOAuthSession,
     xrpc_method: &str,
     body: &Value,
 ) -> Result<reqwest::Response, AppError> {
-    let pds_endpoint = session.base_uri();
-    let url = format!("{}/xrpc/{xrpc_method}", pds_endpoint.trim_end_matches('/'));
+    let request = XrpcRequest {
+        method: Method::POST,
+        nsid: xrpc_method.to_string(),
+        parameters: None::<()>,
+        input: Some(InputDataOrBytes::Data(body.clone())),
+        encoding: Some("application/json".to_string()),
+    };
 
-    let body_bytes = serde_json::to_vec(body)
-        .map_err(|e| AppError::Internal(format!("failed to serialize body: {e}")))?;
+    let result: Result<OutputDataOrBytes<Value>, atrium_xrpc::Error<Value>> =
+        session.send_xrpc(&request).await;
 
-    let request = atrium_xrpc::http::Request::builder()
-        .method("POST")
-        .uri(&url)
-        .header("content-type", "application/json")
-        .body(body_bytes)
-        .map_err(|e| AppError::Internal(format!("failed to build request: {e}")))?;
-
-    let response = session
-        .send_http(request)
-        .await
-        .map_err(|e| AppError::Internal(format!("PDS request failed: {e}")))?;
-
-    // Convert atrium http::Response to reqwest::Response
-    let (parts, body) = response.into_parts();
-    let http_resp = atrium_xrpc::http::Response::from_parts(parts, body);
-    let reqwest_resp = reqwest::Response::from(http_resp);
-
-    Ok(reqwest_resp)
+    match result {
+        Ok(OutputDataOrBytes::Data(data)) => {
+            let body_bytes = serde_json::to_vec(&data)
+                .map_err(|e| AppError::Internal(format!("failed to serialize response: {e}")))?;
+            let http_resp = atrium_xrpc::http::Response::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(body_bytes)
+                .map_err(|e| AppError::Internal(format!("failed to build response: {e}")))?;
+            Ok(reqwest::Response::from(http_resp))
+        }
+        Ok(OutputDataOrBytes::Bytes(bytes)) => {
+            let http_resp = atrium_xrpc::http::Response::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(bytes)
+                .map_err(|e| AppError::Internal(format!("failed to build response: {e}")))?;
+            Ok(reqwest::Response::from(http_resp))
+        }
+        Err(e) => Err(AppError::Internal(format!("PDS request failed: {e}"))),
+    }
 }
 
 /// POST a binary blob to the PDS with OAuth session auth.
@@ -73,37 +81,34 @@ pub(super) async fn pds_post_blob(
     content_type: &str,
     blob: Bytes,
 ) -> Result<Response, AppError> {
-    let pds_endpoint = session.base_uri();
-    let url = format!(
-        "{}/xrpc/com.atproto.repo.uploadBlob",
-        pds_endpoint.trim_end_matches('/')
-    );
+    let request = XrpcRequest {
+        method: Method::POST,
+        nsid: "com.atproto.repo.uploadBlob".to_string(),
+        parameters: None::<()>,
+        input: Some(InputDataOrBytes::<()>::Bytes(blob.to_vec())),
+        encoding: Some(content_type.to_string()),
+    };
 
-    let request = atrium_xrpc::http::Request::builder()
-        .method("POST")
-        .uri(&url)
-        .header("content-type", content_type)
-        .body(blob.to_vec())
-        .map_err(|e| AppError::Internal(format!("failed to build request: {e}")))?;
+    let result: Result<OutputDataOrBytes<Value>, atrium_xrpc::Error<Value>> =
+        session.send_xrpc(&request).await;
 
-    let response = session
-        .send_http(request)
-        .await
-        .map_err(|e| AppError::Internal(format!("PDS uploadBlob failed: {e}")))?;
-
-    let status = StatusCode::from_u16(response.status().as_u16()).unwrap();
-    let body_bytes = response.into_body();
-
-    if status.is_success() {
-        Ok((
-            status,
+    match result {
+        Ok(OutputDataOrBytes::Data(data)) => {
+            let body_bytes = serde_json::to_vec(&data)
+                .map_err(|e| AppError::Internal(format!("failed to serialize response: {e}")))?;
+            Ok((
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "application/json")],
+                Bytes::from(body_bytes),
+            )
+                .into_response())
+        }
+        Ok(OutputDataOrBytes::Bytes(bytes)) => Ok((
+            StatusCode::OK,
             [(axum::http::header::CONTENT_TYPE, "application/json")],
-            Bytes::from(body_bytes),
+            Bytes::from(bytes),
         )
-            .into_response())
-    } else {
-        let body_str = String::from_utf8_lossy(&body_bytes);
-        tracing::warn!(status = %status, body = %body_str, "PDS uploadBlob returned error");
-        Err(AppError::PdsError(status, Bytes::from(body_bytes)))
+            .into_response()),
+        Err(e) => Err(AppError::Internal(format!("PDS uploadBlob failed: {e}"))),
     }
 }
