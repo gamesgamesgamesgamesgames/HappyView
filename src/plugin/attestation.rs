@@ -362,10 +362,7 @@ pub async fn load_or_generate(
     let default_sig_type = "games.gamesgamesgamesgames.attestation".to_string();
 
     // 2. Try loading from instance_settings
-    let sql = adapt_sql(
-        "SELECT value FROM instance_settings WHERE key = ?",
-        backend,
-    );
+    let sql = adapt_sql("SELECT value FROM instance_settings WHERE key = ?", backend);
     let existing: Option<(String,)> = sqlx::query_as(&sql)
         .bind("attestation_private_key")
         .fetch_optional(db)
@@ -657,9 +654,7 @@ mod tests {
             "changes": {"name": "Test"},
         });
 
-        signer
-            .sign_record(&mut record, "did:plc:user123")
-            .unwrap();
+        signer.sign_record(&mut record, "did:plc:user123").unwrap();
 
         let sig = &record["signatures"].as_array().unwrap()[0];
         assert!(
