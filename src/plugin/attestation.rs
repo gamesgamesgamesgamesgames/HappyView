@@ -218,11 +218,9 @@ impl AttestationSigner {
             .and_then(|b| b.as_str())
             .ok_or_else(|| AttestationError::MissingField("signature.signature.$bytes".into()))?;
 
-        let sig_bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            sig_bytes_b64,
-        )
-        .map_err(|e| AttestationError::Encoding(format!("invalid base64: {e}")))?;
+        let sig_bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, sig_bytes_b64)
+                .map_err(|e| AttestationError::Encoding(format!("invalid base64: {e}")))?;
 
         let signature = Signature::from_bytes((&sig_bytes[..]).into())
             .map_err(|e| AttestationError::Signing(format!("invalid signature bytes: {e}")))?;
@@ -413,14 +411,18 @@ mod tests {
         let sig = &record["signatures"].as_array().unwrap()[0];
 
         // Verification should succeed with correct DID
-        assert!(signer
-            .verify_record_signature(&record, sig, "did:plc:contributor")
-            .unwrap());
+        assert!(
+            signer
+                .verify_record_signature(&record, sig, "did:plc:contributor")
+                .unwrap()
+        );
 
         // Verification should fail with wrong DID (replay protection)
-        assert!(!signer
-            .verify_record_signature(&record, sig, "did:plc:wrong")
-            .unwrap());
+        assert!(
+            !signer
+                .verify_record_signature(&record, sig, "did:plc:wrong")
+                .unwrap()
+        );
     }
 
     #[test]
@@ -441,9 +443,11 @@ mod tests {
             "changes": {"name": "test"}
         });
 
-        assert!(!signer
-            .verify_record_signature(&record, &forged_sig, "did:plc:test")
-            .unwrap());
+        assert!(
+            !signer
+                .verify_record_signature(&record, &forged_sig, "did:plc:test")
+                .unwrap()
+        );
     }
 
     #[test]
@@ -469,8 +473,10 @@ mod tests {
         record["changes"]["name"] = serde_json::json!("Tampered");
 
         // Verification should fail
-        assert!(!signer
-            .verify_record_signature(&record, &sig, "did:plc:test")
-            .unwrap());
+        assert!(
+            !signer
+                .verify_record_signature(&record, &sig, "did:plc:test")
+                .unwrap()
+        );
     }
 }

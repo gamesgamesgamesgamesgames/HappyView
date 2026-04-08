@@ -163,9 +163,7 @@ pub async fn execute_procedure_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) =
-        atproto_api::register_atproto_api(&lua, state_arc.clone(), Some(claims.did()))
-    {
+    if let Err(e) = atproto_api::register_atproto_api(&lua, state_arc.clone(), Some(claims.did())) {
         let error_message = format!("failed to register atproto API: {e}");
         log_event(
             &state.db,
@@ -522,11 +520,7 @@ pub async fn execute_query_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = atproto_api::register_atproto_api(
-        &lua,
-        state_arc,
-        claims.map(|c| c.did()),
-    ) {
+    if let Err(e) = atproto_api::register_atproto_api(&lua, state_arc, claims.map(|c| c.did())) {
         let error_message = format!("failed to register atproto API: {e}");
         log_event(
             &state.db,
