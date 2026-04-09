@@ -2,6 +2,7 @@ use crate::AppState;
 use crate::auth::COOKIE_NAME;
 use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
+use atrium_oauth::{AuthorizeOptions, KnownScope, Scope};
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -19,6 +20,27 @@ const LEGACY_REDIRECT_COOKIE: &str = "happyview_redirect";
 pub struct LoginQuery {
     handle: String,
     redirect_uri: Option<String>,
+    scope: String,
+}
+
+fn parse_scopes(scope_str: &str) -> Result<Vec<Scope>, AppError> {
+    let scopes: Vec<Scope> = scope_str
+        .split_whitespace()
+        .map(|s| match s {
+            "atproto" => Scope::Known(KnownScope::Atproto),
+            "transition:generic" => Scope::Known(KnownScope::TransitionGeneric),
+            "transition:chat.bsky" => Scope::Known(KnownScope::TransitionChatBsky),
+            other => Scope::Unknown(other.to_string()),
+        })
+        .collect();
+
+    if scopes.is_empty() {
+        return Err(AppError::BadRequest(
+            "scope parameter must not be empty".into(),
+        ));
+    }
+
+    Ok(scopes)
 }
 
 #[derive(Deserialize)]
@@ -41,15 +63,22 @@ async fn login(
     jar: SignedCookieJar<Key>,
     Query(query): Query<LoginQuery>,
 ) -> Result<(SignedCookieJar<Key>, Json<serde_json::Value>), AppError> {
-    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, "login request");
+    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, scope = %query.scope, "login request");
+
+    let scopes = parse_scopes(&query.scope)?;
 
     // Hold the authorize lock so that authorize() + take_last_state_key() are atomic.
     // This prevents concurrent logins from swapping each other's state keys.
     let _authorize_guard = state.oauth_state_store.authorize_lock.lock().await;
 
+    let options = AuthorizeOptions {
+        scopes,
+        ..Default::default()
+    };
+
     let url = state
         .oauth
-        .authorize(&query.handle, Default::default())
+        .authorize(&query.handle, options)
         .await
         .map_err(|e| AppError::Internal(format!("OAuth authorize failed: {e}")))?;
 
