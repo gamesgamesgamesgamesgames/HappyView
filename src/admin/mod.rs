@@ -10,7 +10,7 @@ mod plugins;
 mod rate_limits;
 mod records;
 mod script_variables;
-pub(crate) mod settings;
+pub mod settings;
 mod stats;
 mod types;
 mod users;

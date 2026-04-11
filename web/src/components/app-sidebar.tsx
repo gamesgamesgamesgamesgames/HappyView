@@ -16,6 +16,7 @@ import {
   IconShield,
   IconLink,
   IconPuzzle,
+  IconLockAccess,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -59,6 +60,7 @@ const settingsSubItems = [
   { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
   { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
   { title: "Rate Limits", url: "/dashboard/settings/rate-limits", icon: IconShield, requiredPermissions: ["rate-limits:read"] },
+  { title: "OAuth", url: "/dashboard/settings/oauth", icon: IconLockAccess, requiredPermissions: ["settings:manage"] },
 ] as const
 
 export function AppSidebar({

@@ -20,11 +20,13 @@ const LEGACY_REDIRECT_COOKIE: &str = "happyview_redirect";
 pub struct LoginQuery {
     handle: String,
     redirect_uri: Option<String>,
-    scope: String,
 }
 
-fn parse_scopes(scope_str: &str) -> Result<Vec<Scope>, AppError> {
-    let scopes: Vec<Scope> = scope_str
+/// Parse a whitespace-separated OAuth scope string into typed `Scope` values.
+/// Known ATProto scope names are mapped to `Scope::Known`; anything else
+/// (e.g. `include:*` permission set references) becomes `Scope::Unknown`.
+pub fn parse_scope_string(scope_str: &str) -> Vec<Scope> {
+    scope_str
         .split_whitespace()
         .map(|s| match s {
             "atproto" => Scope::Known(KnownScope::Atproto),
@@ -32,15 +34,7 @@ fn parse_scopes(scope_str: &str) -> Result<Vec<Scope>, AppError> {
             "transition:chat.bsky" => Scope::Known(KnownScope::TransitionChatBsky),
             other => Scope::Unknown(other.to_string()),
         })
-        .collect();
-
-    if scopes.is_empty() {
-        return Err(AppError::BadRequest(
-            "scope parameter must not be empty".into(),
-        ));
-    }
-
-    Ok(scopes)
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -63,9 +57,29 @@ async fn login(
     jar: SignedCookieJar<Key>,
     Query(query): Query<LoginQuery>,
 ) -> Result<(SignedCookieJar<Key>, Json<serde_json::Value>), AppError> {
-    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, scope = %query.scope, "login request");
+    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, "login request");
 
-    let scopes = parse_scopes(&query.scope)?;
+    // Read the configured scopes from the settings DB. Falls back to `atproto`
+    // only if unset — that matches what we serve from `/oauth/client-metadata.json`.
+    let scopes = match crate::admin::settings::get_setting(
+        &state.db,
+        "oauth_scopes",
+        state.db_backend,
+    )
+    .await
+    {
+        Some(s) => {
+            let parsed = parse_scope_string(&s);
+            if parsed.is_empty() {
+                vec![Scope::Known(KnownScope::Atproto)]
+            } else {
+                parsed
+            }
+        }
+        None => vec![Scope::Known(KnownScope::Atproto)],
+    };
+
+    tracing::debug!(scopes = ?scopes, "resolved oauth scopes");
 
     // Hold the authorize lock so that authorize() + take_last_state_key() are atomic.
     // This prevents concurrent logins from swapping each other's state keys.
@@ -248,4 +262,51 @@ async fn me(
         did,
         is_admin: user.is_some(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_scope_string_maps_known_scopes() {
+        let scopes = parse_scope_string("atproto transition:generic transition:chat.bsky");
+        assert_eq!(scopes.len(), 3);
+        assert!(matches!(scopes[0], Scope::Known(KnownScope::Atproto)));
+        assert!(matches!(
+            scopes[1],
+            Scope::Known(KnownScope::TransitionGeneric)
+        ));
+        assert!(matches!(
+            scopes[2],
+            Scope::Known(KnownScope::TransitionChatBsky)
+        ));
+    }
+
+    #[test]
+    fn parse_scope_string_treats_unknown_as_unknown() {
+        let scopes = parse_scope_string("atproto include:games.gamesgamesgamesgames.authBasic");
+        assert_eq!(scopes.len(), 2);
+        assert!(matches!(scopes[0], Scope::Known(KnownScope::Atproto)));
+        match &scopes[1] {
+            Scope::Unknown(s) => {
+                assert_eq!(s, "include:games.gamesgamesgamesgames.authBasic");
+            }
+            _ => panic!("expected Scope::Unknown for include: reference"),
+        }
+    }
+
+    #[test]
+    fn parse_scope_string_handles_extra_whitespace_and_empty_input() {
+        let scopes = parse_scope_string("   atproto   \n\t  transition:generic  ");
+        assert_eq!(scopes.len(), 2);
+        assert!(matches!(scopes[0], Scope::Known(KnownScope::Atproto)));
+        assert!(matches!(
+            scopes[1],
+            Scope::Known(KnownScope::TransitionGeneric)
+        ));
+
+        let empty = parse_scope_string("   \n  \t  ");
+        assert!(empty.is_empty());
+    }
 }

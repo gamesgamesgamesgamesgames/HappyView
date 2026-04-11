@@ -303,3 +303,131 @@ async fn client_metadata_includes_settings() {
         json["client_name"]
     );
 }
+
+#[tokio::test]
+#[serial]
+#[ignore]
+async fn client_metadata_dual_route_client_id_matches_path() {
+    let app = TestApp::new().await;
+
+    // Fetch the classic path
+    let resp = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/oauth/client-metadata.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let classic = json_body(resp).await;
+    let classic_client_id = classic["client_id"].as_str().expect("client_id missing");
+    assert!(
+        classic_client_id.ends_with("/oauth/client-metadata.json"),
+        "client_id should match requested path, got {classic_client_id}"
+    );
+
+    // Fetch the alternate path — must succeed and mirror its own URL
+    let resp = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/oauth-client-metadata.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let alt = json_body(resp).await;
+    let alt_client_id = alt["client_id"].as_str().expect("client_id missing");
+    assert!(
+        alt_client_id.ends_with("/oauth-client-metadata.json"),
+        "client_id should match requested path, got {alt_client_id}"
+    );
+
+    assert_ne!(
+        classic_client_id, alt_client_id,
+        "dual routes must produce distinct client_id values"
+    );
+}
+
+#[tokio::test]
+#[serial]
+#[ignore]
+async fn client_metadata_scope_overridden_by_setting() {
+    let app = TestApp::new().await;
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_put(
+            "/admin/settings/oauth_scopes",
+            app.admin_cookie(),
+            &json!({ "value": "atproto  include:com.example.foo\n include:com.example.bar" }),
+        ))
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/oauth/client-metadata.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = json_body(resp).await;
+    assert_eq!(
+        json["scope"], "atproto include:com.example.foo include:com.example.bar",
+        "expected normalized scope string, got {:?}",
+        json["scope"]
+    );
+}
+
+#[tokio::test]
+#[serial]
+#[ignore]
+async fn client_metadata_client_uri_overridden_by_setting() {
+    let app = TestApp::new().await;
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_put(
+            "/admin/settings/client_uri",
+            app.admin_cookie(),
+            &json!({ "value": "https://example.test" }),
+        ))
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/oauth/client-metadata.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = json_body(resp).await;
+    assert_eq!(
+        json["client_uri"], "https://example.test",
+        "expected client_uri override, got {:?}",
+        json["client_uri"]
+    );
+}

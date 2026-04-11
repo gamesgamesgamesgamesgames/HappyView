@@ -10,6 +10,7 @@ import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
 import type { LabelerSummary } from "@/types/labelers"
 import type { RateLimitsResponse } from "@/types/rate-limits"
+import type { SettingEntry } from "@/types/settings"
 import type {
   ExternalProvider,
   LinkedAccount,
@@ -32,6 +33,8 @@ export type { ScriptVariableSummary } from "@/types/script-variables"
 export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
 export type { AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
+export type { SettingEntry, OAuthSettings } from "@/types/settings"
+export { OAUTH_SETTING_KEYS } from "@/types/settings"
 export type {
   ExternalProvider,
   LinkedAccount,
@@ -291,6 +294,42 @@ export function deleteScriptVariable(
     `/admin/script-variables/${encodeURIComponent(key)}`,
     { method: "DELETE" }
   )
+}
+
+// Settings
+export function getSettings() {
+  return apiFetch<SettingEntry[]>("/admin/settings")
+}
+
+export function upsertSetting(key: string, value: string) {
+  return apiFetch(`/admin/settings/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  })
+}
+
+export function deleteSetting(key: string) {
+  return apiFetch(`/admin/settings/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  })
+}
+
+export async function uploadLogo(file: File) {
+  const formData = new FormData()
+  formData.append("file", file)
+  const res = await fetch("/admin/settings/logo", {
+    method: "PUT",
+    body: formData,
+    credentials: "same-origin",
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new ApiError(res.status, text)
+  }
+}
+
+export function deleteLogo() {
+  return apiFetch("/admin/settings/logo", { method: "DELETE" })
 }
 
 // Labelers

@@ -1,4 +1,4 @@
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::{DefaultBodyLimit, OriginalUri, State};
 use axum::http::HeaderMap;
 use axum::http::{Method, header};
 use axum::response::{IntoResponse, Response};
@@ -68,7 +68,13 @@ pub fn router(state: AppState) -> Router {
         .nest("/admin", admin::admin_routes(state.clone()))
         .nest("/auth", crate::auth::routes::routes())
         .nest("/external-auth", crate::external_auth::routes())
+        // The ATProto OAuth spec allows either filename convention for the
+        // client metadata document. We serve both so deployments can opt into
+        // whichever URL their client_id points at.
+        //
+        // https://atproto.com/specs/oauth#types-of-clients
         .route("/oauth/client-metadata.json", get(client_metadata))
+        .route("/oauth-client-metadata.json", get(client_metadata))
         .route("/xrpc/app.bsky.actor.getProfile", get(get_profile))
         .route(
             "/xrpc/com.atproto.repo.uploadBlob",
@@ -97,14 +103,32 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
     Json(serde_json::json!({ "public_url": state.config.public_url }))
 }
 
-async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn client_metadata(
+    State(state): State<AppState>,
+    OriginalUri(uri): OriginalUri,
+) -> Json<serde_json::Value> {
     let mut metadata = serde_json::to_value(&state.oauth.client_metadata).unwrap_or_default();
+
+    // The `client_id` field in the response must exactly match the URL the
+    // authorization server fetched. Construct it from the public URL + this
+    // request's path so both `/oauth/client-metadata.json` and
+    // `/oauth-client-metadata.json` work correctly.
+    let client_id = format!(
+        "{}{}",
+        state.config.public_url.trim_end_matches('/'),
+        uri.path()
+    );
+    metadata["client_id"] = serde_json::Value::String(client_id);
 
     let pool = &state.db;
     let backend = state.db_backend;
 
     if let Some(name) = crate::admin::settings::get_setting(pool, "app_name", backend).await {
         metadata["client_name"] = serde_json::Value::String(name);
+    }
+
+    if let Some(uri) = crate::admin::settings::get_setting(pool, "client_uri", backend).await {
+        metadata["client_uri"] = serde_json::Value::String(uri);
     }
 
     // Logo: prefer uploaded logo_data (served at /settings/logo), fall back to logo_uri setting
@@ -126,6 +150,16 @@ async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Valu
 
     if let Some(uri) = crate::admin::settings::get_setting(pool, "policy_uri", backend).await {
         metadata["policy_uri"] = serde_json::Value::String(uri);
+    }
+
+    // OAuth scopes: override from the settings DB so admins can manage scopes without
+    // restarting HappyView. The authorization server fetches this endpoint to validate
+    // scope requests at PAR time, so this value is authoritative for non-loopback clients.
+    if let Some(scopes) = crate::admin::settings::get_setting(pool, "oauth_scopes", backend).await {
+        let normalized = scopes.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !normalized.is_empty() {
+            metadata["scope"] = serde_json::Value::String(normalized);
+        }
     }
 
     Json(metadata)

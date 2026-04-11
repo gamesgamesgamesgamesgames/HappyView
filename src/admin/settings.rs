@@ -16,17 +16,15 @@ use super::types::{SettingEntry, UpsertSettingBody};
 
 const ENV_FALLBACKS: &[(&str, &str)] = &[
     ("app_name", "APP_NAME"),
+    ("client_uri", "CLIENT_URI"),
     ("logo_uri", "LOGO_URI"),
     ("tos_uri", "TOS_URI"),
     ("policy_uri", "POLICY_URI"),
+    ("oauth_scopes", "OAUTH_SCOPES"),
 ];
 
 /// Resolve a setting value: check the DB first, then fall back to env var.
-pub(crate) async fn get_setting(
-    pool: &AnyPool,
-    key: &str,
-    backend: DatabaseBackend,
-) -> Option<String> {
+pub async fn get_setting(pool: &AnyPool, key: &str, backend: DatabaseBackend) -> Option<String> {
     let sql = adapt_sql("SELECT value FROM instance_settings WHERE key = ?", backend);
     let row: Option<(String,)> = sqlx::query_as(&sql)
         .bind(key)

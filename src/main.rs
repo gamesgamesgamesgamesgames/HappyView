@@ -297,15 +297,21 @@ async fn main() {
 
     let oauth_state_store = DbStateStore::new(db_pool.clone(), db_backend);
 
+    // Load OAuth scopes from the settings DB. Falls back to just `atproto` if unset.
+    // The live `/oauth/client-metadata.json` endpoint also reads this setting at
+    // request time, so non-loopback deployments pick up changes without a restart.
+    let oauth_scopes =
+        match happyview::admin::settings::get_setting(&db_pool, "oauth_scopes", db_backend).await {
+            Some(s) => happyview::auth::parse_scope_string(&s),
+            None => vec![Scope::Known(KnownScope::Atproto)],
+        };
+
     let oauth_client = if is_loopback {
         info!("Using loopback OAuth client metadata (local development)");
         atrium_oauth::OAuthClient::new(OAuthClientConfig {
             client_metadata: AtprotoLocalhostClientMetadata {
                 redirect_uris: Some(vec![callback_url]),
-                scopes: Some(vec![
-                    Scope::Known(KnownScope::Atproto),
-                    Scope::Known(KnownScope::TransitionGeneric),
-                ]),
+                scopes: Some(oauth_scopes.clone()),
             },
             keys: None,
             state_store: oauth_state_store.clone(),
@@ -314,6 +320,10 @@ async fn main() {
         })
         .expect("Failed to create OAuth client")
     } else {
+        // For non-loopback, `client_id` is a URL to `/oauth/client-metadata.json` which
+        // the authorization server fetches at runtime. That endpoint reads scopes from
+        // the DB, so the value we put here only matters for the initial validity check
+        // (which requires `atproto` to be present).
         atrium_oauth::OAuthClient::new(OAuthClientConfig {
             client_metadata: AtprotoClientMetadata {
                 client_id: format!(
@@ -324,10 +334,7 @@ async fn main() {
                 redirect_uris: vec![callback_url],
                 token_endpoint_auth_method: AuthMethod::None,
                 grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
-                scopes: vec![
-                    Scope::Known(KnownScope::Atproto),
-                    Scope::Known(KnownScope::TransitionGeneric),
-                ],
+                scopes: oauth_scopes,
                 jwks_uri: None,
                 token_endpoint_auth_signing_alg: None,
             },
