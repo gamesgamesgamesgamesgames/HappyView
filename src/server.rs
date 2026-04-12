@@ -95,7 +95,14 @@ async fn health() -> &'static str {
 }
 
 async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "public_url": state.config.public_url }))
+    Json(serde_json::json!({
+        "public_url": state.config.public_url,
+        "version": env!("CARGO_PKG_VERSION"),
+        "database_backend": format!("{:?}", state.config.database_backend).to_lowercase(),
+        "jetstream_url": state.config.jetstream_url,
+        "relay_url": state.config.relay_url,
+        "plc_url": state.config.plc_url,
+    }))
 }
 
 async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Value> {

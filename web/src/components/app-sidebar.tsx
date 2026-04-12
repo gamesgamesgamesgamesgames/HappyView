@@ -17,6 +17,7 @@ import {
   IconLink,
   IconPuzzle,
   IconLockAccess,
+  IconInfoCircle,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -159,6 +160,14 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="About" isActive={pathname === "/dashboard/about"}>
+              <Link href="/dashboard/about">
+                <IconInfoCircle />
+                <span>About</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={logout} tooltip="Log out">
               <IconLogout />
