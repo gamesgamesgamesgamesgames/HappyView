@@ -38,4 +38,4 @@ jobs:
           push: true
           tags: ${{ env.GHCR_POSTGRES_IMAGE }}:latest
           cache-from: type=gha,scope=postgres
-          cache-to: type=gha,scope=postgres,mode=max
+          cache-to: type=gha,scope=postgres,mode=max,ignore-error=true

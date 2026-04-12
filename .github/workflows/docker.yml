@@ -66,7 +66,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.platform }}
-          cache-to: type=gha,scope=build-${{ matrix.platform }},mode=max
+          cache-to: type=gha,scope=build-${{ matrix.platform }},mode=max,ignore-error=true
           outputs: type=image,"name=${{ env.GHCR_IMAGE }},${{ env.ATCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
 
       - name: Create GHCR manifest
