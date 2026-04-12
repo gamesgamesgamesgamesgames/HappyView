@@ -20,6 +20,7 @@ const LEGACY_REDIRECT_COOKIE: &str = "happyview_redirect";
 pub struct LoginQuery {
     handle: String,
     redirect_uri: Option<String>,
+    scope: Option<String>,
 }
 
 /// Parse a whitespace-separated OAuth scope string into typed `Scope` values.
@@ -57,26 +58,31 @@ async fn login(
     jar: SignedCookieJar<Key>,
     Query(query): Query<LoginQuery>,
 ) -> Result<(SignedCookieJar<Key>, Json<serde_json::Value>), AppError> {
-    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, "login request");
+    tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, scope = ?query.scope, "login request");
 
-    // Read the configured scopes from the settings DB. Falls back to `atproto`
-    // only if unset — that matches what we serve from `/oauth-client-metadata.json`.
-    let scopes = match crate::admin::settings::get_setting(
-        &state.db,
-        "oauth_scopes",
-        state.db_backend,
-    )
-    .await
-    {
-        Some(s) => {
-            let parsed = parse_scope_string(&s);
-            if parsed.is_empty() {
-                vec![Scope::Known(KnownScope::Atproto)]
-            } else {
-                parsed
-            }
+    // Use scopes from the query param if provided, otherwise fall back to the
+    // settings DB. The client metadata advertises all possible scopes, but each
+    // login request can ask for a subset.
+    let scopes = if let Some(ref scope_str) = query.scope {
+        let parsed = parse_scope_string(scope_str);
+        if parsed.is_empty() {
+            vec![Scope::Known(KnownScope::Atproto)]
+        } else {
+            parsed
         }
-        None => vec![Scope::Known(KnownScope::Atproto)],
+    } else {
+        match crate::admin::settings::get_setting(&state.db, "oauth_scopes", state.db_backend).await
+        {
+            Some(s) => {
+                let parsed = parse_scope_string(&s);
+                if parsed.is_empty() {
+                    vec![Scope::Known(KnownScope::Atproto)]
+                } else {
+                    parsed
+                }
+            }
+            None => vec![Scope::Known(KnownScope::Atproto)],
+        }
     };
 
     tracing::debug!(scopes = ?scopes, "resolved oauth scopes");
