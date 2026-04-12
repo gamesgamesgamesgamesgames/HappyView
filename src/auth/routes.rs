@@ -60,7 +60,7 @@ async fn login(
     tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, "login request");
 
     // Read the configured scopes from the settings DB. Falls back to `atproto`
-    // only if unset — that matches what we serve from `/oauth/client-metadata.json`.
+    // only if unset — that matches what we serve from `/oauth-client-metadata.json`.
     let scopes = match crate::admin::settings::get_setting(
         &state.db,
         "oauth_scopes",

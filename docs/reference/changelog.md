@@ -4,7 +4,7 @@
 
 - **Built-in OAuth** — replaced external AIP OAuth dependency with native `atrium-oauth` integration; HappyView manages the full OAuth flow internally
 - **Instance settings** — new `instance_settings` key/value table for configurable instance metadata (app name, logo, ToS, privacy policy) with env var fallback
-- **OAuth branding** — authorization screens now show configurable app name, logo, terms of service, and privacy policy links via the `/oauth/client-metadata.json` endpoint
+- **OAuth branding** — authorization screens now show configurable app name, logo, terms of service, and privacy policy links via the `/oauth-client-metadata.json` endpoint
 - **Logo upload** — upload a logo image via `PUT /admin/settings/logo` (stored in DB, served at `GET /settings/logo`)
 - **`settings:manage` permission** — new permission for managing instance settings, included in Manager and Full Access templates
 - **Redirect URI support** — `/auth/login` accepts optional `redirect_uri` parameter for post-login navigation

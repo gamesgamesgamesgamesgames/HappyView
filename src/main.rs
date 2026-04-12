@@ -297,12 +297,18 @@ async fn main() {
 
     let oauth_state_store = DbStateStore::new(db_pool.clone(), db_backend);
 
-    // Load OAuth scopes from the settings DB. Falls back to just `atproto` if unset.
-    // The live `/oauth/client-metadata.json` endpoint also reads this setting at
-    // request time, so non-loopback deployments pick up changes without a restart.
+    // Load OAuth scopes from the settings DB so they can be managed at runtime
+    // without restarting HappyView. Falls back to just `atproto` if unset.
     let oauth_scopes =
         match happyview::admin::settings::get_setting(&db_pool, "oauth_scopes", db_backend).await {
-            Some(s) => happyview::auth::parse_scope_string(&s),
+            Some(s) => {
+                let parsed = happyview::auth::parse_scope_string(&s);
+                if parsed.is_empty() {
+                    vec![Scope::Known(KnownScope::Atproto)]
+                } else {
+                    parsed
+                }
+            }
             None => vec![Scope::Known(KnownScope::Atproto)],
         };
 
@@ -311,7 +317,7 @@ async fn main() {
         atrium_oauth::OAuthClient::new(OAuthClientConfig {
             client_metadata: AtprotoLocalhostClientMetadata {
                 redirect_uris: Some(vec![callback_url]),
-                scopes: Some(oauth_scopes.clone()),
+                scopes: Some(oauth_scopes),
             },
             keys: None,
             state_store: oauth_state_store.clone(),
@@ -320,14 +326,10 @@ async fn main() {
         })
         .expect("Failed to create OAuth client")
     } else {
-        // For non-loopback, `client_id` is a URL to `/oauth/client-metadata.json` which
-        // the authorization server fetches at runtime. That endpoint reads scopes from
-        // the DB, so the value we put here only matters for the initial validity check
-        // (which requires `atproto` to be present).
         atrium_oauth::OAuthClient::new(OAuthClientConfig {
             client_metadata: AtprotoClientMetadata {
                 client_id: format!(
-                    "{}/oauth/client-metadata.json",
+                    "{}/oauth-client-metadata.json",
                     config.public_url.trim_end_matches('/')
                 ),
                 client_uri: Some(config.public_url.clone()),

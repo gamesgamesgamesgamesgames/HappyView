@@ -203,7 +203,6 @@ export default function OAuthSettingsPage() {
           <h2 className="text-lg font-semibold">Client Metadata</h2>
           <p className="text-muted-foreground text-sm">
             These values are served from{" "}
-            <code className="text-xs">/oauth/client-metadata.json</code> and{" "}
             <code className="text-xs">/oauth-client-metadata.json</code> and shown
             on the OAuth consent screen.
           </p>

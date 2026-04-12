@@ -282,13 +282,13 @@ async fn client_metadata_includes_settings() {
         resp.status()
     );
 
-    // GET /oauth/client-metadata.json (no auth) and verify client_name
+    // GET /oauth-client-metadata.json (no auth) and verify client_name
     let resp = app
         .router
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/oauth/client-metadata.json")
+                .uri("/oauth-client-metadata.json")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -307,30 +307,9 @@ async fn client_metadata_includes_settings() {
 #[tokio::test]
 #[serial]
 #[ignore]
-async fn client_metadata_dual_route_client_id_matches_path() {
+async fn client_metadata_client_id_matches_path() {
     let app = TestApp::new().await;
 
-    // Fetch the classic path
-    let resp = app
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/oauth/client-metadata.json")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-    let classic = json_body(resp).await;
-    let classic_client_id = classic["client_id"].as_str().expect("client_id missing");
-    assert!(
-        classic_client_id.ends_with("/oauth/client-metadata.json"),
-        "client_id should match requested path, got {classic_client_id}"
-    );
-
-    // Fetch the alternate path — must succeed and mirror its own URL
     let resp = app
         .router
         .clone()
@@ -343,16 +322,11 @@ async fn client_metadata_dual_route_client_id_matches_path() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let alt = json_body(resp).await;
-    let alt_client_id = alt["client_id"].as_str().expect("client_id missing");
+    let json = json_body(resp).await;
+    let client_id = json["client_id"].as_str().expect("client_id missing");
     assert!(
-        alt_client_id.ends_with("/oauth-client-metadata.json"),
-        "client_id should match requested path, got {alt_client_id}"
-    );
-
-    assert_ne!(
-        classic_client_id, alt_client_id,
-        "dual routes must produce distinct client_id values"
+        client_id.ends_with("/oauth-client-metadata.json"),
+        "client_id should end with /oauth-client-metadata.json, got {client_id}"
     );
 }
 
@@ -379,7 +353,7 @@ async fn client_metadata_scope_overridden_by_setting() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/oauth/client-metadata.json")
+                .uri("/oauth-client-metadata.json")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -417,7 +391,7 @@ async fn client_metadata_client_uri_overridden_by_setting() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/oauth/client-metadata.json")
+                .uri("/oauth-client-metadata.json")
                 .body(Body::empty())
                 .unwrap(),
         )
