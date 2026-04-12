@@ -228,3 +228,76 @@ async fn test_plugin_not_found() {
 
     assert!(matches!(result, Err(ExecutionError::PluginNotFound(_))));
 }
+
+/// Test that host_get_secret returns a JSON envelope that plugins can parse.
+/// Uses the real Steam plugin WASM which calls get_secret("API_KEY") in get_profile.
+/// This test verifies the fix for the JSON envelope mismatch where the host
+/// returned raw bytes but the plugin expected {"ok": "value"}.
+#[tokio::test]
+async fn test_steam_get_secret_json_envelope() {
+    let wasm_path = "tests/fixtures/steam.wasm";
+    if !std::path::Path::new(wasm_path).exists() {
+        eprintln!("Skipping test: {} not found", wasm_path);
+        return;
+    }
+
+    let (executor, registry) = create_test_executor().await;
+    let wasm_bytes = std::fs::read(wasm_path).expect("Failed to read steam.wasm");
+
+    let plugin = LoadedPlugin {
+        info: PluginInfo {
+            id: "steam".into(),
+            name: "Steam".into(),
+            version: "1.1.0".into(),
+            api_version: "1".into(),
+            icon_url: None,
+            required_secrets: vec!["API_KEY".into()],
+            auth_type: "openid".into(),
+            config_schema: None,
+        },
+        source: PluginSource::File {
+            path: wasm_path.into(),
+        },
+        wasm_bytes,
+        manifest: None,
+    };
+
+    registry.register(plugin).await;
+
+    let mut secrets = Secrets::new();
+    secrets.insert("API_KEY".to_string(), "test-fake-key".to_string());
+
+    let mut instance = executor
+        .instantiate(
+            "steam",
+            "user:did:plc:test",
+            secrets,
+            serde_json::Value::Null,
+        )
+        .await
+        .expect("Failed to instantiate Steam plugin");
+
+    // get_profile calls host_get_secret("API_KEY") internally.
+    // It will then try to call the Steam API with the fake key, which will fail
+    // with an HTTP error — but the important thing is it does NOT fail with
+    // MISSING_SECRET, which would mean host_get_secret's JSON envelope is broken.
+    let result = instance
+        .call_get_profile("76561198024344834", &serde_json::Value::Null)
+        .await;
+
+    match result {
+        Ok(_) => {} // Unlikely with a fake key, but fine
+        Err(ExecutionError::PluginError { code, .. }) => {
+            // HTTP_ERROR = Steam API rejected our fake key (expected)
+            // INVALID_RESPONSE = Steam returned unexpected format (also fine)
+            // MISSING_SECRET = host_get_secret envelope is broken (BAD!)
+            assert_ne!(
+                code, "MISSING_SECRET",
+                "host_get_secret JSON envelope is broken — plugin couldn't parse the secret"
+            );
+        }
+        Err(e) => {
+            panic!("Unexpected error type: {:?}", e);
+        }
+    }
+}

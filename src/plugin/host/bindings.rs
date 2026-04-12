@@ -182,6 +182,10 @@ fn host_log(
 
 /// Host function: get a secret value by name
 /// Returns a packed i64: (ptr << 32) | len, or 0 on error
+///
+/// The response is JSON-encoded as `{"ok": "<value>"}` so plugins can
+/// deserialize it with the same `Response<String>` envelope they use for
+/// other host calls.
 async fn host_get_secret_impl(
     caller: &mut wasmtime::Caller<'_, PluginState>,
     name_ptr: i32,
@@ -197,7 +201,8 @@ async fn host_get_secret_impl(
         None => return 0,
     };
 
-    write_guest_response(caller, value.as_bytes()).await
+    let response_bytes = serde_json::to_vec(&serde_json::json!({"ok": value})).unwrap_or_default();
+    write_guest_response(caller, &response_bytes).await
 }
 
 // ============================================================================
