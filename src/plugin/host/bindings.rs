@@ -34,7 +34,15 @@ fn check_bounds(offset: usize, length: usize, mem_size: usize) -> Result<(usize,
 pub fn register_host_functions(linker: &mut Linker<PluginState>) -> Result<(), wasmtime::Error> {
     // Sync functions
     linker.func_wrap("env", "host_log", host_log)?;
-    linker.func_wrap("env", "host_get_secret", host_get_secret)?;
+
+    // host_get_secret must be async because it calls alloc on an async store
+    linker.func_wrap_async(
+        "env",
+        "host_get_secret",
+        |mut caller: wasmtime::Caller<'_, PluginState>, (name_ptr, name_len): (i32, i32)| {
+            Box::new(async move { host_get_secret_impl(&mut caller, name_ptr, name_len).await })
+        },
+    )?;
 
     // Async functions - HTTP
     linker.func_wrap_async(
@@ -174,53 +182,22 @@ fn host_log(
 
 /// Host function: get a secret value by name
 /// Returns a packed i64: (ptr << 32) | len, or 0 on error
-fn host_get_secret(
-    mut caller: wasmtime::Caller<'_, PluginState>,
+async fn host_get_secret_impl(
+    caller: &mut wasmtime::Caller<'_, PluginState>,
     name_ptr: i32,
     name_len: i32,
 ) -> i64 {
-    let memory = match caller.data().memory {
-        Some(m) => m,
-        None => return 0,
-    };
-    let alloc = match &caller.data().alloc {
-        Some(a) => a.clone(),
+    let name = match read_guest_string(caller, name_ptr, name_len) {
+        Some(n) => n,
         None => return 0,
     };
 
-    let mem_data = memory.data(&caller);
-    let mem_size = mem_data.len();
-
-    let (name_start, name_end) = match check_bounds(name_ptr as usize, name_len as usize, mem_size)
-    {
-        Ok(bounds) => bounds,
-        Err(_) => return 0,
-    };
-
-    let name = match std::str::from_utf8(&mem_data[name_start..name_end]) {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
-
-    let value = match caller.data().secrets.get(name) {
+    let value = match caller.data().secrets.get(&name) {
         Some(v) => v.clone(),
         None => return 0,
     };
 
-    let len = value.len() as u32;
-    let ptr = match alloc.call(&mut caller, len) {
-        Ok(p) if p != 0 => p,
-        _ => return 0,
-    };
-
-    let mem_data = memory.data_mut(&mut caller);
-    if check_bounds(ptr as usize, len as usize, mem_data.len()).is_err() {
-        return 0;
-    }
-
-    mem_data[ptr as usize..(ptr as usize + len as usize)].copy_from_slice(value.as_bytes());
-
-    ((ptr as i64) << 32) | (len as i64)
+    write_guest_response(caller, value.as_bytes()).await
 }
 
 // ============================================================================
