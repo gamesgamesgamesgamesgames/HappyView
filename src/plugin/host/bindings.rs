@@ -250,17 +250,31 @@ async fn host_http_request_impl(
 ) -> i64 {
     let req_bytes = match read_guest_bytes(caller, req_ptr, req_len) {
         Some(b) => b,
-        None => return 0,
+        None => {
+            tracing::error!(
+                "host_http_request: failed to read guest memory (ptr={req_ptr}, len={req_len})"
+            );
+            return 0;
+        }
     };
 
     let request: super::HttpRequest = match serde_json::from_slice(&req_bytes) {
         Ok(r) => r,
-        Err(_) => return 0,
+        Err(e) => {
+            tracing::error!("host_http_request: failed to parse request JSON: {e}");
+            return 0;
+        }
     };
+
+    let url = request.url.clone();
+    let method = request.method.clone();
 
     let ctx = match build_host_context(caller.data()) {
         Some(c) => c,
-        None => return 0,
+        None => {
+            tracing::error!("host_http_request: failed to build host context (db missing?)");
+            return 0;
+        }
     };
 
     let result = {
@@ -270,13 +284,25 @@ async fn host_http_request_impl(
 
     let response_bytes = match result {
         Ok(resp) => serde_json::to_vec(&serde_json::json!({"ok": resp})).unwrap_or_default(),
-        Err(e) => serde_json::to_vec(&serde_json::json!({
-            "error": {"code": "HTTP_ERROR", "message": e.to_string(), "retryable": false}
-        }))
-        .unwrap_or_default(),
+        Err(e) => {
+            tracing::warn!("host_http_request: HTTP {method} {url} failed: {e}");
+            serde_json::to_vec(&serde_json::json!({
+                "error": {"code": "HTTP_ERROR", "message": e.to_string(), "retryable": false}
+            }))
+            .unwrap_or_default()
+        }
     };
 
-    write_guest_response(caller, &response_bytes).await
+    let packed = write_guest_response(caller, &response_bytes).await;
+    if packed == 0 {
+        tracing::error!(
+            "host_http_request: write_guest_response returned 0 for {} {} (response_len={})",
+            method,
+            url,
+            response_bytes.len()
+        );
+    }
+    packed
 }
 
 /// Host function: get a value from KV store
