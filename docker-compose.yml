@@ -20,24 +20,6 @@ services:
   #     timeout: 3s
   #     retries: 5
 
-  tap:
-    image: ghcr.io/bluesky-social/indigo/tap:latest
-    ports:
-      - "2480:2480"
-    environment:
-      TAP_DATABASE_URL: sqlite:///data/tap.db
-      TAP_RELAY_URL: ${TAP_RELAY_URL}
-      TAP_PLC_URL: ${TAP_PLC_URL}
-      TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
-      TAP_COLLECTION_FILTERS: ${TAP_COLLECTION_FILTERS}
-      TAP_SIGNAL_COLLECTIONS: ${TAP_SIGNAL_COLLECTIONS}
-    volumes:
-      - tap-data:/data
-    # Uncomment if using Postgres:
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
-
   happyview:
     image: rust:1.93
     working_dir: /app
@@ -53,16 +35,12 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       PUBLIC_URL: ${PUBLIC_URL}
       SESSION_SECRET: ${SESSION_SECRET}
-      TAP_URL: ${TAP_URL}
-      TAP_ADMIN_PASSWORD: ${TAP_ADMIN_PASSWORD}
       RELAY_URL: ${RELAY_URL}
       PORT: ${PORT}
-    depends_on:
-      # Uncomment if using Postgres:
-      # postgres:
-      #   condition: service_healthy
-      tap:
-        condition: service_started
+    # depends_on:
+    #   Uncomment if using Postgres:
+    #   postgres:
+    #     condition: service_healthy
 
   web:
     image: node:24-alpine
@@ -80,7 +58,6 @@ services:
 volumes:
   # Uncomment if using Postgres:
   # pgdata:
-  tap-data:
   cargo-registry:
   cargo-git:
   cargo-target:
