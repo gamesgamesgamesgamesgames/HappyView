@@ -20,7 +20,6 @@ const ENV_FALLBACKS: &[(&str, &str)] = &[
     ("logo_uri", "LOGO_URI"),
     ("tos_uri", "TOS_URI"),
     ("policy_uri", "POLICY_URI"),
-    ("oauth_scopes", "OAUTH_SCOPES"),
 ];
 
 /// Resolve a setting value: check the DB first, then fall back to env var.

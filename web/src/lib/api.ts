@@ -33,8 +33,8 @@ export type { ScriptVariableSummary } from "@/types/script-variables"
 export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
 export type { ApiClientSummary, CreateApiClientResponse } from "@/types/api-clients"
-export type { SettingEntry, OAuthSettings } from "@/types/settings"
-export { OAUTH_SETTING_KEYS } from "@/types/settings"
+export type { SettingEntry, InstanceSettings } from "@/types/settings"
+export { INSTANCE_SETTING_KEYS } from "@/types/settings"
 export type {
   ExternalProvider,
   LinkedAccount,

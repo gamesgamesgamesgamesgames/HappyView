@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/lib/auth-context"
+import { useConfig } from "@/lib/config-context"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
@@ -13,6 +14,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const { did } = useAuth()
+  const { app_name } = useConfig()
   const router = useRouter()
 
   useEffect(() => {
@@ -20,6 +22,10 @@ export default function DashboardLayout({
       router.replace("/login")
     }
   }, [did, router])
+
+  useEffect(() => {
+    document.title = app_name ? `${app_name} Admin` : "HappyView Admin"
+  }, [app_name])
 
   if (!did) return null
 

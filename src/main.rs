@@ -331,20 +331,9 @@ async fn main() {
 
     let oauth_state_store = DbStateStore::new(db_pool.clone(), db_backend);
 
-    // Load OAuth scopes from the settings DB so they can be managed at runtime
-    // without restarting HappyView. Falls back to just `atproto` if unset.
-    let oauth_scopes =
-        match happyview::admin::settings::get_setting(&db_pool, "oauth_scopes", db_backend).await {
-            Some(s) => {
-                let parsed = happyview::auth::parse_scope_string(&s);
-                if parsed.is_empty() {
-                    vec![Scope::Known(KnownScope::Atproto)]
-                } else {
-                    parsed
-                }
-            }
-            None => vec![Scope::Known(KnownScope::Atproto)],
-        };
+    // HappyView's own default OAuth client always uses the `atproto` scope.
+    // API clients configure their own scopes via the API Clients settings page.
+    let oauth_scopes = vec![Scope::Known(KnownScope::Atproto)];
 
     let oauth_client = if is_loopback {
         info!("Using loopback OAuth client metadata (local development)");

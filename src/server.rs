@@ -99,6 +99,27 @@ async fn health() -> &'static str {
 }
 
 async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let pool = &state.db;
+    let backend = state.db_backend;
+
+    let app_name = crate::admin::settings::get_setting(pool, "app_name", backend)
+        .await
+        .or_else(|| state.config.app_name.clone());
+
+    let has_logo_data = crate::admin::settings::get_setting(pool, "logo_data", backend)
+        .await
+        .is_some();
+    let logo_url = if has_logo_data {
+        Some(format!(
+            "{}/settings/logo",
+            state.config.public_url.trim_end_matches('/')
+        ))
+    } else {
+        crate::admin::settings::get_setting(pool, "logo_uri", backend)
+            .await
+            .or_else(|| state.config.logo_uri.clone())
+    };
+
     Json(serde_json::json!({
         "public_url": state.config.public_url,
         "version": env!("CARGO_PKG_VERSION"),
@@ -108,6 +129,8 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
         "plc_url": state.config.plc_url,
         "default_rate_limit_capacity": state.config.default_rate_limit_capacity,
         "default_rate_limit_refill_rate": state.config.default_rate_limit_refill_rate,
+        "app_name": app_name,
+        "logo_url": logo_url,
     }))
 }
 
@@ -153,16 +176,6 @@ async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Valu
 
     if let Some(uri) = crate::admin::settings::get_setting(pool, "policy_uri", backend).await {
         metadata["policy_uri"] = serde_json::Value::String(uri);
-    }
-
-    // OAuth scopes: override from the settings DB so admins can manage scopes without
-    // restarting HappyView. The authorization server fetches this endpoint to validate
-    // scope requests at PAR time, so this value is authoritative for non-loopback clients.
-    if let Some(scopes) = crate::admin::settings::get_setting(pool, "oauth_scopes", backend).await {
-        let normalized = scopes.split_whitespace().collect::<Vec<_>>().join(" ");
-        if !normalized.is_empty() {
-            metadata["scope"] = serde_json::Value::String(normalized);
-        }
     }
 
     Json(metadata)

@@ -24,6 +24,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { useAuth } from "@/lib/auth-context"
+import { useConfig } from "@/lib/config-context"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import {
   Collapsible,
@@ -61,7 +62,7 @@ const settingsSubItems = [
   { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
   { title: "API Clients", url: "/dashboard/settings/api-clients", icon: IconApps, requiredPermissions: ["api-clients:view"] },
   { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
-  { title: "OAuth", url: "/dashboard/settings/oauth", icon: IconLockAccess, requiredPermissions: ["settings:manage"] },
+  { title: "General", url: "/dashboard/settings/general", icon: IconLockAccess, requiredPermissions: ["settings:manage"] },
 ] as const
 
 export function AppSidebar({
@@ -69,6 +70,7 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { logout } = useAuth()
+  const { app_name, logo_url } = useConfig()
   const { hasPermission } = useCurrentUser()
 
   const visibleNavItems = navItems.filter((item) => {
@@ -85,21 +87,34 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader className="p-4">
-        <Image
-          src="/logo.light.png"
-          alt="HappyView"
-          width={140}
-          height={48}
-          className="block dark:hidden"
-        />
-        <Image
-          src="/logo.dark.png"
-          alt="HappyView"
-          width={140}
-          height={48}
-          className="hidden dark:block"
-        />
+      <SidebarHeader className="flex items-center justify-center p-4">
+        {logo_url ? (
+          <Image
+            src={logo_url}
+            alt={app_name ?? "HappyView"}
+            width={140}
+            height={48}
+            className="object-contain"
+            unoptimized
+          />
+        ) : (
+          <>
+            <Image
+              src="/logo.light.png"
+              alt="HappyView"
+              width={140}
+              height={48}
+              className="block dark:hidden"
+            />
+            <Image
+              src="/logo.dark.png"
+              alt="HappyView"
+              width={140}
+              height={48}
+              className="hidden dark:block"
+            />
+          </>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

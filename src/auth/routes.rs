@@ -72,18 +72,7 @@ async fn login(
             parsed
         }
     } else {
-        match crate::admin::settings::get_setting(&state.db, "oauth_scopes", state.db_backend).await
-        {
-            Some(s) => {
-                let parsed = parse_scope_string(&s);
-                if parsed.is_empty() {
-                    vec![Scope::Known(KnownScope::Atproto)]
-                } else {
-                    parsed
-                }
-            }
-            None => vec![Scope::Known(KnownScope::Atproto)],
-        }
+        vec![Scope::Known(KnownScope::Atproto)]
     };
 
     tracing::debug!(scopes = ?scopes, client_id = ?query.client_id, "resolved oauth scopes");
