@@ -69,6 +69,8 @@ const KNOWN_KEYS = [
   "caller_did",
   "duration_ms",
   "response_size",
+  "message",
+  "level",
 ] as const;
 
 function EventDetailBody({ event }: { event: EventLogEntry }) {
@@ -130,6 +132,23 @@ function EventDetailBody({ event }: { event: EventLogEntry }) {
           </div>
         )}
       </div>
+
+      {/* Plugin log message */}
+      {d.message != null && (
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-sm">Message</span>
+            {d.level != null && (
+              <Badge variant="outline" className="text-xs uppercase">
+                {String(d.level)}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 whitespace-pre-wrap break-words font-mono text-xs">
+            {String(d.message)}
+          </p>
+        </div>
+      )}
 
       {/* Error section */}
       {d.error != null && (
@@ -375,6 +394,7 @@ export default function EventsPage() {
             { label: "Script", value: "script" },
             { label: "Admin", value: "admin" },
             { label: "Backfill", value: "backfill" },
+            { label: "Plugin", value: "plugin" },
           ],
         },
       },

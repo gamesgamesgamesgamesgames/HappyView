@@ -25,14 +25,54 @@ impl FromStr for LogLevel {
     }
 }
 
-/// Log a message from a plugin
-pub fn log(plugin_id: &str, level: LogLevel, message: &str) {
+/// Log a message from a plugin.
+///
+/// Always emits to `tracing`. If `db` is `Some`, also spawns a detached task
+/// that writes the event to the `event_logs` table so it appears in the
+/// Event Logs UI. The spawned task is fire-and-forget; errors are logged by
+/// `event_log::log_event` but not returned to the caller.
+pub fn log(
+    plugin_id: &str,
+    level: LogLevel,
+    message: &str,
+    db: Option<sqlx::AnyPool>,
+    db_backend: crate::db::DatabaseBackend,
+) {
     match level {
         LogLevel::Debug => debug!(plugin = %plugin_id, "{}", message),
         LogLevel::Info => info!(plugin = %plugin_id, "{}", message),
         LogLevel::Warn => warn!(plugin = %plugin_id, "{}", message),
         LogLevel::Error => error!(plugin = %plugin_id, "{}", message),
     }
+
+    let Some(db) = db else { return };
+
+    let severity = match level {
+        LogLevel::Debug | LogLevel::Info => crate::event_log::Severity::Info,
+        LogLevel::Warn => crate::event_log::Severity::Warn,
+        LogLevel::Error => crate::event_log::Severity::Error,
+    };
+    let level_str = match level {
+        LogLevel::Debug => "debug",
+        LogLevel::Info => "info",
+        LogLevel::Warn => "warn",
+        LogLevel::Error => "error",
+    };
+
+    let event = crate::event_log::EventLog {
+        event_type: "plugin.log".to_string(),
+        severity,
+        actor_did: None,
+        subject: Some(plugin_id.to_string()),
+        detail: serde_json::json!({
+            "level": level_str,
+            "message": message,
+        }),
+    };
+
+    tokio::spawn(async move {
+        crate::event_log::log_event(&db, event, db_backend).await;
+    });
 }
 
 #[cfg(test)]
@@ -61,10 +101,11 @@ mod tests {
 
     #[test]
     fn test_log_does_not_panic() {
-        // Verify log() runs without panicking for each level
-        log("test-plugin", LogLevel::Debug, "debug message");
-        log("test-plugin", LogLevel::Info, "info message");
-        log("test-plugin", LogLevel::Warn, "warn message");
-        log("test-plugin", LogLevel::Error, "error message");
+        // With db=None, only the tracing path runs. Verifies each level does not panic.
+        let backend = crate::db::DatabaseBackend::Sqlite;
+        log("test-plugin", LogLevel::Debug, "debug message", None, backend);
+        log("test-plugin", LogLevel::Info, "info message", None, backend);
+        log("test-plugin", LogLevel::Warn, "warn message", None, backend);
+        log("test-plugin", LogLevel::Error, "error message", None, backend);
     }
 }

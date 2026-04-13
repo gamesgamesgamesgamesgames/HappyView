@@ -175,9 +175,11 @@ fn host_log(
     let level = std::str::from_utf8(&mem_data[level_start..level_end]).unwrap_or("info");
     let msg = std::str::from_utf8(&mem_data[msg_start..msg_end]).unwrap_or("");
 
-    let plugin_id = &caller.data().plugin_id;
+    let plugin_id = caller.data().plugin_id.clone();
+    let db = caller.data().db.clone();
+    let db_backend = caller.data().db_backend;
     let log_level: super::LogLevel = level.parse().unwrap_or_default();
-    super::log(plugin_id, log_level, msg);
+    super::log(&plugin_id, log_level, msg, db, db_backend);
 }
 
 /// Host function: get a secret value by name
