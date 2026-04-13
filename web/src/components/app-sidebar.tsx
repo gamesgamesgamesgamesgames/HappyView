@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
   IconDashboard,
@@ -7,83 +7,137 @@ import {
   IconTable,
   IconClipboardList,
   IconUsers,
-  IconSettings,
   IconLogout,
   IconKey,
   IconVariable,
   IconTag,
-  IconChevronRight,
   IconLink,
   IconPuzzle,
-  IconLockAccess,
+  IconSettings,
   IconInfoCircle,
   IconApps,
-} from "@tabler/icons-react"
-import Image from "next/image"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+} from "@tabler/icons-react";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-import { useAuth } from "@/lib/auth-context"
-import { useConfig } from "@/lib/config-context"
-import { useCurrentUser } from "@/hooks/use-current-user"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { useAuth } from "@/lib/auth-context";
+import { useConfig } from "@/lib/config-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { Scroller } from "@/components/ui/scroller";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
+  SidebarSeparator,
+} from "@/components/ui/sidebar";
 
-const navItems = [
-  { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+type NavItem = {
+  title: string;
+  url: string;
+  icon: React.ComponentType;
+  requiredPermissions?: string[];
+};
+
+const dataItems: NavItem[] = [
   { title: "Lexicons", url: "/dashboard/lexicons", icon: IconFileDescription },
-  { title: "Backfill", url: "/dashboard/backfill", icon: IconDatabase },
   { title: "Records", url: "/dashboard/records", icon: IconTable },
-  { title: "Event Logs", url: "/dashboard/events", icon: IconClipboardList, requiredPermissions: ["events:read"] },
-] as const
+  { title: "Backfill", url: "/dashboard/backfill", icon: IconDatabase },
+];
 
-const settingsSubItems = [
-  { title: "Users", url: "/dashboard/settings/users", icon: IconUsers, requiredPermissions: ["users:read"] },
-  { title: "Linked Accounts", url: "/dashboard/settings/accounts", icon: IconLink, requiredPermissions: [] as string[] },
-  { title: "Plugins", url: "/dashboard/settings/plugins", icon: IconPuzzle, requiredPermissions: ["plugins:read"] },
-  { title: "ENV Variables", url: "/dashboard/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
-  { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
-  { title: "API Clients", url: "/dashboard/settings/api-clients", icon: IconApps, requiredPermissions: ["api-clients:view"] },
-  { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
-  { title: "General", url: "/dashboard/settings/general", icon: IconLockAccess, requiredPermissions: ["settings:manage"] },
-] as const
+const accessItems: NavItem[] = [
+  {
+    title: "Users",
+    url: "/dashboard/settings/users",
+    icon: IconUsers,
+    requiredPermissions: ["users:read"],
+  },
+  {
+    title: "API Keys",
+    url: "/dashboard/settings/api-keys",
+    icon: IconKey,
+    requiredPermissions: ["api-keys:read"],
+  },
+  {
+    title: "API Clients",
+    url: "/dashboard/settings/api-clients",
+    icon: IconApps,
+    requiredPermissions: ["api-clients:view"],
+  },
+];
 
-export function AppSidebar({
-  ...props
-}: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname()
-  const { logout } = useAuth()
-  const { app_name, logo_url } = useConfig()
-  const { hasPermission } = useCurrentUser()
+const integrationItems: NavItem[] = [
+  {
+    title: "Plugins",
+    url: "/dashboard/settings/plugins",
+    icon: IconPuzzle,
+    requiredPermissions: ["plugins:read"],
+  },
+  {
+    title: "Linked Accounts",
+    url: "/dashboard/settings/accounts",
+    icon: IconLink,
+  },
+  {
+    title: "Labelers",
+    url: "/dashboard/settings/labelers",
+    icon: IconTag,
+    requiredPermissions: ["labelers:read"],
+  },
+];
 
-  const visibleNavItems = navItems.filter((item) => {
-    if (!("requiredPermissions" in item)) return true
-    return item.requiredPermissions.some((perm) => hasPermission(perm))
-  })
+const systemItems: NavItem[] = [
+  {
+    title: "General",
+    url: "/dashboard/settings/general",
+    icon: IconSettings,
+    requiredPermissions: ["settings:manage"],
+  },
+  {
+    title: "ENV Variables",
+    url: "/dashboard/settings/env-variables",
+    icon: IconVariable,
+    requiredPermissions: ["script-variables:read"],
+  },
+  {
+    title: "Event Logs",
+    url: "/dashboard/events",
+    icon: IconClipboardList,
+    requiredPermissions: ["events:read"],
+  },
+];
 
-  const visibleSettingsItems = settingsSubItems.filter((item) =>
-    item.requiredPermissions.length === 0 ||
-    item.requiredPermissions.some((perm) => hasPermission(perm))
-  )
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname();
+  const { logout } = useAuth();
+  const { app_name, logo_url } = useConfig();
+  const { hasPermission } = useCurrentUser();
 
-  const isSettingsActive = pathname.startsWith("/dashboard/settings")
+  function filterByPermission(items: NavItem[]) {
+    return items.filter(
+      (item) =>
+        !item.requiredPermissions ||
+        item.requiredPermissions.some((perm) => hasPermission(perm)),
+    );
+  }
+
+  function isActive(url: string) {
+    return url === "/dashboard"
+      ? pathname === "/dashboard"
+      : pathname.startsWith(url);
+  }
+
+  const visibleData = filterByPermission(dataItems);
+  const visibleAccess = filterByPermission(accessItems);
+  const visibleIntegrations = filterByPermission(integrationItems);
+  const visibleSystem = filterByPermission(systemItems);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -116,67 +170,134 @@ export function AppSidebar({
           </>
         )}
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent className="flex flex-col gap-2">
-            <SidebarMenu>
-              {visibleNavItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+      <SidebarSeparator className="!mx-0" />
+      <Scroller asChild hideScrollbar>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    tooltip={item.title}
-                    isActive={
-                      item.url === "/dashboard"
-                        ? pathname === "/dashboard"
-                        : pathname.startsWith(item.url)
-                    }
+                    tooltip="Dashboard"
+                    isActive={isActive("/dashboard")}
                   >
-                    <Link href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
+                    <Link href="/dashboard">
+                      <IconDashboard />
+                      <span>Dashboard</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-              {visibleSettingsItems.length > 0 && (
-                <Collapsible defaultOpen={isSettingsActive} className="group/collapsible">
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton tooltip="Settings" isActive={isSettingsActive}>
-                        <IconSettings />
-                        <span>Settings</span>
-                        <IconChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+          {visibleData.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Data</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleData.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.title}
+                        isActive={isActive(item.url)}
+                      >
+                        <Link href={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
                       </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {visibleSettingsItems.map((item) => (
-                          <SidebarMenuSubItem key={item.title}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={pathname.startsWith(item.url)}
-                            >
-                              <Link href={item.url}>
-                                <item.icon />
-                                <span>{item.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {visibleAccess.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Access</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleAccess.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.title}
+                        isActive={isActive(item.url)}
+                      >
+                        <Link href={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {visibleIntegrations.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Integrations</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleIntegrations.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.title}
+                        isActive={isActive(item.url)}
+                      >
+                        <Link href={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {visibleSystem.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>System</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleSystem.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.title}
+                        isActive={isActive(item.url)}
+                      >
+                        <Link href={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </SidebarContent>
+      </Scroller>
+      <SidebarSeparator className="!mx-0" />
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="About" isActive={pathname === "/dashboard/about"}>
+            <SidebarMenuButton
+              asChild
+              tooltip="About"
+              isActive={pathname === "/dashboard/about"}
+            >
               <Link href="/dashboard/about">
                 <IconInfoCircle />
                 <span>About</span>
@@ -192,5 +313,5 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }
