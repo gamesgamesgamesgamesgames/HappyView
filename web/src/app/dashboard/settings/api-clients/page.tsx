@@ -183,7 +183,11 @@ export default function ApiClientsPage() {
                     {client.client_id_url}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{client.scopes}</Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {client.scopes.split(/\s+/).filter(Boolean).map((scope) => (
+                        <Badge key={scope} variant="secondary">{scope}</Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={client.is_active ? "default" : "outline"}>
