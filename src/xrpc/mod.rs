@@ -1,5 +1,5 @@
-mod procedure;
-mod query;
+pub(crate) mod procedure;
+pub(crate) mod query;
 
 use axum::Json;
 use axum::body::Body;
@@ -19,7 +19,7 @@ use crate::resolve::resolve_nsid_authority;
 
 /// Parse a raw query string into a map where repeated keys become JSON arrays.
 /// Single-value keys remain as JSON strings for backward compatibility.
-fn parse_query_params(query: &str) -> HashMap<String, Value> {
+pub(crate) fn parse_query_params(query: &str) -> HashMap<String, Value> {
     let mut multi: HashMap<String, Vec<String>> = HashMap::new();
     for pair in query.split('&') {
         if pair.is_empty() {
@@ -54,7 +54,7 @@ fn parse_query_params(query: &str) -> HashMap<String, Value> {
 /// HTTP query params arrive as strings. Without this, Lua scripts receive
 /// `"25"` (a string) for `params.limit`, which Postgres rejects when used
 /// in LIMIT (`argument of LIMIT must be type bigint, not type text`).
-fn coerce_params(params: &mut HashMap<String, Value>, parameters: &Value) {
+pub(crate) fn coerce_params(params: &mut HashMap<String, Value>, parameters: &Value) {
     let properties = match parameters.get("properties").and_then(|p| p.as_object()) {
         Some(p) => p,
         None => return,
@@ -98,7 +98,7 @@ fn coerce_params(params: &mut HashMap<String, Value>, parameters: &Value) {
 }
 
 /// Proxy an unrecognized XRPC method to its home AppView resolved via DNS.
-async fn proxy_to_authority(
+pub(crate) async fn proxy_to_authority(
     state: &AppState,
     method: &str,
     query_string: &str,

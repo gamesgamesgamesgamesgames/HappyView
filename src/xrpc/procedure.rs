@@ -10,7 +10,7 @@ use crate::lexicon::ProcedureAction;
 use crate::record_refs::sync_refs;
 use crate::repo;
 
-pub(super) async fn handle_procedure(
+pub(crate) async fn handle_procedure(
     state: &AppState,
     method: &str,
     claims: &Claims,

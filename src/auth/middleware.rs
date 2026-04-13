@@ -34,13 +34,18 @@ impl Claims {
         self.client_key.as_deref()
     }
 
-    /// Test-only constructor.
-    #[cfg(test)]
-    pub fn new_for_test(did: String) -> Self {
+    /// Create claims for an internal call (e.g. Lua xrpc lib) with no client key.
+    pub fn internal(did: String) -> Self {
         Self {
             did,
             client_key: None,
         }
+    }
+
+    /// Test-only constructor.
+    #[cfg(test)]
+    pub fn new_for_test(did: String) -> Self {
+        Self::internal(did)
     }
 }
 

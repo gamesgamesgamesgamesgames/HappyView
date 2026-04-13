@@ -8,7 +8,7 @@ use crate::auth::Claims;
 use crate::db::adapt_sql;
 use crate::error::AppError;
 
-pub(super) async fn handle_query(
+pub(crate) async fn handle_query(
     state: &AppState,
     method: &str,
     params: &HashMap<String, Value>,

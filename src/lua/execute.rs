@@ -163,6 +163,32 @@ pub async fn execute_procedure_script(
         return Err(AppError::Internal(error_message));
     }
 
+    if let Err(e) =
+        super::xrpc_api::register_xrpc_api(&lua, state_arc.clone(), Some(claims.did().to_string()))
+    {
+        let error_message = format!("failed to register xrpc API: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: Some(claims.did().to_string()),
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "input": input_json,
+                    "caller_did": claims.did(),
+                    "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
+                }),
+            },
+            backend,
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
     if let Err(e) = atproto_api::register_atproto_api(&lua, state_arc.clone(), Some(claims.did())) {
         let error_message = format!("failed to register atproto API: {e}");
         log_event(
@@ -500,6 +526,32 @@ pub async fn execute_query_script(
 
     if let Err(e) = http_api::register_http_api(&lua, state_arc.clone()) {
         let error_message = format!("failed to register http API: {e}");
+        log_event(
+            &state.db,
+            EventLog {
+                event_type: "script.error".to_string(),
+                severity: Severity::Error,
+                actor_did: None,
+                subject: Some(method.to_string()),
+                detail: serde_json::json!({
+                    "error": error_message,
+                    "script_source": script_source,
+                    "method": method,
+                    "duration_ms": start.elapsed().as_millis() as u64,
+                }),
+            },
+            backend,
+        )
+        .await;
+        return Err(AppError::Internal(error_message));
+    }
+
+    if let Err(e) = super::xrpc_api::register_xrpc_api(
+        &lua,
+        state_arc.clone(),
+        claims.map(|c| c.did().to_string()),
+    ) {
+        let error_message = format!("failed to register xrpc API: {e}");
         log_event(
             &state.db,
             EventLog {
@@ -890,6 +942,9 @@ async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
 
     http_api::register_http_api(&lua, state_arc.clone())
         .map_err(|e| format!("failed to register http API: {e}"))?;
+
+    super::xrpc_api::register_xrpc_api(&lua, state_arc.clone(), Some(event.did.to_string()))
+        .map_err(|e| format!("failed to register xrpc API: {e}"))?;
 
     atproto_api::register_atproto_api(&lua, state_arc, None)
         .map_err(|e| format!("failed to register atproto API: {e}"))?;
