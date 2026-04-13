@@ -9,7 +9,7 @@ import type { AdminListRecordsResponse } from "@/types/records"
 import type { EventsListResponse } from "@/types/events"
 import type { ScriptVariableSummary } from "@/types/script-variables"
 import type { LabelerSummary } from "@/types/labelers"
-import type { RateLimitsResponse } from "@/types/rate-limits"
+import type { ApiClientSummary, CreateApiClientResponse } from "@/types/api-clients"
 import type { SettingEntry } from "@/types/settings"
 import type {
   ExternalProvider,
@@ -32,7 +32,7 @@ export type { EventLogEntry, EventsListResponse } from "@/types/events"
 export type { ScriptVariableSummary } from "@/types/script-variables"
 export type { LabelerSummary } from "@/types/labelers"
 export type { RecordLabel } from "@/types/records"
-export type { AllowlistEntry, RateLimitsResponse } from "@/types/rate-limits"
+export type { ApiClientSummary, CreateApiClientResponse } from "@/types/api-clients"
 export type { SettingEntry, OAuthSettings } from "@/types/settings"
 export { OAUTH_SETTING_KEYS } from "@/types/settings"
 export type {
@@ -364,48 +364,52 @@ export function deleteLabeler(
   })
 }
 
-// Rate Limits
-export function getRateLimits() {
-  return apiFetch<RateLimitsResponse>("/admin/rate-limits")
+// API Clients
+export function getApiClients() {
+  return apiFetch<ApiClientSummary[]>("/admin/api-clients")
 }
 
-export function upsertRateLimit(
+export function getApiClient(id: string) {
+  return apiFetch<ApiClientSummary>(`/admin/api-clients/${encodeURIComponent(id)}`)
+}
+
+export function createApiClient(
   body: {
-    capacity: number
-    refill_rate: number
-    default_query_cost: number
-    default_procedure_cost: number
-    default_proxy_cost: number
+    name: string
+    client_id_url: string
+    client_uri: string
+    redirect_uris: string[]
+    scopes?: string
+    rate_limit_capacity: number
+    rate_limit_refill_rate: number
   }
 ) {
-  return apiFetch("/admin/rate-limits", {
+  return apiFetch<CreateApiClientResponse>("/admin/api-clients", {
     method: "POST",
     body: JSON.stringify(body),
   })
 }
 
-export function setRateLimitEnabled(
-  body: { enabled: boolean }
+export function updateApiClient(
+  id: string,
+  body: {
+    name?: string
+    client_uri?: string
+    redirect_uris?: string[]
+    scopes?: string
+    rate_limit_capacity?: number
+    rate_limit_refill_rate?: number
+    is_active?: boolean
+  }
 ) {
-  return apiFetch("/admin/rate-limits/enabled", {
+  return apiFetch(`/admin/api-clients/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(body),
   })
 }
 
-export function addAllowlistEntry(
-  body: { cidr: string; note?: string }
-) {
-  return apiFetch("/admin/rate-limits/allowlist", {
-    method: "POST",
-    body: JSON.stringify(body),
-  })
-}
-
-export function removeAllowlistEntry(
-  id: number
-) {
-  return apiFetch(`/admin/rate-limits/allowlist/${encodeURIComponent(id)}`, {
+export function deleteApiClient(id: string) {
+  return apiFetch(`/admin/api-clients/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }

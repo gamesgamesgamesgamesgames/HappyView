@@ -13,11 +13,11 @@ import {
   IconVariable,
   IconTag,
   IconChevronRight,
-  IconShield,
   IconLink,
   IconPuzzle,
   IconLockAccess,
   IconInfoCircle,
+  IconApps,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -59,8 +59,8 @@ const settingsSubItems = [
   { title: "Plugins", url: "/dashboard/settings/plugins", icon: IconPuzzle, requiredPermissions: ["plugins:read"] },
   { title: "ENV Variables", url: "/dashboard/settings/env-variables", icon: IconVariable, requiredPermissions: ["script-variables:read"] },
   { title: "API Keys", url: "/dashboard/settings/api-keys", icon: IconKey, requiredPermissions: ["api-keys:read"] },
+  { title: "API Clients", url: "/dashboard/settings/api-clients", icon: IconApps, requiredPermissions: ["api-clients:view"] },
   { title: "Labelers", url: "/dashboard/settings/labelers", icon: IconTag, requiredPermissions: ["labelers:read"] },
-  { title: "Rate Limits", url: "/dashboard/settings/rate-limits", icon: IconShield, requiredPermissions: ["rate-limits:read"] },
   { title: "OAuth", url: "/dashboard/settings/oauth", icon: IconLockAccess, requiredPermissions: ["settings:manage"] },
 ] as const
 

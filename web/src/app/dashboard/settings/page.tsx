@@ -16,8 +16,8 @@ export default function SettingsPage() {
       router.replace("/dashboard/settings/env-variables");
     } else if (hasPermission("api-keys:read")) {
       router.replace("/dashboard/settings/api-keys");
-    } else if (hasPermission("rate-limits:read")) {
-      router.replace("/dashboard/settings/rate-limits");
+    } else if (hasPermission("api-clients:view")) {
+      router.replace("/dashboard/settings/api-clients");
     }
   }, [router, hasPermission]);
 

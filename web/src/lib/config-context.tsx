@@ -4,9 +4,15 @@ import { createContext, useContext, useEffect, useState } from "react"
 
 interface ConfigContextType {
   public_url: string
+  default_rate_limit_capacity: number
+  default_rate_limit_refill_rate: number
 }
 
-const ConfigContext = createContext<ConfigContextType>({ public_url: "" })
+const ConfigContext = createContext<ConfigContextType>({
+  public_url: "",
+  default_rate_limit_capacity: 100,
+  default_rate_limit_refill_rate: 2.0,
+})
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<ConfigContextType | null>(null)
@@ -19,7 +25,11 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         return res.json()
       })
       .then((data) => {
-        setConfig({ public_url: data.public_url })
+        setConfig({
+          public_url: data.public_url,
+          default_rate_limit_capacity: data.default_rate_limit_capacity,
+          default_rate_limit_refill_rate: data.default_rate_limit_refill_rate,
+        })
       })
       .catch((e) => setError(e.message))
   }, [])

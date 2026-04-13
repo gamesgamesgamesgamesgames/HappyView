@@ -55,7 +55,7 @@ const PERMISSION_CATEGORIES: Record<string, string[]> = {
   Users: ["users:create", "users:read", "users:update", "users:delete"],
   "API Keys": ["api-keys:create", "api-keys:read", "api-keys:delete"],
   Backfill: ["backfill:create", "backfill:read"],
-  "Rate Limits": ["rate-limits:read", "rate-limits:create", "rate-limits:delete"],
+  "API Clients": ["api-clients:view", "api-clients:create", "api-clients:edit", "api-clients:delete"],
   Plugins: ["plugins:read", "plugins:create", "plugins:delete"],
   System: ["stats:read", "events:read"],
 };

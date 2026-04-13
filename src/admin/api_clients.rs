@@ -3,6 +3,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use hex;
 use rand::Rng;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::AppState;
@@ -29,19 +30,26 @@ pub(super) async fn create_api_client(
     rand::rng().fill(&mut random_bytes);
     let client_key = format!("hvc_{}", hex::encode(random_bytes));
 
+    // Generate the client secret: "hvs_" + 64 random hex chars.
+    let mut secret_bytes = [0u8; 32];
+    rand::rng().fill(&mut secret_bytes);
+    let client_secret = format!("hvs_{}", hex::encode(secret_bytes));
+    let client_secret_hash = hex::encode(Sha256::digest(client_secret.as_bytes()));
+
     let id = Uuid::new_v4().to_string();
     let now = now_rfc3339();
     let redirect_uris_json =
         serde_json::to_string(&body.redirect_uris).unwrap_or_else(|_| "[]".to_string());
 
     let insert_sql = adapt_sql(
-        "INSERT INTO api_clients (id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+        "INSERT INTO api_clients (id, client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
         state.db_backend,
     );
 
     sqlx::query(&insert_sql)
         .bind(&id)
         .bind(&client_key)
+        .bind(&client_secret_hash)
         .bind(&body.name)
         .bind(&body.client_id_url)
         .bind(&body.client_uri)
@@ -72,6 +80,15 @@ pub(super) async fn create_api_client(
     ) {
         tracing::warn!(client_id = %body.client_id_url, error = %e, "OAuth client registration failed (DB row created)");
     }
+
+    // Register the client identity for request validation.
+    state.rate_limiter.register_client_identity(
+        client_key.clone(),
+        crate::rate_limit::ClientIdentity {
+            secret_hash: client_secret_hash,
+            client_uri: body.client_uri.clone(),
+        },
+    );
 
     // Register per-client rate limit config if overrides are set.
     if let (Some(capacity), Some(refill_rate)) =
@@ -111,6 +128,7 @@ pub(super) async fn create_api_client(
         Json(CreateApiClientResponse {
             id,
             client_key,
+            client_secret,
             name: body.name,
             client_id_url: body.client_id_url,
         }),
@@ -274,11 +292,12 @@ pub(super) async fn update_api_client(
 
     // Read current values
     let select_sql = adapt_sql(
-        "SELECT client_key, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active FROM api_clients WHERE id = ?",
+        "SELECT client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active FROM api_clients WHERE id = ?",
         state.db_backend,
     );
 
     type UpdateRow = (
+        String,
         String,
         String,
         String,
@@ -297,6 +316,7 @@ pub(super) async fn update_api_client(
 
     let Some((
         client_key,
+        client_secret_hash,
         cur_name,
         client_id_url,
         cur_client_uri,
@@ -367,8 +387,15 @@ pub(super) async fn update_api_client(
         state.oauth.remove(&client_id_url);
     }
 
-    // Update per-client rate limit config.
+    // Update client identity and per-client rate limit config.
     if is_active != 0 {
+        state.rate_limiter.register_client_identity(
+            client_key.clone(),
+            crate::rate_limit::ClientIdentity {
+                secret_hash: client_secret_hash,
+                client_uri: client_uri.clone(),
+            },
+        );
         if let (Some(cap), Some(refill)) = (capacity, refill_rate) {
             let global = state.rate_limiter.global_config();
             state.rate_limiter.register_client_config(
@@ -386,6 +413,7 @@ pub(super) async fn update_api_client(
             state.rate_limiter.remove_client_config(&client_key);
         }
     } else {
+        state.rate_limiter.remove_client_identity(&client_key);
         state.rate_limiter.remove_client_config(&client_key);
     }
 
@@ -436,10 +464,11 @@ pub(super) async fn delete_api_client(
         return Err(AppError::NotFound(format!("api client '{id}' not found")));
     }
 
-    // Remove from OAuth registry and rate limiter.
+    // Remove from OAuth registry, rate limiter, and client identities.
     if let Some((url, key)) = client_info {
         state.oauth.remove(&url);
         state.rate_limiter.remove_client_config(&key);
+        state.rate_limiter.remove_client_identity(&key);
     }
 
     log_event(

@@ -348,6 +348,7 @@ pub(super) struct ApiClientSummary {
 pub(super) struct CreateApiClientResponse {
     pub(super) id: String,
     pub(super) client_key: String,
+    pub(super) client_secret: String,
     pub(super) name: String,
     pub(super) client_id_url: String,
 }

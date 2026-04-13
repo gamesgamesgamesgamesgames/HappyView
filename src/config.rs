@@ -21,6 +21,8 @@ pub struct Config {
     pub tos_uri: Option<String>,
     pub policy_uri: Option<String>,
     pub token_encryption_key: Option<[u8; 32]>,
+    pub default_rate_limit_capacity: u32,
+    pub default_rate_limit_refill_rate: f64,
 }
 
 impl Config {
@@ -62,6 +64,14 @@ impl Config {
                     .ok()
                     .and_then(|bytes| bytes.try_into().ok())
             }),
+            default_rate_limit_capacity: env::var("DEFAULT_RATE_LIMIT_CAPACITY")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(100),
+            default_rate_limit_refill_rate: env::var("DEFAULT_RATE_LIMIT_REFILL_RATE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(2.0),
         }
     }
 
@@ -126,6 +136,8 @@ mod tests {
             tos_uri: None,
             policy_uri: None,
             token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
         };
         assert_eq!(
             config.listen_addr(),

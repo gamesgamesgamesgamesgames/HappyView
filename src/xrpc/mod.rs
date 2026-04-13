@@ -154,6 +154,92 @@ async fn proxy_to_authority(
         .unwrap())
 }
 
+/// Extract the API client key from the request for rate limiting.
+///
+/// Every request must carry a client key. Returns an error when none is
+/// found so the caller can reject the request with 401.
+///
+/// Resolution order:
+/// 1. Session cookie (`client_key` field in Claims)
+/// 2. `X-Client-Key` header
+/// 3. `client_key` query parameter
+///
+/// Security validation (Origin / secret) is logged as warnings but does
+/// not reject the request — the key is always used as the rate-limit
+/// bucket regardless.
+fn resolve_client_key(
+    state: &AppState,
+    claims: Option<&Claims>,
+    parts: &Parts,
+    query_params: &std::collections::HashMap<String, serde_json::Value>,
+) -> Result<String, AppError> {
+    // 1. Try session cookie
+    let client_key = claims
+        .and_then(|c| c.client_key().map(|k| k.to_string()))
+        // 2. Try X-Client-Key header
+        .or_else(|| {
+            parts
+                .headers
+                .get("x-client-key")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+        })
+        // 3. Try client_key query param
+        .or_else(|| {
+            query_params
+                .get("client_key")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+        .ok_or_else(|| {
+            AppError::Auth(
+                "Missing client identification. Provide an X-Client-Key header or client_key query parameter.".into(),
+            )
+        })?;
+
+    // Log validation warnings but always return the key for rate limiting.
+    if !state.rate_limiter.is_valid_client_key(&client_key) {
+        tracing::warn!("Unknown client key: {client_key}");
+        return Ok(client_key);
+    }
+
+    // If the key came from a session cookie, it was already validated at login time.
+    let from_session = claims
+        .and_then(|c| c.client_key())
+        .map(|k| k == client_key)
+        .unwrap_or(false);
+
+    if !from_session {
+        let origin = parts.headers.get("origin").and_then(|v| v.to_str().ok());
+
+        if let Some(origin) = origin {
+            if !state
+                .rate_limiter
+                .validate_client_origin(&client_key, origin)
+            {
+                tracing::warn!("Origin mismatch for client {client_key}: got {origin}");
+            }
+        } else {
+            let secret = parts
+                .headers
+                .get("x-client-secret")
+                .and_then(|v| v.to_str().ok());
+
+            match secret {
+                Some(s) if state.rate_limiter.validate_client_secret(&client_key, s) => {}
+                Some(_) => {
+                    tracing::warn!("Invalid client secret for {client_key}");
+                }
+                None => {
+                    tracing::warn!("No Origin or X-Client-Secret for client {client_key}");
+                }
+            }
+        }
+    }
+
+    Ok(client_key)
+}
+
 /// Apply rate limit headers to a response.
 fn apply_rate_limit_headers(response: &mut Response, remaining: u32, limit: u32, reset: u64) {
     let headers = response.headers_mut();
@@ -173,11 +259,7 @@ pub async fn xrpc_get(
     let mut params = parse_query_params(&raw_query);
     let claims = Claims::from_request_parts(&mut parts, &state).await.ok();
 
-    // Rate limit check — keyed by client_key for API client requests, "anonymous" otherwise
-    let rate_key = claims
-        .as_ref()
-        .and_then(|c| c.client_key().map(|k| k.to_string()))
-        .unwrap_or_else(|| "anonymous".to_string());
+    let rate_key = resolve_client_key(&state, claims.as_ref(), &parts, &params)?;
 
     let lexicon = state.lexicons.get(&method).await;
 
@@ -252,16 +334,14 @@ pub async fn xrpc_post(
     State(state): State<AppState>,
     Path(method): Path<String>,
     RawQuery(raw_query): RawQuery,
-    claims: Claims,
-    _headers: axum::http::HeaderMap,
+    mut parts: Parts,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
     let mut params = parse_query_params(&raw_query);
-    let rate_key = claims
-        .client_key()
-        .map(|k| k.to_string())
-        .unwrap_or_else(|| "anonymous".to_string());
+    let claims = Claims::from_request_parts(&mut parts, &state).await?;
+
+    let rate_key = resolve_client_key(&state, Some(&claims), &parts, &params)?;
 
     let lexicon = state.lexicons.get(&method).await;
 

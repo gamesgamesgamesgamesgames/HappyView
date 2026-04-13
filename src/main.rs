@@ -269,27 +269,37 @@ async fn main() {
     let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global);
     tokio::spawn(rate_limiter.clone().spawn_cleanup());
 
-    // Load per-client rate limit configs from api_clients table.
+    // Load per-client rate limit configs and identities from api_clients table.
     {
-        let client_configs: Vec<(String, i32, f64)> = sqlx::query_as(
-            "SELECT client_key, rate_limit_capacity, rate_limit_refill_rate FROM api_clients WHERE is_active = 1 AND rate_limit_capacity IS NOT NULL AND rate_limit_refill_rate IS NOT NULL",
+        type ClientRow = (String, String, String, Option<i32>, Option<f64>);
+        let client_rows: Vec<ClientRow> = sqlx::query_as(
+            "SELECT client_key, client_secret_hash, client_uri, rate_limit_capacity, rate_limit_refill_rate FROM api_clients WHERE is_active = 1",
         )
         .fetch_all(&db_pool)
         .await
         .unwrap_or_default();
 
         let global = rate_limiter.global_config();
-        for (client_key, capacity, refill_rate) in client_configs {
-            rate_limiter.register_client_config(
-                client_key,
-                RateLimitConfig {
-                    capacity: capacity as u32,
-                    refill_rate,
-                    default_query_cost: global.default_query_cost,
-                    default_procedure_cost: global.default_procedure_cost,
-                    default_proxy_cost: global.default_proxy_cost,
+        for (client_key, secret_hash, client_uri, capacity, refill_rate) in client_rows {
+            rate_limiter.register_client_identity(
+                client_key.clone(),
+                happyview::rate_limit::ClientIdentity {
+                    secret_hash,
+                    client_uri,
                 },
             );
+            if let (Some(cap), Some(refill)) = (capacity, refill_rate) {
+                rate_limiter.register_client_config(
+                    client_key,
+                    RateLimitConfig {
+                        capacity: cap as u32,
+                        refill_rate: refill,
+                        default_query_cost: global.default_query_cost,
+                        default_procedure_cost: global.default_procedure_cost,
+                        default_proxy_cost: global.default_proxy_cost,
+                    },
+                );
+            }
         }
     }
 

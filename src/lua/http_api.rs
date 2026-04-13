@@ -104,6 +104,8 @@ mod tests {
             tos_uri: None,
             policy_uri: None,
             token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
         };
         let (tx, _) = watch::channel(vec![]);
         let (labeler_tx, _) = watch::channel(());

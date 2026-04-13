@@ -1,5 +1,4 @@
 use axum::extract::{DefaultBodyLimit, State};
-use axum::http::HeaderMap;
 use axum::http::{Method, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -83,7 +82,13 @@ pub fn router(state: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE])
+                .allow_headers([
+                    header::CONTENT_TYPE,
+                    header::AUTHORIZATION,
+                    header::COOKIE,
+                    axum::http::HeaderName::from_static("x-client-key"),
+                    axum::http::HeaderName::from_static("x-client-secret"),
+                ])
                 .allow_credentials(true),
         )
         .with_state(state)
@@ -101,6 +106,8 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
         "jetstream_url": state.config.jetstream_url,
         "relay_url": state.config.relay_url,
         "plc_url": state.config.plc_url,
+        "default_rate_limit_capacity": state.config.default_rate_limit_capacity,
+        "default_rate_limit_refill_rate": state.config.default_rate_limit_refill_rate,
     }))
 }
 
@@ -161,12 +168,11 @@ async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Valu
     Json(metadata)
 }
 
-async fn get_profile(
-    State(state): State<AppState>,
-    claims: Claims,
-    _headers: HeaderMap,
-) -> Result<Response, AppError> {
-    let rate_key = claims.did().to_string();
+async fn get_profile(State(state): State<AppState>, claims: Claims) -> Result<Response, AppError> {
+    let rate_key = claims
+        .client_key()
+        .map(|k| k.to_string())
+        .unwrap_or_else(|| claims.did().to_string());
     let check = state
         .rate_limiter
         .check(&rate_key, state.rate_limiter.default_cost_for_type("query"));

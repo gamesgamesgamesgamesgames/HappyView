@@ -35,12 +35,22 @@ struct TokenBucket {
     last_access: Instant,
 }
 
+/// Metadata about a registered API client, used for request validation.
+pub struct ClientIdentity {
+    /// SHA-256 hash of the client secret
+    pub secret_hash: String,
+    /// The client's registered URI (for Origin header validation)
+    pub client_uri: String,
+}
+
 pub struct RateLimiter {
     enabled: AtomicBool,
     buckets: DashMap<String, TokenBucket>,
     global_config: ArcSwap<RateLimitConfig>,
     /// Per-client config overrides, keyed by client_key (e.g. "hvc_...")
     client_configs: DashMap<String, RateLimitConfig>,
+    /// Registered client identities, keyed by client_key
+    client_identities: DashMap<String, ClientIdentity>,
 }
 
 pub struct RateLimiterState {
@@ -62,6 +72,7 @@ impl RateLimiter {
             buckets: DashMap::new(),
             global_config: ArcSwap::new(Arc::new(global)),
             client_configs: DashMap::new(),
+            client_identities: DashMap::new(),
         })
     }
 
@@ -162,6 +173,46 @@ impl RateLimiter {
     /// Remove a per-client rate limit config override.
     pub fn remove_client_config(&self, client_key: &str) {
         self.client_configs.remove(client_key);
+    }
+
+    /// Register a client identity (key, secret hash, and client URI).
+    pub fn register_client_identity(&self, client_key: String, identity: ClientIdentity) {
+        self.client_identities.insert(client_key, identity);
+    }
+
+    /// Remove a client identity.
+    pub fn remove_client_identity(&self, client_key: &str) {
+        self.client_identities.remove(client_key);
+    }
+
+    /// Validate a client key + secret combination. Returns true if the secret
+    /// hash matches the stored hash for this client key.
+    pub fn validate_client_secret(&self, client_key: &str, secret: &str) -> bool {
+        use sha2::{Digest, Sha256};
+        if let Some(identity) = self.client_identities.get(client_key) {
+            let hash = hex::encode(Sha256::digest(secret.as_bytes()));
+            hash == identity.secret_hash
+        } else {
+            false
+        }
+    }
+
+    /// Validate a client key + origin combination. Returns true if the origin
+    /// matches the registered client_uri for this client key.
+    pub fn validate_client_origin(&self, client_key: &str, origin: &str) -> bool {
+        if let Some(identity) = self.client_identities.get(client_key) {
+            // Compare origins: strip trailing slash for consistency
+            let registered = identity.client_uri.trim_end_matches('/');
+            let provided = origin.trim_end_matches('/');
+            registered == provided
+        } else {
+            false
+        }
+    }
+
+    /// Check whether a client key is registered.
+    pub fn is_valid_client_key(&self, client_key: &str) -> bool {
+        self.client_identities.contains_key(client_key)
     }
 
     pub async fn spawn_cleanup(self: Arc<Self>) {
