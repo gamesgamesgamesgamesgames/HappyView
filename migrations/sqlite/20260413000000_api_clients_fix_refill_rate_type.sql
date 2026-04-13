@@ -1,0 +1,1 @@
+-- No-op: SQLite stores all floats as 8-byte IEEE 754 regardless of declared type.
