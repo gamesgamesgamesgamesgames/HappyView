@@ -2,7 +2,6 @@ import type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 import type { StatsResponse } from "@/types/stats"
 import type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
 import type { NetworkLexiconSummary } from "@/types/network-lexicons"
-import type { TapStatsResponse } from "@/types/tap"
 import type { BackfillJob } from "@/types/backfill"
 import type { UserSummary } from "@/types/users"
 import type { AdminListRecordsResponse } from "@/types/records"
@@ -24,7 +23,6 @@ export type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 export type { CollectionStat, StatsResponse } from "@/types/stats"
 export type { LexiconSummary, LexiconDetail } from "@/types/lexicons"
 export type { NetworkLexiconSummary } from "@/types/network-lexicons"
-export type { TapStatsResponse } from "@/types/tap"
 export type { BackfillJob } from "@/types/backfill"
 export type { UserSummary } from "@/types/users"
 export type { AdminRecord, AdminListRecordsResponse } from "@/types/records"
@@ -143,11 +141,6 @@ export function deleteNetworkLexicon(
     `/admin/network-lexicons/${encodeURIComponent(nsid)}`,
     { method: "DELETE" }
   )
-}
-
-// Tap Stats
-export function getTapStats() {
-  return apiFetch<TapStatsResponse>("/admin/tap/stats")
 }
 
 // Backfill

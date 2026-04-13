@@ -106,7 +106,7 @@ fn build_subscribe_url(base_url: &str, collections: &[String]) -> String {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Spawn a background task that connects to Jetstream's WebSocket firehose and
+/// Spawn a background task that connects to Jetstream's WebSocket stream and
 /// processes record + identity events. Uses exponential backoff on disconnects.
 pub fn spawn(state: AppState, mut collections_rx: watch::Receiver<Vec<String>>) {
     tokio::spawn(async move {

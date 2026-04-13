@@ -13,8 +13,8 @@ use super::auth::UserAuth;
 use super::permissions::Permission;
 use super::types::{AddNetworkLexiconBody, NetworkLexiconSummary};
 
-/// Send the current record collection list to the Tap task so it
-/// syncs the updated filter.
+/// Broadcast the current record collection list so the Jetstream
+/// subscription syncs its filter.
 async fn notify_collections(state: &AppState) {
     let collections = state.lexicons.get_record_collections().await;
     let _ = state.collections_tx.send(collections);

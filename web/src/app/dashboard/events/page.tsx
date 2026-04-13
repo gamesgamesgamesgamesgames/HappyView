@@ -375,7 +375,6 @@ export default function EventsPage() {
             { label: "Script", value: "script" },
             { label: "Admin", value: "admin" },
             { label: "Backfill", value: "backfill" },
-            { label: "Tap", value: "tap" },
           ],
         },
       },
