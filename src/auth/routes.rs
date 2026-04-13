@@ -21,6 +21,7 @@ pub struct LoginQuery {
     handle: String,
     redirect_uri: Option<String>,
     scope: Option<String>,
+    client_id: Option<String>,
 }
 
 /// Parse a whitespace-separated OAuth scope string into typed `Scope` values.
@@ -85,7 +86,10 @@ async fn login(
         }
     };
 
-    tracing::debug!(scopes = ?scopes, "resolved oauth scopes");
+    tracing::debug!(scopes = ?scopes, client_id = ?query.client_id, "resolved oauth scopes");
+
+    // Select the appropriate OAuth client based on client_id
+    let oauth_client = state.oauth.get_or_default(query.client_id.as_deref());
 
     // Hold the authorize lock so that authorize() + take_last_state_key() are atomic.
     // This prevents concurrent logins from swapping each other's state keys.
@@ -96,8 +100,7 @@ async fn login(
         ..Default::default()
     };
 
-    let url = state
-        .oauth
+    let url = oauth_client
         .authorize(&query.handle, options)
         .await
         .map_err(|e| AppError::Internal(format!("OAuth authorize failed: {e}")))?;
@@ -113,19 +116,22 @@ async fn login(
 
     // Store the redirect URI in the database, keyed by the OAuth state parameter.
     // This avoids third-party cookie issues when Pentaract (cross-origin) calls this endpoint.
-    if let Some(redirect_uri) = &query.redirect_uri {
-        tracing::debug!(oauth_state = ?oauth_state, redirect_uri = %redirect_uri, "storing redirect for state");
+    // Store redirect URI and client_id for the callback to use
+    if query.redirect_uri.is_some() || query.client_id.is_some() {
+        let redirect_uri = query.redirect_uri.as_deref().unwrap_or("");
+        tracing::debug!(oauth_state = ?oauth_state, redirect_uri = %redirect_uri, client_id = ?query.client_id, "storing redirect for state");
 
         if let Some(oauth_state) = oauth_state {
             let now = now_rfc3339();
             let expires_at = (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
             let sql = adapt_sql(
-                "INSERT INTO auth_login_redirects (state, redirect_uri, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                "INSERT INTO auth_login_redirects (state, redirect_uri, client_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
                 state.db_backend,
             );
             let _ = sqlx::query(&sql)
                 .bind(&oauth_state)
                 .bind(redirect_uri)
+                .bind(query.client_id.as_deref())
                 .bind(&now)
                 .bind(&expires_at)
                 .execute(&state.db)
@@ -145,14 +151,14 @@ async fn callback(
 ) -> Result<(SignedCookieJar<Key>, Redirect), AppError> {
     tracing::debug!(state = ?query.state, "callback received");
 
-    // Look up the redirect URI from the database before the OAuth library consumes the state
-    let redirect_url = if let Some(oauth_state) = &query.state {
+    // Look up the redirect URI and client_id from the database before the OAuth library consumes the state
+    let (redirect_url, client_id) = if let Some(oauth_state) = &query.state {
         let sql = adapt_sql(
-            "SELECT redirect_uri FROM auth_login_redirects WHERE state = ? AND expires_at > ?",
+            "SELECT redirect_uri, client_id FROM auth_login_redirects WHERE state = ? AND expires_at > ?",
             state.db_backend,
         );
         let now = now_rfc3339();
-        let row: Option<(String,)> = sqlx::query_as(&sql)
+        let row: Option<(String, Option<String>)> = sqlx::query_as(&sql)
             .bind(oauth_state)
             .bind(&now)
             .fetch_optional(&state.db)
@@ -172,11 +178,20 @@ async fn callback(
         }
 
         tracing::debug!(found_redirect = ?row, "redirect lookup result");
-        row.map(|(uri,)| uri)
+        match row {
+            Some((uri, cid)) => {
+                let uri = if uri.is_empty() { None } else { Some(uri) };
+                (uri, cid)
+            }
+            None => (None, None),
+        }
     } else {
         tracing::debug!("no state in callback query");
-        None
+        (None, None)
     };
+
+    // Use the same OAuth client that was used for authorize
+    let oauth_client = state.oauth.get_or_default(client_id.as_deref());
 
     let params = atrium_oauth::CallbackParams {
         code: query.code,
@@ -184,8 +199,7 @@ async fn callback(
         iss: query.iss,
     };
 
-    let (session, _app_state) = state
-        .oauth
+    let (session, _app_state) = oauth_client
         .callback(params)
         .await
         .map_err(|e| AppError::Internal(format!("OAuth callback failed: {e}")))?;
@@ -196,13 +210,37 @@ async fn callback(
         .await
         .ok_or_else(|| AppError::Internal("no DID in OAuth session".into()))?;
 
+    // Look up the client_key for the API client so we can store it in the session cookie
+    // for per-client rate limiting.
+    let client_key = if let Some(ref cid) = client_id {
+        let sql = adapt_sql(
+            "SELECT client_key FROM api_clients WHERE client_id_url = ? AND is_active = 1",
+            state.db_backend,
+        );
+        let row: Option<(String,)> = sqlx::query_as(&sql)
+            .bind(cid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+        row.map(|(k,)| k)
+    } else {
+        None
+    };
+
     // Use DB-stored redirect, or default to "/"
-    let redirect_url = redirect_url.unwrap_or_else(|| "/".to_string());
+    let redirect_url = redirect_url.unwrap_or_else(|| "/".into());
     tracing::debug!(redirect_url = %redirect_url, "redirecting after callback");
 
     // Set the session cookie
     // Must use SameSite=None for cross-origin requests (e.g., Pentaract calling HappyView)
-    let mut session_cookie = Cookie::new(COOKIE_NAME, did.to_string());
+    // Encode did and optional client_key separated by newline.
+    let did_str = did.as_ref();
+    let cookie_value = if let Some(ref ck) = client_key {
+        format!("{did_str}\n{ck}")
+    } else {
+        did_str.to_string()
+    };
+    let mut session_cookie = Cookie::new(COOKIE_NAME, cookie_value);
     session_cookie.set_path("/");
     session_cookie.set_http_only(true);
     session_cookie.set_same_site(axum_extra::extract::cookie::SameSite::None);
@@ -227,9 +265,10 @@ async fn logout(
     jar: SignedCookieJar<Key>,
 ) -> Result<SignedCookieJar<Key>, AppError> {
     if let Some(cookie) = jar.get(COOKIE_NAME) {
-        let did_str = cookie.value().to_string();
+        let raw = cookie.value().to_string();
+        let did_str = raw.split('\n').next().unwrap_or(&raw).to_string();
         if let Ok(did) = atrium_api::types::string::Did::new(did_str) {
-            let _ = state.oauth.revoke(&did).await;
+            let _ = state.oauth.default_client().revoke(&did).await;
         }
     }
 
@@ -254,7 +293,8 @@ async fn me(
     let cookie = jar
         .get(COOKIE_NAME)
         .ok_or(AppError::Auth("not authenticated".into()))?;
-    let did = cookie.value().to_string();
+    let raw = cookie.value().to_string();
+    let did = raw.split('\n').next().unwrap_or(&raw).to_string();
 
     let backend = state.db_backend;
     let user: Option<(i32,)> =

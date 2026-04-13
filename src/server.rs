@@ -7,7 +7,6 @@ use axum::{Json, Router};
 use bytes::Bytes;
 use http_body_util::Full;
 use std::convert::Infallible;
-use std::net::IpAddr;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -106,7 +105,8 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
 }
 
 async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let mut metadata = serde_json::to_value(&state.oauth.client_metadata).unwrap_or_default();
+    let mut metadata =
+        serde_json::to_value(&state.oauth.default_client().client_metadata).unwrap_or_default();
 
     // The `client_id` field in the response must exactly match the URL the
     // authorization server fetched.
@@ -161,25 +161,15 @@ async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Valu
     Json(metadata)
 }
 
-fn ip_from_forwarded_for(value: Option<&str>) -> Option<IpAddr> {
-    let forwarded = value?;
-    let first = forwarded.split(',').next()?;
-    first.trim().parse::<IpAddr>().ok()
-}
-
 async fn get_profile(
     State(state): State<AppState>,
     claims: Claims,
-    headers: HeaderMap,
+    _headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let client_ip =
-        ip_from_forwarded_for(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
     let rate_key = claims.did().to_string();
-    let check = state.rate_limiter.check(
-        &rate_key,
-        state.rate_limiter.default_cost_for_type("query"),
-        client_ip,
-    );
+    let check = state
+        .rate_limiter
+        .check(&rate_key, state.rate_limiter.default_cost_for_type("query"));
 
     if let CheckResult::Limited {
         retry_after,

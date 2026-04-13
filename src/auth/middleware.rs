@@ -15,7 +15,13 @@ use crate::error::AppError;
 #[derive(Debug, Clone)]
 pub struct Claims {
     did: String,
+    /// The API client key (e.g. "hvc_...") if the user authenticated via an API client.
+    client_key: Option<String>,
 }
+
+/// Separator used to encode `did` and `client_key` in a single cookie value.
+/// Newlines cannot appear in DIDs or client keys, so this is safe.
+const COOKIE_SEP: char = '\n';
 
 impl Claims {
     /// The authenticated user's DID.
@@ -23,10 +29,18 @@ impl Claims {
         &self.did
     }
 
+    /// The API client key, if the user logged in via an API client.
+    pub fn client_key(&self) -> Option<&str> {
+        self.client_key.as_deref()
+    }
+
     /// Test-only constructor.
     #[cfg(test)]
     pub fn new_for_test(did: String) -> Self {
-        Self { did }
+        Self {
+            did,
+            client_key: None,
+        }
     }
 }
 
@@ -43,8 +57,13 @@ impl FromRequestParts<AppState> for Claims {
             .map_err(|_| AppError::Auth("failed to read cookies".into()))?;
 
         if let Some(cookie) = jar.get(COOKIE_NAME) {
-            let did = cookie.value().to_string();
-            return Ok(Claims { did });
+            let value = cookie.value().to_string();
+            let (did, client_key) = if let Some((d, k)) = value.split_once(COOKIE_SEP) {
+                (d.to_string(), Some(k.to_string()))
+            } else {
+                (value, None)
+            };
+            return Ok(Claims { did, client_key });
         }
 
         // Path 2: Authorization header
@@ -63,13 +82,17 @@ impl FromRequestParts<AppState> for Claims {
                 // API key auth is handled by UserAuth extractor which looks up the key.
                 // We need to extract the DID from the api_keys table.
                 let did = resolve_api_key_did(state, token).await?;
-                return Ok(Claims { did });
+                return Ok(Claims {
+                    did,
+                    client_key: None,
+                });
             }
 
             // Otherwise, try service auth JWT
             let service_auth = super::service_auth::ServiceAuth::from_bearer(token, state).await?;
             return Ok(Claims {
                 did: service_auth.did,
+                client_key: None,
             });
         }
 

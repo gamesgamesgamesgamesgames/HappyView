@@ -1,3 +1,4 @@
+mod api_clients;
 mod api_keys;
 pub(crate) mod auth;
 mod backfill;
@@ -74,11 +75,6 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             post(rate_limits::upsert).get(rate_limits::list),
         )
         .route("/rate-limits/enabled", put(rate_limits::set_enabled))
-        .route("/rate-limits/allowlist", post(rate_limits::add_allowlist))
-        .route(
-            "/rate-limits/allowlist/{id}",
-            delete(rate_limits::remove_allowlist),
-        )
         .route("/settings", get(settings::list))
         .route(
             "/settings/logo",
@@ -95,5 +91,15 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route(
             "/plugins/{id}/secrets",
             get(plugins::get_secrets).put(plugins::update_secrets),
+        )
+        .route(
+            "/api-clients",
+            post(api_clients::create_api_client).get(api_clients::list_api_clients),
+        )
+        .route(
+            "/api-clients/{id}",
+            get(api_clients::get_api_client)
+                .put(api_clients::update_api_client)
+                .delete(api_clients::delete_api_client),
         )
 }

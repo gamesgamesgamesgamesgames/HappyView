@@ -3,13 +3,12 @@ mod query;
 
 use axum::Json;
 use axum::body::Body;
-use axum::extract::{ConnectInfo, FromRequestParts, Path, RawQuery, State};
+use axum::extract::{FromRequestParts, Path, RawQuery, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::Response;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
 
 use crate::AppState;
 use crate::auth::Claims;
@@ -155,23 +154,6 @@ async fn proxy_to_authority(
         .unwrap())
 }
 
-/// Extract client IP from X-Forwarded-For header or ConnectInfo.
-fn extract_client_ip(parts: &Parts) -> Option<IpAddr> {
-    if let Some(forwarded) = parts
-        .headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        && let Some(first) = forwarded.split(',').next()
-        && let Ok(ip) = first.trim().parse::<IpAddr>()
-    {
-        return Some(ip);
-    }
-    parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip())
-}
-
 /// Apply rate limit headers to a response.
 fn apply_rate_limit_headers(response: &mut Response, remaining: u32, limit: u32, reset: u64) {
     let headers = response.headers_mut();
@@ -189,18 +171,13 @@ pub async fn xrpc_get(
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
     let mut params = parse_query_params(&raw_query);
-    let client_ip = extract_client_ip(&parts);
     let claims = Claims::from_request_parts(&mut parts, &state).await.ok();
 
-    // Rate limit check
+    // Rate limit check — keyed by client_key for API client requests, "anonymous" otherwise
     let rate_key = claims
         .as_ref()
-        .map(|c| c.did().to_string())
-        .unwrap_or_else(|| {
-            client_ip
-                .map(|ip| ip.to_string())
-                .unwrap_or_else(|| "unknown".to_string())
-        });
+        .and_then(|c| c.client_key().map(|k| k.to_string()))
+        .unwrap_or_else(|| "anonymous".to_string());
 
     let lexicon = state.lexicons.get(&method).await;
 
@@ -214,7 +191,7 @@ pub async fn xrpc_get(
         state.rate_limiter.default_cost_for_type("proxy")
     };
 
-    let check = state.rate_limiter.check(&rate_key, cost, client_ip);
+    let check = state.rate_limiter.check(&rate_key, cost);
 
     match check {
         CheckResult::Limited {
@@ -270,27 +247,21 @@ pub async fn xrpc_get(
     Ok(response)
 }
 
-/// Extract client IP from X-Forwarded-For header value.
-fn ip_from_forwarded_for(value: Option<&str>) -> Option<IpAddr> {
-    let forwarded = value?;
-    let first = forwarded.split(',').next()?;
-    first.trim().parse::<IpAddr>().ok()
-}
-
 /// Catch-all POST handler for XRPC procedures.
 pub async fn xrpc_post(
     State(state): State<AppState>,
     Path(method): Path<String>,
     RawQuery(raw_query): RawQuery,
     claims: Claims,
-    headers: axum::http::HeaderMap,
+    _headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
     let mut params = parse_query_params(&raw_query);
-    let client_ip =
-        ip_from_forwarded_for(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
-    let rate_key = claims.did().to_string();
+    let rate_key = claims
+        .client_key()
+        .map(|k| k.to_string())
+        .unwrap_or_else(|| "anonymous".to_string());
 
     let lexicon = state.lexicons.get(&method).await;
 
@@ -304,7 +275,7 @@ pub async fn xrpc_post(
         state.rate_limiter.default_cost_for_type("proxy")
     };
 
-    let check = state.rate_limiter.check(&rate_key, cost, client_ip);
+    let check = state.rate_limiter.check(&rate_key, cost);
 
     match check {
         CheckResult::Limited {

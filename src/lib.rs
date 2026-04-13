@@ -57,7 +57,7 @@ pub struct AppState {
     pub collections_tx: watch::Sender<Vec<String>>,
     pub labeler_subscriptions_tx: watch::Sender<()>,
     pub rate_limiter: Arc<RateLimiter>,
-    pub oauth: Arc<HappyViewOAuthClient>,
+    pub oauth: Arc<auth::OAuthClientRegistry>,
     pub oauth_state_store: DbStateStore,
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub plugin_registry: Arc<plugin::PluginRegistry>,

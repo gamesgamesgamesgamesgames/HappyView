@@ -297,6 +297,62 @@ pub(super) struct UpdatePluginSecretsBody {
 }
 
 // ---------------------------------------------------------------------------
+// API client types
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub(super) struct CreateApiClientBody {
+    pub(super) name: String,
+    pub(super) client_id_url: String,
+    pub(super) client_uri: String,
+    pub(super) redirect_uris: Vec<String>,
+    #[serde(default = "default_scopes")]
+    pub(super) scopes: String,
+    pub(super) rate_limit_capacity: Option<i32>,
+    pub(super) rate_limit_refill_rate: Option<f64>,
+}
+
+fn default_scopes() -> String {
+    "atproto".to_string()
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpdateApiClientBody {
+    pub(super) name: Option<String>,
+    pub(super) client_uri: Option<String>,
+    pub(super) redirect_uris: Option<Vec<String>>,
+    pub(super) scopes: Option<String>,
+    pub(super) rate_limit_capacity: Option<Option<i32>>,
+    pub(super) rate_limit_refill_rate: Option<Option<f64>>,
+    pub(super) is_active: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub(super) struct ApiClientSummary {
+    pub(super) id: String,
+    pub(super) client_key: String,
+    pub(super) name: String,
+    pub(super) client_id_url: String,
+    pub(super) client_uri: String,
+    pub(super) redirect_uris: Vec<String>,
+    pub(super) scopes: String,
+    pub(super) rate_limit_capacity: Option<i32>,
+    pub(super) rate_limit_refill_rate: Option<f64>,
+    pub(super) is_active: bool,
+    pub(super) created_by: String,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct CreateApiClientResponse {
+    pub(super) id: String,
+    pub(super) client_key: String,
+    pub(super) name: String,
+    pub(super) client_id_url: String,
+}
+
+// ---------------------------------------------------------------------------
 // Rate limit types
 // ---------------------------------------------------------------------------
 
@@ -314,12 +370,6 @@ pub(super) struct SetEnabledBody {
     pub(super) enabled: bool,
 }
 
-#[derive(Deserialize)]
-pub(super) struct AddAllowlistBody {
-    pub(super) cidr: String,
-    pub(super) note: Option<String>,
-}
-
 #[derive(Serialize)]
 pub(super) struct RateLimitsResponse {
     pub(super) enabled: bool,
@@ -328,13 +378,4 @@ pub(super) struct RateLimitsResponse {
     pub(super) default_query_cost: i32,
     pub(super) default_procedure_cost: i32,
     pub(super) default_proxy_cost: i32,
-    pub(super) allowlist: Vec<AllowlistEntry>,
-}
-
-#[derive(Serialize)]
-pub(super) struct AllowlistEntry {
-    pub(super) id: i32,
-    pub(super) cidr: String,
-    pub(super) note: Option<String>,
-    pub(super) created_at: String,
 }

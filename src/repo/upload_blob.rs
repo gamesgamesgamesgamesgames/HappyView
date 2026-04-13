@@ -2,7 +2,6 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::Response;
-use std::net::IpAddr;
 
 use crate::AppState;
 use crate::auth::Claims;
@@ -18,17 +17,10 @@ pub async fn upload_blob(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
-    let client_ip: Option<IpAddr> = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .and_then(|s| s.trim().parse().ok());
-
     let rate_key = claims.did().to_string();
     let check = state.rate_limiter.check(
         &rate_key,
         state.rate_limiter.default_cost_for_type("procedure"),
-        client_ip,
     );
 
     if let CheckResult::Limited {

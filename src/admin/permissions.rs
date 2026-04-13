@@ -76,6 +76,15 @@ pub enum Permission {
     PluginsCreate,
     #[serde(rename = "plugins:delete")]
     PluginsDelete,
+
+    #[serde(rename = "api-clients:view")]
+    ApiClientsView,
+    #[serde(rename = "api-clients:create")]
+    ApiClientsCreate,
+    #[serde(rename = "api-clients:edit")]
+    ApiClientsEdit,
+    #[serde(rename = "api-clients:delete")]
+    ApiClientsDelete,
 }
 
 impl Permission {
@@ -112,10 +121,14 @@ impl Permission {
             Self::PluginsRead => "plugins:read",
             Self::PluginsCreate => "plugins:create",
             Self::PluginsDelete => "plugins:delete",
+            Self::ApiClientsView => "api-clients:view",
+            Self::ApiClientsCreate => "api-clients:create",
+            Self::ApiClientsEdit => "api-clients:edit",
+            Self::ApiClientsDelete => "api-clients:delete",
         }
     }
 
-    /// All 30 permissions.
+    /// All permissions.
     pub fn all() -> HashSet<Permission> {
         HashSet::from([
             Self::LexiconsCreate,
@@ -148,6 +161,10 @@ impl Permission {
             Self::PluginsRead,
             Self::PluginsCreate,
             Self::PluginsDelete,
+            Self::ApiClientsView,
+            Self::ApiClientsCreate,
+            Self::ApiClientsEdit,
+            Self::ApiClientsDelete,
         ])
     }
 }
@@ -199,6 +216,10 @@ impl Template {
                 perms.insert(Permission::PluginsRead);
                 perms.insert(Permission::PluginsCreate);
                 perms.insert(Permission::PluginsDelete);
+                perms.insert(Permission::ApiClientsView);
+                perms.insert(Permission::ApiClientsCreate);
+                perms.insert(Permission::ApiClientsEdit);
+                perms.insert(Permission::ApiClientsDelete);
                 perms
             }
             Self::FullAccess => Permission::all(),

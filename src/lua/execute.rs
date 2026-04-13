@@ -1023,9 +1023,10 @@ mod tests {
                     default_procedure_cost: 1,
                     default_proxy_cost: 1,
                 },
-                vec![],
             ),
-            oauth: std::sync::Arc::new(oauth),
+            oauth: std::sync::Arc::new(crate::auth::OAuthClientRegistry::new(std::sync::Arc::new(
+                oauth,
+            ))),
             oauth_state_store: crate::auth::oauth_store::DbStateStore::new(
                 test_db.clone(),
                 crate::db::DatabaseBackend::Sqlite,

@@ -5,7 +5,7 @@ use happyview::config::Config;
 use happyview::db;
 use happyview::dns::NativeDnsResolver;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
-use happyview::rate_limit::RateLimiter;
+use happyview::rate_limit::{RateLimitConfig, RateLimiter};
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 use happyview::{AppState, jetstream, labeler, server};
 use tokio::sync::watch;
@@ -266,8 +266,32 @@ async fn main() {
 
     // Initialize rate limiter from DB.
     let rl_state = RateLimiter::load_from_db(&db_pool).await;
-    let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global, rl_state.allowlist);
+    let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global);
     tokio::spawn(rate_limiter.clone().spawn_cleanup());
+
+    // Load per-client rate limit configs from api_clients table.
+    {
+        let client_configs: Vec<(String, i32, f64)> = sqlx::query_as(
+            "SELECT client_key, rate_limit_capacity, rate_limit_refill_rate FROM api_clients WHERE is_active = 1 AND rate_limit_capacity IS NOT NULL AND rate_limit_refill_rate IS NOT NULL",
+        )
+        .fetch_all(&db_pool)
+        .await
+        .unwrap_or_default();
+
+        let global = rate_limiter.global_config();
+        for (client_key, capacity, refill_rate) in client_configs {
+            rate_limiter.register_client_config(
+                client_key,
+                RateLimitConfig {
+                    capacity: capacity as u32,
+                    refill_rate,
+                    default_query_cost: global.default_query_cost,
+                    default_procedure_cost: global.default_procedure_cost,
+                    default_proxy_cost: global.default_proxy_cost,
+                },
+            );
+        }
+    }
 
     // Build atrium-oauth client
     let dns = NativeDnsResolver::new();
@@ -370,6 +394,20 @@ async fn main() {
     let (collections_tx, collections_rx) = watch::channel(initial_collections);
     let (labeler_subscriptions_tx, labeler_subscriptions_rx) = watch::channel(());
 
+    // Build the OAuth client registry and load API clients from DB
+    let oauth_registry = Arc::new(happyview::auth::OAuthClientRegistry::new(Arc::new(
+        oauth_client,
+    )));
+    oauth_registry
+        .load_from_db(
+            &db_pool,
+            db_backend,
+            &config.plc_url,
+            oauth_state_store.clone(),
+            db_pool.clone(),
+        )
+        .await;
+
     let state = AppState {
         config: config.clone(),
         http,
@@ -379,7 +417,7 @@ async fn main() {
         collections_tx,
         labeler_subscriptions_tx,
         rate_limiter,
-        oauth: Arc::new(oauth_client),
+        oauth: oauth_registry,
         oauth_state_store,
         cookie_key,
         plugin_registry,
