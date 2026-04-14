@@ -19,6 +19,8 @@ RUN cargo build --release && rm -rf src target/release/.fingerprint/happyview-*
 # Build application code
 COPY src/ src/
 COPY migrations/ migrations/
+ARG HAPPYVIEW_VERSION
+ENV HAPPYVIEW_VERSION=$HAPPYVIEW_VERSION
 RUN cargo build --release
 
 FROM debian:bookworm-slim

@@ -120,9 +120,14 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
             .or_else(|| state.config.logo_uri.clone())
     };
 
+    let version: &str = match option_env!("HAPPYVIEW_VERSION") {
+        Some(v) if !v.is_empty() => v.trim_start_matches('v'),
+        _ => env!("CARGO_PKG_VERSION"),
+    };
+
     Json(serde_json::json!({
         "public_url": state.config.public_url,
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": version,
         "database_backend": format!("{:?}", state.config.database_backend).to_lowercase(),
         "jetstream_url": state.config.jetstream_url,
         "relay_url": state.config.relay_url,
