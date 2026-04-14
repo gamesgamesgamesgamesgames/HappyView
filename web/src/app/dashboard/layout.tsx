@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useConfig } from "@/lib/config-context"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PluginUpdateProvider } from "@/components/plugin-update-provider"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/sonner"
 
 export default function DashboardLayout({
   children,
@@ -30,16 +32,19 @@ export default function DashboardLayout({
   if (!did) return null
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" />
-      <SidebarInset>{children}</SidebarInset>
-    </SidebarProvider>
+    <PluginUpdateProvider>
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+            "--header-height": "calc(var(--spacing) * 12)",
+          } as React.CSSProperties
+        }
+      >
+        <AppSidebar variant="inset" />
+        <SidebarInset>{children}</SidebarInset>
+      </SidebarProvider>
+      <Toaster />
+    </PluginUpdateProvider>
   )
 }

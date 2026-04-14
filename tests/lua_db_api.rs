@@ -95,6 +95,11 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
             happyview::plugin::WasmRuntime::new().expect("wasm runtime"),
         ),
         attestation_signer: None,
+        official_registry: std::sync::Arc::new(tokio::sync::RwLock::new(
+            happyview::plugin::official_registry::OfficialRegistryState::default(),
+        )),
+        official_registry_config: happyview::plugin::official_registry::RegistryConfig::production(
+        ),
     }
 }
 

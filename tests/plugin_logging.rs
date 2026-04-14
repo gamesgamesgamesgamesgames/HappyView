@@ -27,10 +27,34 @@ async fn plugin_log_writes_all_four_levels_to_event_logs() {
     let backend = test_backend();
     truncate_all(&pool).await;
 
-    log("my-plugin", LogLevel::Debug, "dbg msg", Some(pool.clone()), backend);
-    log("my-plugin", LogLevel::Info, "info msg", Some(pool.clone()), backend);
-    log("my-plugin", LogLevel::Warn, "warn msg", Some(pool.clone()), backend);
-    log("my-plugin", LogLevel::Error, "err msg", Some(pool.clone()), backend);
+    log(
+        "my-plugin",
+        LogLevel::Debug,
+        "dbg msg",
+        Some(pool.clone()),
+        backend,
+    );
+    log(
+        "my-plugin",
+        LogLevel::Info,
+        "info msg",
+        Some(pool.clone()),
+        backend,
+    );
+    log(
+        "my-plugin",
+        LogLevel::Warn,
+        "warn msg",
+        Some(pool.clone()),
+        backend,
+    );
+    log(
+        "my-plugin",
+        LogLevel::Error,
+        "err msg",
+        Some(pool.clone()),
+        backend,
+    );
 
     flush_spawned_tasks().await;
 
@@ -44,7 +68,12 @@ async fn plugin_log_writes_all_four_levels_to_event_logs() {
         .await
         .expect("failed to query event_logs");
 
-    assert_eq!(rows.len(), 4, "expected 4 plugin.log rows, got {}", rows.len());
+    assert_eq!(
+        rows.len(),
+        4,
+        "expected 4 plugin.log rows, got {}",
+        rows.len()
+    );
 
     // Severity mapping: Debug->info, Info->info, Warn->warn, Error->error
     let severities: Vec<&str> = rows.iter().map(|(s, _, _)| s.as_str()).collect();
@@ -79,7 +108,13 @@ async fn plugin_log_with_none_db_does_not_write_event_log() {
     truncate_all(&pool).await;
 
     // db=None: should only emit to tracing, not persist.
-    log("silent-plugin", LogLevel::Info, "should not persist", None, backend);
+    log(
+        "silent-plugin",
+        LogLevel::Info,
+        "should not persist",
+        None,
+        backend,
+    );
 
     flush_spawned_tasks().await;
 

@@ -1,16 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, RefreshCw, ExternalLink, Settings, Loader2, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Plus, Trash2, RefreshCw, ExternalLink, Settings, Loader2, AlertTriangle, CheckCircle2, AlertCircle, ArrowUpCircle, Search } from "lucide-react";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { getPlugins, addPlugin, removePlugin, reloadPlugin, getPluginSecrets, updatePluginSecrets, previewPlugin, type PluginPreview } from "@/lib/api";
+import { useOfficialPlugins } from "@/hooks/use-official-plugins";
+import { getPlugins, addPlugin, removePlugin, reloadPlugin, getPluginSecrets, updatePluginSecrets, previewPlugin, checkPluginUpdate, type PluginPreview } from "@/lib/api";
 import type { PluginSummary } from "@/types/plugins";
+import { PluginUpdateDialog } from "@/components/plugin-update-dialog";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -30,6 +44,15 @@ import {
   ResponsiveDialogTrigger,
 } from "@/components/ui/responsive-dialog";
 
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function formatAuthType(authType: string): string {
   const formats: Record<string, string> = {
     oauth2: "OAuth 2.0",
@@ -46,13 +69,37 @@ export default function PluginsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [updateDialogPlugin, setUpdateDialogPlugin] = useState<PluginSummary | null>(null);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState<string | null>(null);
+
+  const searchParams = useSearchParams();
 
   // Add plugin dialog state
   const [addOpen, setAddOpen] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [adding, setAdding] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
   const [pluginPreview, setPluginPreview] = useState<PluginPreview | null>(null);
+  const [comboboxOpen, setComboboxOpen] = useState<boolean>(false);
+  const [selectedManifestUrl, setSelectedManifestUrl] = useState<string | null>(
+    null,
+  );
+
+  const { plugins: officialPlugins, loading: officialLoading } = useOfficialPlugins();
+
+  const filteredOfficialPlugins = useMemo(() => {
+    const q = newUrl.trim().toLowerCase();
+    if (!q) return officialPlugins;
+    return officialPlugins.filter(
+      (p) =>
+        p.id.toLowerCase().includes(q) ||
+        p.name.toLowerCase().includes(q),
+    );
+  }, [officialPlugins, newUrl]);
+
+  const showCombobox = officialLoading || officialPlugins.length > 0;
+  const hasComboboxResults =
+    officialLoading || filteredOfficialPlugins.length > 0;
 
   // Configure secrets dialog state
   const [configOpen, setConfigOpen] = useState(false);
@@ -78,20 +125,63 @@ export default function PluginsPage() {
     load();
   }, [load]);
 
-  async function handlePreview() {
-    if (!newUrl.trim()) return;
+  function openUpdateDialog(plugin: PluginSummary) {
+    setUpdateDialogPlugin(plugin);
+    setUpdateDialogOpen(true);
+  }
 
-    setPreviewing(true);
+  async function handleCheckUpdate(plugin: PluginSummary) {
+    setCheckingUpdate(plugin.id);
     setError(null);
     try {
-      const preview = await previewPlugin(newUrl.trim());
-      setPluginPreview(preview);
+      await checkPluginUpdate(plugin.id);
+      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setPreviewing(false);
+      setCheckingUpdate(null);
     }
   }
+
+  useEffect(() => {
+    const updateId = searchParams.get("update");
+    if (!updateId || plugins.length === 0) return;
+    const target = plugins.find((p) => p.id === updateId);
+    if (target && target.update_available) {
+      openUpdateDialog(target);
+    }
+  }, [searchParams, plugins]);
+
+  const newUrlIsUrl = isValidHttpUrl(newUrl.trim());
+  const effectivePreviewUrl = selectedManifestUrl
+    ? selectedManifestUrl
+    : newUrlIsUrl
+      ? newUrl.trim()
+      : null;
+
+  useEffect(() => {
+    if (!addOpen) return;
+    if (!effectivePreviewUrl) {
+      setPluginPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const preview = await previewPlugin(
+          effectivePreviewUrl,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) setPluginPreview(preview);
+      } catch {
+        // fail silently
+      }
+    }, 500);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [addOpen, effectivePreviewUrl]);
 
   async function handleAdd() {
     if (!pluginPreview) return;
@@ -103,6 +193,7 @@ export default function PluginsPage() {
       setAddOpen(false);
       setNewUrl("");
       setPluginPreview(null);
+      setSelectedManifestUrl(null);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -115,6 +206,8 @@ export default function PluginsPage() {
     setAddOpen(false);
     setNewUrl("");
     setPluginPreview(null);
+    setSelectedManifestUrl(null);
+    setComboboxOpen(false);
     setError(null);
   }
 
@@ -220,125 +313,194 @@ export default function PluginsPage() {
               </ResponsiveDialogTrigger>
               <ResponsiveDialogContent>
                 <ResponsiveDialogHeader>
-                  <ResponsiveDialogTitle>
-                    {pluginPreview ? `Install ${pluginPreview.name}?` : "Add Plugin"}
-                  </ResponsiveDialogTitle>
+                  <ResponsiveDialogTitle>Add Plugin</ResponsiveDialogTitle>
                   <ResponsiveDialogDescription>
-                    {pluginPreview
-                      ? "Review the plugin details below before installing."
-                      : "Enter a plugin URL to preview its details."}
+                    Select an official plugin or enter a plugin URL.
                   </ResponsiveDialogDescription>
                 </ResponsiveDialogHeader>
 
-                {!pluginPreview ? (
-                  // Step 1: Enter URL
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="url">Plugin URL</Label>
-                      <Input
-                        id="url"
-                        placeholder="https://github.com/org/repo/releases/download/v1.0.0/steam.wasm"
-                        value={newUrl}
-                        onChange={(e) => setNewUrl(e.target.value)}
-                        disabled={previewing}
-                      />
-                      <p className="text-muted-foreground text-xs">
-                        Link to the .wasm file or manifest.json (GitHub Releases URL)
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  // Step 2: Show preview
-                  <div className="grid gap-4 py-4">
-                    <div className="flex items-start gap-4">
-                      {pluginPreview.icon_url && (
-                        <img
-                          src={pluginPreview.icon_url}
-                          alt=""
-                          className="size-12 rounded"
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="url">Plugin</Label>
+                      {showCombobox ? (
+                        <Popover
+                          open={
+                            comboboxOpen && hasComboboxResults && !newUrlIsUrl
+                          }
+                          onOpenChange={setComboboxOpen}
+                        >
+                          <PopoverAnchor asChild>
+                            <Input
+                              id="url"
+                              placeholder="https://github.com/org/repo/releases/download/v1.0.0/steam.wasm"
+                              value={newUrl}
+                              onChange={(e) => {
+                                setNewUrl(e.target.value);
+                                setSelectedManifestUrl(null);
+                                setComboboxOpen(true);
+                              }}
+                              onFocus={() => setComboboxOpen(true)}
+                              autoComplete="off"
+                            />
+                          </PopoverAnchor>
+                          <PopoverContent
+                            className="p-0 w-(--radix-popover-trigger-width)"
+                            align="start"
+                            onOpenAutoFocus={(e) => e.preventDefault()}
+                            onInteractOutside={(e) => {
+                              // Don't close when clicking the input itself
+                              const target = e.target as Node;
+                              if (
+                                target instanceof Element &&
+                                target.id === "url"
+                              ) {
+                                e.preventDefault();
+                              }
+                            }}
+                          >
+                            <Command shouldFilter={false}>
+                              <CommandList>
+                                {officialLoading ? (
+                                  <CommandGroup>
+                                    <CommandItem
+                                      disabled
+                                      value="__loading__"
+                                    >
+                                      <Loader2 className="mr-2 size-4 animate-spin" />
+                                      Loading plugins…
+                                    </CommandItem>
+                                  </CommandGroup>
+                                ) : (
+                                  <CommandGroup>
+                                      {filteredOfficialPlugins.map((p) => (
+                                        <CommandItem
+                                          key={p.id}
+                                          value={`${p.id} ${p.name}`}
+                                          onSelect={() => {
+                                            setNewUrl(p.name);
+                                            setSelectedManifestUrl(
+                                              p.manifest_url,
+                                            );
+                                            setComboboxOpen(false);
+                                          }}
+                                        >
+                                          {p.icon_url ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                              src={p.icon_url}
+                                              alt=""
+                                              className="size-6 rounded shrink-0"
+                                            />
+                                          ) : (
+                                            <div className="size-6 rounded bg-muted shrink-0" />
+                                          )}
+                                          <div className="flex flex-col min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium truncate">
+                                                {p.name}
+                                              </span>
+                                              <Badge
+                                                variant="secondary"
+                                                className="shrink-0"
+                                              >
+                                                v{p.latest_version}
+                                              </Badge>
+                                            </div>
+                                            {p.description && (
+                                              <span className="text-muted-foreground text-xs truncate">
+                                                {p.description}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                )}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <Input
+                          id="url"
+                          placeholder="https://github.com/org/repo/releases/download/v1.0.0/steam.wasm"
+                          value={newUrl}
+                          onChange={(e) => {
+                            setNewUrl(e.target.value);
+                            setSelectedManifestUrl(null);
+                          }}
                         />
                       )}
-                      <div className="flex-1">
-                        <h3 className="font-semibold">{pluginPreview.name}</h3>
-                        <p className="text-muted-foreground text-sm">
-                          {pluginPreview.description || `Version ${pluginPreview.version}`}
-                        </p>
-                      </div>
-                      <Badge variant="secondary">{pluginPreview.version}</Badge>
-                    </div>
-
-                    <div className="grid gap-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Auth Type</span>
-                        <Badge variant="outline">
-                          {formatAuthType(pluginPreview.auth_type)}
-                        </Badge>
-                      </div>
-                      {pluginPreview.required_secrets.length > 0 && (
-                        <div className="grid gap-2">
-                          <span className="text-muted-foreground">Required Configuration</span>
-                          <div className="flex flex-col gap-2">
-                            {pluginPreview.required_secrets.map((secret) => (
-                              <div key={secret.key} className="bg-muted rounded p-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium text-sm">{secret.name}</span>
-                                  <code className="text-xs text-muted-foreground">{secret.key}</code>
-                                </div>
-                                {secret.description && (
-                                  <p className="text-muted-foreground text-xs mt-1">{secret.description}</p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      Link to the .wasm file or manifest.json (GitHub Releases URL)
+                    </p>
                   </div>
-                )}
+
+                  {pluginPreview && (
+                    <div className="grid gap-4 rounded-lg border p-4">
+                      <div className="flex items-start gap-4">
+                        {pluginPreview.icon_url && (
+                          <img
+                            src={pluginPreview.icon_url}
+                            alt=""
+                            className="size-12 rounded"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <h3 className="font-semibold">{pluginPreview.name}</h3>
+                          <p className="text-muted-foreground text-sm">
+                            {pluginPreview.description || `Version ${pluginPreview.version}`}
+                          </p>
+                        </div>
+                        <Badge variant="secondary">{pluginPreview.version}</Badge>
+                      </div>
+
+                      <div className="grid gap-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Auth Type</span>
+                          <Badge variant="outline">
+                            {formatAuthType(pluginPreview.auth_type)}
+                          </Badge>
+                        </div>
+                        {pluginPreview.required_secrets.length > 0 && (
+                          <div className="grid gap-2">
+                            <span className="text-muted-foreground">Required Configuration</span>
+                            <div className="flex flex-col gap-2">
+                              {pluginPreview.required_secrets.map((secret) => (
+                                <div key={secret.key} className="bg-muted rounded p-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-medium text-sm">{secret.name}</span>
+                                    <code className="text-xs text-muted-foreground">{secret.key}</code>
+                                  </div>
+                                  {secret.description && (
+                                    <p className="text-muted-foreground text-xs mt-1">{secret.description}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <ResponsiveDialogFooter>
-                  {pluginPreview ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => setPluginPreview(null)}
-                        disabled={adding}
-                      >
-                        Back
-                      </Button>
-                      <Button onClick={handleAdd} disabled={adding}>
-                        {adding ? (
-                          <>
-                            <Loader2 className="mr-2 size-4 animate-spin" />
-                            Installing...
-                          </>
-                        ) : (
-                          "Install Plugin"
-                        )}
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <ResponsiveDialogClose asChild>
-                        <Button variant="outline" disabled={previewing}>
-                          Cancel
-                        </Button>
-                      </ResponsiveDialogClose>
-                      <Button
-                        onClick={handlePreview}
-                        disabled={previewing || !newUrl.trim()}
-                      >
-                        {previewing ? (
-                          <>
-                            <Loader2 className="mr-2 size-4 animate-spin" />
-                            Loading...
-                          </>
-                        ) : (
-                          "Preview Plugin"
-                        )}
-                      </Button>
-                    </>
-                  )}
+                  <ResponsiveDialogClose asChild>
+                    <Button variant="outline" disabled={adding}>
+                      Cancel
+                    </Button>
+                  </ResponsiveDialogClose>
+                  <Button onClick={handleAdd} disabled={adding || !pluginPreview}>
+                    {adding ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Installing...
+                      </>
+                    ) : (
+                      "Install Plugin"
+                    )}
+                  </Button>
                 </ResponsiveDialogFooter>
               </ResponsiveDialogContent>
             </ResponsiveDialog>
@@ -418,6 +580,31 @@ export default function PluginsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        {canCreate && plugin.update_available && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-primary"
+                            title={`Update to v${plugin.latest_version}`}
+                            onClick={() => openUpdateDialog(plugin)}
+                          >
+                            <ArrowUpCircle className="size-4" />
+                          </Button>
+                        )}
+                        {canCreate && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            title="Check for updates"
+                            onClick={() => handleCheckUpdate(plugin)}
+                            disabled={checkingUpdate === plugin.id}
+                          >
+                            <Search
+                              className={`size-4 ${checkingUpdate === plugin.id ? "animate-spin" : ""}`}
+                            />
+                          </Button>
+                        )}
                         {canCreate && plugin.required_secrets?.length > 0 && (
                           <Button
                             variant="ghost"
@@ -510,6 +697,16 @@ export default function PluginsPage() {
             </ResponsiveDialogFooter>
           </ResponsiveDialogContent>
         </ResponsiveDialog>
+
+        <PluginUpdateDialog
+          plugin={updateDialogPlugin}
+          open={updateDialogOpen}
+          onOpenChange={(open) => {
+            setUpdateDialogOpen(open);
+            if (!open) setUpdateDialogPlugin(null);
+          }}
+          onUpdated={() => load()}
+        />
       </div>
     </>
   );

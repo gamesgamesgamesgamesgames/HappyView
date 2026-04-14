@@ -16,6 +16,7 @@ import {
   IconSettings,
   IconInfoCircle,
   IconApps,
+  IconArrowUpCircle,
 } from "@tabler/icons-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -24,6 +25,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useConfig } from "@/lib/config-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { usePluginUpdates } from "@/components/plugin-update-provider";
 import { Scroller } from "@/components/ui/scroller";
 import {
   Sidebar,
@@ -119,6 +121,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { logout } = useAuth();
   const { app_name, logo_url } = useConfig();
   const { hasPermission } = useCurrentUser();
+  const { hasUpdates } = usePluginUpdates();
 
   function filterByPermission(items: NavItem[]) {
     return items.filter(
@@ -245,20 +248,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarGroupLabel>Integrations</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {visibleIntegrations.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        tooltip={item.title}
-                        isActive={isActive(item.url)}
-                      >
-                        <Link href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {visibleIntegrations.map((item) => {
+                    const showUpdateBadge =
+                      item.title === "Plugins" && hasUpdates;
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          tooltip={item.title}
+                          isActive={isActive(item.url)}
+                        >
+                          <Link href={item.url}>
+                            <item.icon />
+                            <span>{item.title}</span>
+                            {showUpdateBadge && (
+                              <IconArrowUpCircle
+                                className="ml-auto size-4 text-primary"
+                                aria-label="Updates available"
+                              />
+                            )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

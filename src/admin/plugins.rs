@@ -10,6 +10,66 @@ use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::plugin::encryption::{decrypt, encrypt};
 use crate::plugin::loader;
+use crate::plugin::official_registry::{OfficialPlugin, ReleaseEntry};
+
+/// If the reload request provides a new URL, use it and clear the old sha256
+/// (the new version has its own hash). Otherwise keep the stored values.
+fn resolve_reload_url(
+    current: (String, Option<String>),
+    body: Option<super::types::ReloadPluginBody>,
+) -> (String, Option<String>) {
+    match body {
+        Some(b) if b.url.is_some() => (b.url.unwrap(), None),
+        _ => current,
+    }
+}
+
+struct UpdateInfo {
+    update_available: bool,
+    latest_version: Option<String>,
+    pending_releases: Vec<ReleaseEntry>,
+}
+
+fn compute_update_info(
+    installed_version: &str,
+    cache_entry: Option<&OfficialPlugin>,
+) -> UpdateInfo {
+    let Some(entry) = cache_entry else {
+        return UpdateInfo {
+            update_available: false,
+            latest_version: None,
+            pending_releases: Vec::new(),
+        };
+    };
+
+    let installed = match semver::Version::parse(installed_version) {
+        Ok(v) => v,
+        Err(_) => {
+            return UpdateInfo {
+                update_available: false,
+                latest_version: Some(entry.latest_version.clone()),
+                pending_releases: Vec::new(),
+            };
+        }
+    };
+
+    let pending: Vec<ReleaseEntry> = entry
+        .releases
+        .iter()
+        .filter(|r| {
+            semver::Version::parse(&r.version)
+                .map(|v| v > installed)
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+
+    UpdateInfo {
+        update_available: !pending.is_empty(),
+        latest_version: Some(entry.latest_version.clone()),
+        pending_releases: pending,
+    }
+}
 
 use super::auth::UserAuth;
 use super::permissions::Permission;
@@ -40,6 +100,8 @@ pub(super) async fn list(
             .into_iter()
             .collect()
     };
+
+    let official_guard = state.official_registry.read().await;
 
     let summaries: Vec<PluginSummary> = plugins
         .into_iter()
@@ -82,6 +144,9 @@ pub(super) async fn list(
             let secrets_configured =
                 required_secrets.is_empty() || configured_plugins.contains(&p.info.id);
 
+            let update_info =
+                compute_update_info(&p.info.version, official_guard.plugins.get(&p.info.id));
+
             PluginSummary {
                 id: p.info.id.clone(),
                 name: p.info.name.clone(),
@@ -94,6 +159,9 @@ pub(super) async fn list(
                 required_secrets,
                 secrets_configured,
                 loaded_at: None, // Would need to track this in registry
+                update_available: update_info.update_available,
+                latest_version: update_info.latest_version,
+                pending_releases: update_info.pending_releases,
             }
         })
         .collect();
@@ -195,6 +263,9 @@ pub(super) async fn add(
         required_secrets,
         secrets_configured,
         loaded_at: Some(now_rfc3339()),
+        update_available: false,
+        latest_version: None,
+        pending_releases: Vec::new(),
     };
 
     let plugin_id = plugin.info.id.clone();
@@ -265,6 +336,7 @@ pub(super) async fn reload(
     State(state): State<AppState>,
     auth: UserAuth,
     Path(plugin_id): Path<String>,
+    body: Option<Json<super::types::ReloadPluginBody>>,
 ) -> Result<Json<PluginSummary>, AppError> {
     auth.require(Permission::PluginsCreate).await?;
 
@@ -283,6 +355,8 @@ pub(super) async fn reload(
             ));
         }
     };
+
+    let (url, sha256) = resolve_reload_url((url, sha256), body.map(|Json(b)| b));
 
     // Remove old plugin
     state.plugin_registry.remove(&plugin_id).await;
@@ -348,7 +422,22 @@ pub(super) async fn reload(
         required_secrets,
         secrets_configured,
         loaded_at: Some(now_rfc3339()),
+        update_available: false,
+        latest_version: None,
+        pending_releases: Vec::new(),
     };
+
+    // Persist the (possibly new) URL so restarts pick it up
+    let persist_sql = adapt_sql(
+        "UPDATE plugins SET url = ?, sha256 = NULL WHERE id = ?",
+        state.db_backend,
+    );
+    sqlx::query(&persist_sql)
+        .bind(&url)
+        .bind(&plugin.info.id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to persist plugin URL: {}", e)))?;
 
     // Register the reloaded plugin
     state.plugin_registry.register(plugin).await;
@@ -543,4 +632,200 @@ pub(super) async fn update_secrets(
     .await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /admin/plugins/{id}/check-update — force a cache refresh for one plugin
+pub(super) async fn check_update(
+    State(state): State<AppState>,
+    auth: UserAuth,
+    Path(plugin_id): Path<String>,
+) -> Result<Json<PluginSummary>, AppError> {
+    auth.require(Permission::PluginsCreate).await?;
+
+    crate::plugin::official_registry::refresh_plugin(
+        &state.http,
+        &state.official_registry_config,
+        &state.official_registry,
+        &plugin_id,
+    )
+    .await
+    .map_err(|e| AppError::BadRequest(format!("Update check failed: {}", e)))?;
+
+    // Return the refreshed PluginSummary by re-running the same join logic
+    let current = state
+        .plugin_registry
+        .get(&plugin_id)
+        .await
+        .ok_or_else(|| AppError::NotFound(format!("Plugin '{}' not found", plugin_id)))?;
+
+    let guard = state.official_registry.read().await;
+    let update_info = compute_update_info(&current.info.version, guard.plugins.get(&plugin_id));
+
+    let required_secrets: Vec<super::types::SecretDefinition> =
+        if let Some(manifest) = &current.manifest {
+            manifest
+                .required_secrets
+                .iter()
+                .map(|s| super::types::SecretDefinition {
+                    key: s.key.clone(),
+                    name: s.name.clone(),
+                    description: s.description.clone(),
+                })
+                .collect()
+        } else {
+            current
+                .info
+                .required_secrets
+                .iter()
+                .map(|key| super::types::SecretDefinition {
+                    key: key.clone(),
+                    name: key.clone(),
+                    description: None,
+                })
+                .collect()
+        };
+
+    let (source, url, sha256) = match &current.source {
+        crate::plugin::PluginSource::File { path } => {
+            ("file".to_string(), Some(path.display().to_string()), None)
+        }
+        crate::plugin::PluginSource::Url { url, sha256 } => {
+            ("url".to_string(), Some(url.clone()), sha256.clone())
+        }
+    };
+
+    Ok(Json(PluginSummary {
+        id: current.info.id.clone(),
+        name: current.info.name.clone(),
+        version: current.info.version.clone(),
+        source,
+        url,
+        sha256,
+        enabled: true,
+        auth_type: current.info.auth_type.clone(),
+        required_secrets,
+        secrets_configured: true,
+        loaded_at: None,
+        update_available: update_info.update_available,
+        latest_version: update_info.latest_version,
+        pending_releases: update_info.pending_releases,
+    }))
+}
+
+/// GET /admin/plugins/official — list plugins from the official registry cache
+pub(super) async fn list_official(
+    State(state): State<AppState>,
+    auth: UserAuth,
+) -> Result<Json<super::types::OfficialPluginsListResponse>, AppError> {
+    auth.require(Permission::PluginsRead).await?;
+
+    let guard = state.official_registry.read().await;
+    let plugins = guard
+        .plugins
+        .values()
+        .map(|p| super::types::OfficialPluginSummary {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            description: p.description.clone(),
+            icon_url: p.icon_url.clone(),
+            latest_version: p.latest_version.clone(),
+            manifest_url: p.manifest_url.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Json(super::types::OfficialPluginsListResponse {
+        plugins,
+        last_refreshed_at: guard.last_refreshed_at.clone(),
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plugin::official_registry::{OfficialPlugin, ReleaseEntry};
+
+    fn entry(versions: &[&str]) -> OfficialPlugin {
+        OfficialPlugin {
+            id: "steam".into(),
+            name: "steam".into(),
+            description: None,
+            icon_url: None,
+            latest_version: versions[0].into(),
+            manifest_url: "m".into(),
+            wasm_url: "w".into(),
+            releases: versions
+                .iter()
+                .map(|v| ReleaseEntry {
+                    version: (*v).into(),
+                    name: format!("v{v}"),
+                    published_at: "2026-04-10T00:00:00Z".into(),
+                    body: "notes".into(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn compute_update_info_flags_update_when_behind() {
+        let cached = entry(&["1.2.0", "1.1.0", "1.0.0"]);
+        let info = compute_update_info("1.0.0", Some(&cached));
+        assert!(info.update_available);
+        assert_eq!(info.latest_version.as_deref(), Some("1.2.0"));
+        assert_eq!(info.pending_releases.len(), 2);
+        assert_eq!(info.pending_releases[0].version, "1.2.0");
+        assert_eq!(info.pending_releases[1].version, "1.1.0");
+    }
+
+    #[test]
+    fn compute_update_info_no_update_when_current() {
+        let cached = entry(&["1.2.0"]);
+        let info = compute_update_info("1.2.0", Some(&cached));
+        assert!(!info.update_available);
+        assert_eq!(info.latest_version.as_deref(), Some("1.2.0"));
+        assert!(info.pending_releases.is_empty());
+    }
+
+    #[test]
+    fn compute_update_info_no_cache_entry() {
+        let info = compute_update_info("1.2.0", None);
+        assert!(!info.update_available);
+        assert!(info.latest_version.is_none());
+        assert!(info.pending_releases.is_empty());
+    }
+
+    #[test]
+    fn compute_update_info_handles_malformed_installed_version() {
+        let cached = entry(&["1.2.0"]);
+        let info = compute_update_info("not-semver", Some(&cached));
+        assert!(!info.update_available);
+        assert_eq!(info.latest_version.as_deref(), Some("1.2.0"));
+    }
+
+    #[test]
+    fn resolve_reload_url_uses_override_and_clears_sha() {
+        let current = ("https://old".to_string(), Some("deadbeef".to_string()));
+        let body = super::super::types::ReloadPluginBody {
+            url: Some("https://new".into()),
+        };
+        let (url, sha) = resolve_reload_url(current, Some(body));
+        assert_eq!(url, "https://new");
+        assert_eq!(sha, None);
+    }
+
+    #[test]
+    fn resolve_reload_url_keeps_current_when_body_absent() {
+        let current = ("https://old".to_string(), Some("deadbeef".to_string()));
+        let (url, sha) = resolve_reload_url(current, None);
+        assert_eq!(url, "https://old");
+        assert_eq!(sha.as_deref(), Some("deadbeef"));
+    }
+
+    #[test]
+    fn resolve_reload_url_keeps_current_when_body_url_is_none() {
+        let current = ("https://old".to_string(), Some("deadbeef".to_string()));
+        let body = super::super::types::ReloadPluginBody { url: None };
+        let (url, sha) = resolve_reload_url(current, Some(body));
+        assert_eq!(url, "https://old");
+        assert_eq!(sha.as_deref(), Some("deadbeef"));
+    }
 }

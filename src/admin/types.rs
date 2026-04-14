@@ -251,6 +251,34 @@ pub(super) struct PluginSummary {
     /// Whether all required secrets have been configured
     pub(super) secrets_configured: bool,
     pub(super) loaded_at: Option<String>,
+    #[serde(default)]
+    pub(super) update_available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) latest_version: Option<String>,
+    #[serde(default)]
+    pub(super) pending_releases: Vec<crate::plugin::official_registry::ReleaseEntry>,
+}
+
+#[derive(Serialize)]
+pub(super) struct OfficialPluginSummary {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) description: Option<String>,
+    pub(super) icon_url: Option<String>,
+    pub(super) latest_version: String,
+    pub(super) manifest_url: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct OfficialPluginsListResponse {
+    pub(super) plugins: Vec<OfficialPluginSummary>,
+    pub(super) last_refreshed_at: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+pub(super) struct ReloadPluginBody {
+    #[serde(default)]
+    pub(super) url: Option<String>,
 }
 
 #[derive(Deserialize)]

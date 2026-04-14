@@ -25,6 +25,7 @@ use config::Config;
 use db::DatabaseBackend;
 use dns::NativeDnsResolver;
 use lexicon::LexiconRegistry;
+use plugin::official_registry::{RegistryConfig, SharedRegistry};
 use rate_limit::RateLimiter;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -63,6 +64,8 @@ pub struct AppState {
     pub plugin_registry: Arc<plugin::PluginRegistry>,
     pub wasm_runtime: Arc<plugin::WasmRuntime>,
     pub attestation_signer: Option<Arc<plugin::attestation::AttestationSigner>>,
+    pub official_registry: SharedRegistry,
+    pub official_registry_config: RegistryConfig,
 }
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {

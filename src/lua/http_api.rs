@@ -181,6 +181,11 @@ mod tests {
                 crate::plugin::WasmRuntime::new().expect("wasm runtime"),
             ),
             attestation_signer: None,
+            official_registry: std::sync::Arc::new(tokio::sync::RwLock::new(
+                crate::plugin::official_registry::OfficialRegistryState::default(),
+            )),
+            official_registry_config: crate::plugin::official_registry::RegistryConfig::production(
+            ),
         }
     }
 

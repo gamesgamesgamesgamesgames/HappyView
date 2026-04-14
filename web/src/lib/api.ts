@@ -467,8 +467,18 @@ export function connectWithConfig(pluginId: string, config: Record<string, unkno
 }
 
 // Plugins
-import type { PluginSummary, PluginsListResponse } from "@/types/plugins"
-export type { PluginSummary, PluginsListResponse } from "@/types/plugins"
+import type {
+  PluginSummary,
+  PluginsListResponse,
+  OfficialPluginsListResponse,
+} from "@/types/plugins"
+export type {
+  PluginSummary,
+  PluginsListResponse,
+  OfficialPluginSummary,
+  OfficialPluginsListResponse,
+  ReleaseEntry,
+} from "@/types/plugins"
 
 export function getPlugins() {
   return apiFetch<PluginsListResponse>("/admin/plugins")
@@ -487,9 +497,23 @@ export function removePlugin(id: string) {
   })
 }
 
-export function reloadPlugin(id: string) {
+export function reloadPlugin(id: string, body?: { url?: string }) {
   return apiFetch<PluginSummary>(
     `/admin/plugins/${encodeURIComponent(id)}/reload`,
+    {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    },
+  )
+}
+
+export function getOfficialPlugins() {
+  return apiFetch<OfficialPluginsListResponse>("/admin/plugins/official")
+}
+
+export function checkPluginUpdate(id: string) {
+  return apiFetch<PluginSummary>(
+    `/admin/plugins/${encodeURIComponent(id)}/check-update`,
     { method: "POST" },
   )
 }
@@ -530,9 +554,10 @@ export interface PluginPreview {
   wasm_url: string
 }
 
-export function previewPlugin(url: string) {
+export function previewPlugin(url: string, signal?: AbortSignal) {
   return apiFetch<PluginPreview>("/admin/plugins/preview", {
     method: "POST",
     body: JSON.stringify({ url }),
+    signal,
   })
 }

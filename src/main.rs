@@ -407,6 +407,18 @@ async fn main() {
         )
         .await;
 
+    let official_registry: happyview::plugin::official_registry::SharedRegistry =
+        std::sync::Arc::new(tokio::sync::RwLock::new(
+            happyview::plugin::official_registry::OfficialRegistryState::default(),
+        ));
+    let official_registry_config =
+        happyview::plugin::official_registry::RegistryConfig::production();
+    happyview::plugin::official_registry::spawn_refresh_task(
+        http.clone(),
+        official_registry_config.clone(),
+        official_registry.clone(),
+    );
+
     let state = AppState {
         config: config.clone(),
         http,
@@ -422,6 +434,8 @@ async fn main() {
         plugin_registry,
         wasm_runtime,
         attestation_signer,
+        official_registry,
+        official_registry_config,
     };
 
     jetstream::spawn(state.clone(), collections_rx);

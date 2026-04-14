@@ -86,8 +86,10 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         )
         .route("/plugins", post(plugins::add).get(plugins::list))
         .route("/plugins/preview", post(plugins::preview))
+        .route("/plugins/official", get(plugins::list_official))
         .route("/plugins/{id}", delete(plugins::remove))
         .route("/plugins/{id}/reload", post(plugins::reload))
+        .route("/plugins/{id}/check-update", post(plugins::check_update))
         .route(
             "/plugins/{id}/secrets",
             get(plugins::get_secrets).put(plugins::update_secrets),

@@ -1655,6 +1655,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustls",
+ "semver",
  "serde",
  "serde_json",
  "serial_test",

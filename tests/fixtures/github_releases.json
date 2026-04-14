@@ -1,0 +1,16 @@
+[
+  {
+    "tag_name": "steam-v1.2.0",
+    "name": "steam-v1.2.0",
+    "published_at": "2026-04-10T00:00:00Z",
+    "body": "- Added better logging\n- Fixed token refresh",
+    "html_url": "https://example.com/steam-v1.2.0"
+  },
+  {
+    "tag_name": "steam-v1.1.0",
+    "name": "steam-v1.1.0",
+    "published_at": "2026-03-01T00:00:00Z",
+    "body": "- Initial release",
+    "html_url": "https://example.com/steam-v1.1.0"
+  }
+]

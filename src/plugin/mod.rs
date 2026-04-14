@@ -4,6 +4,7 @@ pub mod executor;
 pub mod host;
 pub mod loader;
 pub mod memory;
+pub mod official_registry;
 mod runtime;
 pub mod sync;
 mod types;

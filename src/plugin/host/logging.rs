@@ -103,9 +103,21 @@ mod tests {
     fn test_log_does_not_panic() {
         // With db=None, only the tracing path runs. Verifies each level does not panic.
         let backend = crate::db::DatabaseBackend::Sqlite;
-        log("test-plugin", LogLevel::Debug, "debug message", None, backend);
+        log(
+            "test-plugin",
+            LogLevel::Debug,
+            "debug message",
+            None,
+            backend,
+        );
         log("test-plugin", LogLevel::Info, "info message", None, backend);
         log("test-plugin", LogLevel::Warn, "warn message", None, backend);
-        log("test-plugin", LogLevel::Error, "error message", None, backend);
+        log(
+            "test-plugin",
+            LogLevel::Error,
+            "error message",
+            None,
+            backend,
+        );
     }
 }

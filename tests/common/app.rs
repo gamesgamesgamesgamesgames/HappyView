@@ -24,6 +24,15 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn new() -> Self {
+        Self::new_with_registry_config(
+            happyview::plugin::official_registry::RegistryConfig::production(),
+        )
+        .await
+    }
+
+    pub async fn new_with_registry_config(
+        registry_config: happyview::plugin::official_registry::RegistryConfig,
+    ) -> Self {
         let pool = db::test_pool().await;
         let backend = db::test_backend();
         db::truncate_all(&pool).await;
@@ -141,6 +150,10 @@ impl TestApp {
                 happyview::plugin::WasmRuntime::new().expect("wasm runtime"),
             ),
             attestation_signer: None,
+            official_registry: std::sync::Arc::new(tokio::sync::RwLock::new(
+                happyview::plugin::official_registry::OfficialRegistryState::default(),
+            )),
+            official_registry_config: registry_config,
         };
 
         let router = server::router(state.clone());
@@ -157,5 +170,30 @@ impl TestApp {
     /// Build a Cookie header that authenticates as the admin user.
     pub fn admin_cookie(&self) -> (axum::http::HeaderName, axum::http::HeaderValue) {
         crate::common::auth::admin_cookie_header(&self.admin_did, &self.state.cookie_key)
+    }
+
+    /// Install a fake plugin directly into the registry at the given version.
+    pub async fn install_fake_plugin(&self, id: &str, version: &str) {
+        use happyview::plugin::{LoadedPlugin, PluginInfo, PluginSource};
+
+        let plugin = LoadedPlugin {
+            info: PluginInfo {
+                id: id.to_string(),
+                name: id.to_string(),
+                version: version.to_string(),
+                api_version: "1".to_string(),
+                icon_url: None,
+                required_secrets: vec![],
+                auth_type: "openid".to_string(),
+                config_schema: None,
+            },
+            source: PluginSource::Url {
+                url: format!("https://example.com/{id}.wasm"),
+                sha256: None,
+            },
+            wasm_bytes: vec![],
+            manifest: None,
+        };
+        self.state.plugin_registry.register(plugin).await;
     }
 }
