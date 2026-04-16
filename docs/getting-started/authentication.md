@@ -100,9 +100,148 @@ To add more users after that, use `POST /admin/users` or the [dashboard](dashboa
 
 ## Proxying procedures to the user's PDS
 
-When a client calls an XRPC procedure that writes a record, HappyView proxies the write to the user's PDS using the user's stored OAuth session. `atrium-oauth` attaches a DPoP proof and a DPoP-bound access token to the outbound request automatically — HappyView doesn't do any manual DPoP handling.
+When a client calls an XRPC procedure that writes a record, HappyView proxies the write to the user's PDS. There are two auth paths that support this:
 
-This only works if HappyView has a live OAuth session for the caller, which in practice means the caller logged in through the dashboard or through an API client's OAuth flow. A request that only carries an `X-Client-Key` header (no session cookie) can hit queries but can't be used to proxy writes — there's no user to write as. Service auth JWTs and admin API keys similarly don't carry a user OAuth session.
+- **Cookie auth (dashboard)** — `atrium-oauth` attaches a DPoP proof and a DPoP-bound access token to the outbound request automatically.
+- **DPoP key provisioning (third-party apps)** — HappyView uses the app's provisioned DPoP key to generate fresh proofs and attach the stored access token (see below).
+
+A request that only carries an `X-Client-Key` header (no session cookie or DPoP token) can hit queries but can't proxy writes — there's no user to write as. Service auth JWTs and admin API keys similarly don't carry a user session.
+
+## DPoP key provisioning for third-party apps
+
+Third-party apps that want HappyView to make PDS writes on behalf of their users use the **DPoP key provisioning** flow instead of cookie auth. This avoids browser-based redirects through HappyView's domain, which can be blocked by Firefox's Bounce Tracker Protection.
+
+The idea: the app gets a DPoP keypair from HappyView, uses that keypair during its own OAuth flow with the user's PDS, then registers the resulting tokens back with HappyView. From that point on, XRPC requests authenticated with `Authorization: DPoP <access_token>` plus a `DPoP` proof header and `X-Client-Key` will have HappyView proxy writes using the stored session.
+
+### API clients: confidential vs public
+
+API clients have a `client_type` field — either `confidential` (default) or `public`.
+
+- **Confidential clients** authenticate with `X-Client-Key` + `X-Client-Secret` headers on every `/oauth/*` request.
+- **Public clients** (browser apps that can't keep a secret) authenticate with `X-Client-Key` header + PKCE. The app sends a `pkce_challenge` (S256) in the body when provisioning a key, then proves possession with `pkce_verifier` when registering a session. Public clients also have `allowed_origins` — the `Origin` header must match.
+
+### The full flow
+
+#### 1. Provision a DPoP key
+
+```
+POST /oauth/dpop-keys
+X-Client-Key: hvc_...
+X-Client-Secret: hvs_...
+Content-Type: application/json
+
+{}
+```
+
+For public clients, omit `X-Client-Secret` and include the PKCE challenge in the body:
+
+```
+POST /oauth/dpop-keys
+X-Client-Key: hvc_...
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "pkce_challenge": "base64url..." }
+```
+
+Response:
+
+```json
+{
+  "provision_id": "hvp_...",
+  "dpop_key": { "kty": "EC", "crv": "P-256", "x": "...", "y": "...", "d": "..." }
+}
+```
+
+The `dpop_key` is the private JWK. Use it to generate DPoP proofs during your OAuth flow with the user's PDS.
+
+#### 2. Run OAuth with the user's PDS
+
+Use the provisioned DPoP key as your DPoP keypair in a standard AT Protocol OAuth flow with the user's PDS. HappyView is not involved in this step — the app talks directly to the PDS authorization server.
+
+#### 3. Register the session
+
+After the OAuth callback, register the token set with HappyView:
+
+```
+POST /oauth/sessions
+X-Client-Key: hvc_...
+X-Client-Secret: hvs_...
+Content-Type: application/json
+
+{
+  "provision_id": "hvp_...",
+  "did": "did:plc:user123",
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_at": "2026-04-17T00:00:00Z",
+  "scopes": "atproto transition:generic",
+  "pds_url": "https://bsky.social",
+  "issuer": "https://bsky.social"
+}
+```
+
+For public clients, omit `X-Client-Secret` and include the PKCE verifier in the body:
+
+```json
+{
+  "provision_id": "hvp_...",
+  "pkce_verifier": "...",
+  "did": "did:plc:user123",
+  ...
+}
+```
+
+Response:
+
+```json
+{
+  "session_id": "uuid",
+  "did": "did:plc:user123"
+}
+```
+
+#### 4. Make XRPC requests
+
+With a registered session, send XRPC requests using DPoP auth:
+
+```sh
+curl -X POST 'https://happyview.example.com/xrpc/com.example.feed.createPost' \
+  -H 'X-Client-Key: hvc_...' \
+  -H 'Authorization: DPoP <access_token>' \
+  -H 'DPoP: <proof_jwt>' \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "Hello world"}'
+```
+
+HappyView validates the DPoP proof, looks up the stored session, and proxies the write to the user's PDS using the provisioned DPoP key to generate a fresh proof.
+
+#### 5. Logout
+
+Confidential clients authenticate with `X-Client-Key` + `X-Client-Secret`:
+
+```
+DELETE /oauth/sessions/did:plc:user123
+X-Client-Key: hvc_...
+X-Client-Secret: hvs_...
+```
+
+Public clients must provide a valid DPoP proof to prove they hold the key:
+
+```
+DELETE /oauth/sessions/did:plc:user123
+X-Client-Key: hvc_...
+Authorization: DPoP <access_token>
+DPoP: <proof_jwt>
+```
+
+This deletes the stored session and the associated DPoP key.
+
+### Security notes
+
+- Private keys and tokens are encrypted at rest with AES-256-GCM using `TOKEN_ENCRYPTION_KEY`.
+- DPoP proofs are validated for method, URL, timestamp (5-minute window), access token binding, and JWK thumbprint.
+- Scopes requested must include `atproto` and must be a subset of the API client's registered scopes.
 
 ## Next steps
 

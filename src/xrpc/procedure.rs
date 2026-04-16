@@ -29,6 +29,29 @@ pub(crate) async fn handle_procedure(
         AppError::BadRequest(format!("{method} has no target_collection configured"))
     })?;
 
+    // If the user authenticated via a DPoP session (has a client_key from DPoP auth),
+    // use the DPoP PDS write path. Otherwise, fall back to the atrium OAuth session.
+    if let Some(client_key) = claims.client_key() {
+        let encryption_key = state
+            .config
+            .token_encryption_key
+            .as_ref()
+            .ok_or_else(|| AppError::Internal("TOKEN_ENCRYPTION_KEY not configured".into()))?;
+
+        let api_client_id = repo::get_dpop_client_id(state, client_key).await?;
+
+        return handle_dpop_procedure(
+            state,
+            claims,
+            input,
+            collection,
+            &lexicon.action,
+            &api_client_id,
+            encryption_key,
+        )
+        .await;
+    }
+
     let session = repo::get_oauth_session(state, claims.did()).await?;
 
     match &lexicon.action {
@@ -262,4 +285,129 @@ async fn handle_delete_record(
     } else {
         repo::forward_pds_response(resp).await
     }
+}
+
+async fn handle_dpop_procedure(
+    state: &AppState,
+    claims: &Claims,
+    input: &Value,
+    collection: &str,
+    action: &ProcedureAction,
+    api_client_id: &str,
+    encryption_key: &[u8; 32],
+) -> Result<Response, AppError> {
+    let (xrpc_method, pds_body) = match action {
+        ProcedureAction::Create => {
+            let mut record = input.clone();
+            if let Some(obj) = record.as_object_mut() {
+                obj.insert("$type".to_string(), json!(collection));
+                obj.remove("shouldPublish");
+            }
+            (
+                "com.atproto.repo.createRecord",
+                json!({
+                    "repo": claims.did(),
+                    "collection": collection,
+                    "record": record,
+                }),
+            )
+        }
+        ProcedureAction::Update => {
+            let uri = input
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AppError::BadRequest("missing uri field".into()))?;
+            let rkey = uri
+                .split('/')
+                .next_back()
+                .ok_or_else(|| AppError::Internal("invalid AT URI".into()))?;
+            let mut record = input.clone();
+            if let Some(obj) = record.as_object_mut() {
+                obj.insert("$type".to_string(), json!(collection));
+                obj.remove("uri");
+                obj.remove("shouldPublish");
+            }
+            (
+                "com.atproto.repo.putRecord",
+                json!({
+                    "repo": claims.did(),
+                    "collection": collection,
+                    "rkey": rkey,
+                    "record": record,
+                }),
+            )
+        }
+        ProcedureAction::Delete => {
+            let uri = input
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AppError::BadRequest("missing uri field".into()))?;
+            let rkey = uri
+                .split('/')
+                .next_back()
+                .ok_or_else(|| AppError::Internal("invalid AT URI".into()))?;
+            (
+                "com.atproto.repo.deleteRecord",
+                json!({
+                    "repo": claims.did(),
+                    "collection": collection,
+                    "rkey": rkey,
+                }),
+            )
+        }
+        ProcedureAction::Upsert => {
+            let has_uri = input.get("uri").and_then(|v| v.as_str()).is_some();
+            if has_uri {
+                let uri = input["uri"].as_str().unwrap();
+                let rkey = uri
+                    .split('/')
+                    .next_back()
+                    .ok_or_else(|| AppError::Internal("invalid AT URI".into()))?;
+                let mut record = input.clone();
+                if let Some(obj) = record.as_object_mut() {
+                    obj.insert("$type".to_string(), json!(collection));
+                    obj.remove("uri");
+                    obj.remove("shouldPublish");
+                }
+                (
+                    "com.atproto.repo.putRecord",
+                    json!({
+                        "repo": claims.did(),
+                        "collection": collection,
+                        "rkey": rkey,
+                        "record": record,
+                    }),
+                )
+            } else {
+                let mut record = input.clone();
+                if let Some(obj) = record.as_object_mut() {
+                    obj.insert("$type".to_string(), json!(collection));
+                    obj.remove("shouldPublish");
+                }
+                (
+                    "com.atproto.repo.createRecord",
+                    json!({
+                        "repo": claims.did(),
+                        "collection": collection,
+                        "record": record,
+                    }),
+                )
+            }
+        }
+    };
+
+    let resp = crate::oauth::pds_write::dpop_pds_post(
+        &state.http,
+        &state.db,
+        state.db_backend,
+        encryption_key,
+        &state.config.plc_url,
+        api_client_id,
+        claims.did(),
+        xrpc_method,
+        &pds_body,
+    )
+    .await?;
+
+    repo::forward_pds_response(resp).await
 }

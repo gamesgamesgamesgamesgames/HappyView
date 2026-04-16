@@ -12,7 +12,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::AppState;
 use crate::admin;
-use crate::auth::Claims;
+use crate::auth::XrpcClaims;
 use crate::domain_middleware::resolve_domain;
 use crate::error::AppError;
 use crate::profile;
@@ -64,6 +64,7 @@ pub fn router(state: AppState) -> Router {
     let domain_routes = Router::new()
         .nest("/auth", crate::auth::routes::routes())
         .nest("/external-auth", crate::external_auth::routes())
+        .nest("/oauth", crate::oauth::routes::routes())
         // https://atproto.com/specs/oauth#types-of-clients
         .route("/oauth-client-metadata.json", get(client_metadata))
         .route("/xrpc/app.bsky.actor.getProfile", get(get_profile))
@@ -89,13 +90,14 @@ pub fn router(state: AppState) -> Router {
         .layer(
             CorsLayer::new()
                 .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
                 .allow_headers([
                     header::CONTENT_TYPE,
                     header::AUTHORIZATION,
                     header::COOKIE,
                     axum::http::HeaderName::from_static("x-client-key"),
                     axum::http::HeaderName::from_static("x-client-secret"),
+                    axum::http::HeaderName::from_static("dpop"),
                 ])
                 .allow_credentials(true),
         )
@@ -208,7 +210,13 @@ async fn client_metadata(
     Json(metadata)
 }
 
-async fn get_profile(State(state): State<AppState>, claims: Claims) -> Result<Response, AppError> {
+async fn get_profile(
+    State(state): State<AppState>,
+    xrpc_claims: XrpcClaims,
+) -> Result<Response, AppError> {
+    let claims = xrpc_claims
+        .0
+        .ok_or_else(|| AppError::Auth("getProfile requires DPoP authentication".into()))?;
     let check = if let Some(client_key) = claims.client_key() {
         let cost = state
             .rate_limiter

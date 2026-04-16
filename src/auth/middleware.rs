@@ -101,6 +101,10 @@ impl FromRequestParts<AppState> for Claims {
             });
         }
 
+        if let Some(token) = header.strip_prefix("DPoP ") {
+            return resolve_dpop_claims(state, parts, token).await;
+        }
+
         Err(AppError::Auth("invalid Authorization scheme".into()))
     }
 }
@@ -123,4 +127,135 @@ async fn resolve_api_key_did(state: &AppState, token: &str) -> Result<String, Ap
 
     row.map(|(did,)| did)
         .ok_or_else(|| AppError::Auth("invalid API key".into()))
+}
+
+/// Resolve claims from a DPoP-authenticated request.
+///
+/// Expects:
+/// - `Authorization: DPoP <access_token>`
+/// - `DPoP: <proof_jwt>` header
+/// - `X-Client-Key: <client_key>` header
+pub async fn resolve_dpop_claims(
+    state: &AppState,
+    parts: &Parts,
+    access_token: &str,
+) -> Result<Claims, AppError> {
+    let client_key = parts
+        .headers
+        .get("x-client-key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AppError::Auth("DPoP auth requires X-Client-Key header".into()))?;
+
+    let dpop_proof = parts
+        .headers
+        .get("dpop")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AppError::Auth("DPoP auth requires DPoP header".into()))?;
+
+    let encryption_key = state
+        .config
+        .token_encryption_key
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("TOKEN_ENCRYPTION_KEY not configured".into()))?;
+
+    // Resolve the API client
+    let client =
+        crate::oauth::client_auth::resolve_client_by_key(&state.db, state.db_backend, client_key)
+            .await?;
+
+    // Look up the session by token
+    let session = crate::oauth::sessions::get_dpop_session_by_token_hash(
+        &state.db,
+        state.db_backend,
+        encryption_key,
+        &client.id,
+        access_token,
+    )
+    .await?;
+
+    // Check token expiry
+    if let Some(ref expires_at) = session.token_expires_at
+        && let Ok(exp) = chrono::DateTime::parse_from_rfc3339(expires_at)
+        && exp < chrono::Utc::now()
+    {
+        return Err(AppError::Auth("token_expired".into()));
+    }
+
+    // Get the DPoP key thumbprint for proof validation
+    let thumbprint = crate::oauth::keys::get_dpop_key_thumbprint(
+        &state.db,
+        state.db_backend,
+        &session.dpop_key_id,
+    )
+    .await?;
+
+    // Build the request URL for htu validation
+    let scheme = if state.config.public_url.starts_with("https") {
+        "https"
+    } else {
+        "http"
+    };
+    let host = parts
+        .headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost");
+    let request_url = format!("{}://{}{}", scheme, host, parts.uri.path());
+    let method = parts.method.as_str();
+
+    // Validate the DPoP proof
+    crate::oauth::dpop_proof::validate_dpop_proof(
+        dpop_proof,
+        method,
+        &request_url,
+        access_token,
+        &thumbprint,
+    )?;
+
+    Ok(Claims {
+        did: session.user_did,
+        client_key: Some(client_key.to_string()),
+    })
+}
+
+/// XRPC-specific claims extractor.
+///
+/// Only accepts DPoP auth (`Authorization: DPoP <token>` + `DPoP` proof + `X-Client-Key`).
+/// Cookie auth, Bearer API keys, and service JWTs are rejected on XRPC routes.
+/// Wraps `Option<Claims>` — `None` means anonymous (client-key-only) access.
+#[derive(Debug, Clone)]
+pub struct XrpcClaims(pub Option<Claims>);
+
+impl FromRequestParts<AppState> for XrpcClaims {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let header = parts
+            .headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok());
+
+        match header {
+            Some(h) if h.starts_with("DPoP ") => {
+                let token = &h[5..];
+                let claims = resolve_dpop_claims(state, parts, token).await?;
+                Ok(XrpcClaims(Some(claims)))
+            }
+            Some(h) if h.starts_with("Bearer ") => {
+                Err(AppError::Auth(
+                    "XRPC routes do not accept Bearer auth. Use DPoP auth or omit the Authorization header for anonymous access.".into(),
+                ))
+            }
+            Some(_) => {
+                Err(AppError::Auth("invalid Authorization scheme".into()))
+            }
+            None => {
+                // No auth header — anonymous access (client-key only)
+                Ok(XrpcClaims(None))
+            }
+        }
+    }
 }

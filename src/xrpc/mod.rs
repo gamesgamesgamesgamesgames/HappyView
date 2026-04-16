@@ -3,7 +3,7 @@ pub(crate) mod query;
 
 use axum::Json;
 use axum::body::Body;
-use axum::extract::{FromRequestParts, Path, RawQuery, State};
+use axum::extract::{Path, RawQuery, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::Response;
@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::AppState;
-use crate::auth::Claims;
+use crate::auth::{Claims, XrpcClaims};
 use crate::error::AppError;
 use crate::lexicon::LexiconType;
 use crate::rate_limit::CheckResult;
@@ -253,11 +253,12 @@ pub async fn xrpc_get(
     State(state): State<AppState>,
     Path(method): Path<String>,
     RawQuery(raw_query): RawQuery,
-    mut parts: Parts,
+    xrpc_claims: XrpcClaims,
+    parts: Parts,
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
     let mut params = parse_query_params(&raw_query);
-    let claims = Claims::from_request_parts(&mut parts, &state).await.ok();
+    let claims = xrpc_claims.0;
 
     let rate_key = resolve_client_key(&state, claims.as_ref(), &parts, &params)?;
 
@@ -336,12 +337,15 @@ pub async fn xrpc_post(
     State(state): State<AppState>,
     Path(method): Path<String>,
     RawQuery(raw_query): RawQuery,
-    mut parts: Parts,
+    xrpc_claims: XrpcClaims,
+    parts: Parts,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
     let raw_query = raw_query.unwrap_or_default();
     let mut params = parse_query_params(&raw_query);
-    let claims = Claims::from_request_parts(&mut parts, &state).await?;
+    let claims = xrpc_claims
+        .0
+        .ok_or_else(|| AppError::Auth("XRPC procedures require DPoP authentication".into()))?;
 
     let rate_key = resolve_client_key(&state, Some(&claims), &parts, &params)?;
 

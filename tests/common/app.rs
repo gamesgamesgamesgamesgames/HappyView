@@ -165,6 +165,67 @@ impl TestApp {
         }
     }
 
+    pub async fn new_with_encryption() -> Self {
+        let mut app = Self::new().await;
+        // Set a test encryption key (32 bytes)
+        app.state.config.token_encryption_key = Some([0x42u8; 32]);
+        // Rebuild the router with the updated state
+        app.router = server::router(app.state.clone());
+        app
+    }
+
+    /// Create an API client in the database for testing.
+    /// Returns (client_key, client_secret, api_client_id).
+    pub async fn create_api_client(
+        &self,
+        client_type: &str,
+        allowed_origins: Option<Vec<String>>,
+    ) -> (String, String, String) {
+        use happyview::db::{adapt_sql, now_rfc3339};
+        use rand::RngCore;
+        use sha2::{Digest, Sha256};
+
+        let mut key_bytes = [0u8; 16];
+        rand::rng().fill_bytes(&mut key_bytes);
+        let client_key = format!("hvc_{}", hex::encode(key_bytes));
+
+        let mut secret_bytes = [0u8; 32];
+        rand::rng().fill_bytes(&mut secret_bytes);
+        let client_secret = format!("hvs_{}", hex::encode(secret_bytes));
+        let secret_hash = hex::encode(Sha256::digest(client_secret.as_bytes()));
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = now_rfc3339();
+        let origins_json = allowed_origins
+            .as_ref()
+            .map(|o| serde_json::to_string(o).unwrap_or_else(|_| "[]".to_string()));
+
+        let sql = adapt_sql(
+            "INSERT INTO api_clients (id, client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, is_active, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+            self.state.db_backend,
+        );
+
+        sqlx::query(&sql)
+            .bind(&id)
+            .bind(&client_key)
+            .bind(&secret_hash)
+            .bind("test-client")
+            .bind(format!("https://test.example.com/oauth/{}", &id[..8]))
+            .bind("https://test.example.com")
+            .bind("[]")
+            .bind("atproto")
+            .bind(client_type)
+            .bind(&origins_json)
+            .bind(&self.admin_did)
+            .bind(&now)
+            .bind(&now)
+            .execute(&self.state.db)
+            .await
+            .expect("failed to create test API client");
+
+        (client_key, client_secret, id)
+    }
+
     /// Build a Cookie header that authenticates as the admin user.
     pub fn admin_cookie(&self) -> (axum::http::HeaderName, axum::http::HeaderValue) {
         crate::common::auth::admin_cookie_header(&self.admin_did, &self.state.cookie_key)

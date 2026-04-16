@@ -12,6 +12,7 @@ pub mod jetstream;
 pub mod labeler;
 pub mod lexicon;
 pub mod lua;
+pub mod oauth;
 pub mod plugin;
 pub mod profile;
 pub mod rate_limit;

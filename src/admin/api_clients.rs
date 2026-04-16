@@ -41,8 +41,13 @@ pub(super) async fn create_api_client(
     let redirect_uris_json =
         serde_json::to_string(&body.redirect_uris).unwrap_or_else(|_| "[]".to_string());
 
+    let allowed_origins_json = body
+        .allowed_origins
+        .as_ref()
+        .map(|origins| serde_json::to_string(origins).unwrap_or_else(|_| "[]".to_string()));
+
     let insert_sql = adapt_sql(
-        "INSERT INTO api_clients (id, client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+        "INSERT INTO api_clients (id, client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, client_type, allowed_origins, is_active, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
         state.db_backend,
     );
 
@@ -57,6 +62,8 @@ pub(super) async fn create_api_client(
         .bind(&body.scopes)
         .bind(body.rate_limit_capacity)
         .bind(body.rate_limit_refill_rate)
+        .bind(&body.client_type)
+        .bind(&allowed_origins_json)
         .bind(&auth.did)
         .bind(&now)
         .bind(&now)
@@ -143,7 +150,7 @@ pub(super) async fn list_api_clients(
     auth.require(Permission::ApiClientsView).await?;
 
     let select_sql = adapt_sql(
-        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at FROM api_clients ORDER BY created_at DESC",
+        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at FROM api_clients ORDER BY created_at DESC",
         state.db_backend,
     );
 
@@ -156,6 +163,8 @@ pub(super) async fn list_api_clients(
         String,
         String,
         String,
+        String,
+        Option<String>,
         Option<i32>,
         Option<f64>,
         i32,
@@ -178,6 +187,8 @@ pub(super) async fn list_api_clients(
                 client_uri,
                 redirect_uris_json,
                 scopes,
+                client_type,
+                allowed_origins_json,
                 rate_limit_capacity,
                 rate_limit_refill_rate,
                 is_active,
@@ -187,6 +198,9 @@ pub(super) async fn list_api_clients(
             )| {
                 let redirect_uris: Vec<String> =
                     serde_json::from_str(&redirect_uris_json).unwrap_or_default();
+                let allowed_origins: Option<Vec<String>> = allowed_origins_json
+                    .as_deref()
+                    .and_then(|j| serde_json::from_str(j).ok());
                 ApiClientSummary {
                     id,
                     client_key,
@@ -195,6 +209,8 @@ pub(super) async fn list_api_clients(
                     client_uri,
                     redirect_uris,
                     scopes,
+                    client_type,
+                    allowed_origins,
                     rate_limit_capacity,
                     rate_limit_refill_rate,
                     is_active: is_active != 0,
@@ -218,7 +234,7 @@ pub(super) async fn get_api_client(
     auth.require(Permission::ApiClientsView).await?;
 
     let select_sql = adapt_sql(
-        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at FROM api_clients WHERE id = ?",
+        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at FROM api_clients WHERE id = ?",
         state.db_backend,
     );
 
@@ -230,6 +246,8 @@ pub(super) async fn get_api_client(
         String,
         String,
         String,
+        String,
+        Option<String>,
         Option<i32>,
         Option<f64>,
         i32,
@@ -251,6 +269,8 @@ pub(super) async fn get_api_client(
         client_uri,
         redirect_uris_json,
         scopes,
+        client_type,
+        allowed_origins_json,
         rate_limit_capacity,
         rate_limit_refill_rate,
         is_active,
@@ -263,6 +283,9 @@ pub(super) async fn get_api_client(
     };
 
     let redirect_uris: Vec<String> = serde_json::from_str(&redirect_uris_json).unwrap_or_default();
+    let allowed_origins: Option<Vec<String>> = allowed_origins_json
+        .as_deref()
+        .and_then(|j| serde_json::from_str(j).ok());
 
     Ok(Json(ApiClientSummary {
         id,
@@ -272,6 +295,8 @@ pub(super) async fn get_api_client(
         client_uri,
         redirect_uris,
         scopes,
+        client_type,
+        allowed_origins,
         rate_limit_capacity,
         rate_limit_refill_rate,
         is_active: is_active != 0,

@@ -356,10 +356,17 @@ pub(super) struct CreateApiClientBody {
     pub(super) scopes: String,
     pub(super) rate_limit_capacity: Option<i32>,
     pub(super) rate_limit_refill_rate: Option<f64>,
+    #[serde(default = "default_client_type")]
+    pub(super) client_type: String,
+    pub(super) allowed_origins: Option<Vec<String>>,
 }
 
 fn default_scopes() -> String {
     "atproto".to_string()
+}
+
+fn default_client_type() -> String {
+    "confidential".to_string()
 }
 
 #[derive(Deserialize)]
@@ -382,6 +389,8 @@ pub(super) struct ApiClientSummary {
     pub(super) client_uri: String,
     pub(super) redirect_uris: Vec<String>,
     pub(super) scopes: String,
+    pub(super) client_type: String,
+    pub(super) allowed_origins: Option<Vec<String>>,
     pub(super) rate_limit_capacity: Option<i32>,
     pub(super) rate_limit_refill_rate: Option<f64>,
     pub(super) is_active: bool,
