@@ -13,6 +13,7 @@ use tower_http::trace::TraceLayer;
 use crate::AppState;
 use crate::admin;
 use crate::auth::Claims;
+use crate::domain_middleware::resolve_domain;
 use crate::error::AppError;
 use crate::profile;
 use crate::rate_limit::CheckResult;
@@ -60,10 +61,7 @@ pub fn router(state: AppState) -> Router {
 
     let serve_dir = ServeDir::new(&static_dir).not_found_service(spa_fallback);
 
-    Router::new()
-        .route("/health", get(health))
-        .route("/settings/logo", get(crate::admin::settings::serve_logo))
-        .nest("/admin", admin::admin_routes(state.clone()))
+    let domain_routes = Router::new()
         .nest("/auth", crate::auth::routes::routes())
         .nest("/external-auth", crate::external_auth::routes())
         // https://atproto.com/specs/oauth#types-of-clients
@@ -76,6 +74,16 @@ pub fn router(state: AppState) -> Router {
         // Catch-all for dynamically registered lexicons
         .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
         .route("/config", get(config_endpoint))
+        .route("/settings/logo", get(crate::admin::settings::serve_logo))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            resolve_domain,
+        ));
+
+    Router::new()
+        .route("/health", get(health))
+        .nest("/admin", admin::admin_routes(state.clone()))
+        .merge(domain_routes)
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http())
         .layer(
@@ -98,7 +106,14 @@ async fn health() -> &'static str {
     "ok"
 }
 
-async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn config_endpoint(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+) -> Json<serde_json::Value> {
+    let domain_url = crate::domain_middleware::extract_domain(&req)
+        .map(|d| d.url.clone())
+        .unwrap_or_else(|| state.config.public_url.clone());
+
     let pool = &state.db;
     let backend = state.db_backend;
 
@@ -112,7 +127,7 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
     let logo_url = if has_logo_data {
         Some(format!(
             "{}/settings/logo",
-            state.config.public_url.trim_end_matches('/')
+            domain_url.trim_end_matches('/')
         ))
     } else {
         crate::admin::settings::get_setting(pool, "logo_uri", backend)
@@ -126,7 +141,7 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
     };
 
     Json(serde_json::json!({
-        "public_url": state.config.public_url,
+        "public_url": domain_url,
         "version": version,
         "database_backend": format!("{:?}", state.config.database_backend).to_lowercase(),
         "jetstream_url": state.config.jetstream_url,
@@ -139,15 +154,22 @@ async fn config_endpoint(State(state): State<AppState>) -> Json<serde_json::Valu
     }))
 }
 
-async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let mut metadata =
-        serde_json::to_value(&state.oauth.default_client().client_metadata).unwrap_or_default();
+async fn client_metadata(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+) -> Json<serde_json::Value> {
+    let domain_url = crate::domain_middleware::extract_domain(&req)
+        .map(|d| d.url.clone())
+        .unwrap_or_else(|| state.config.public_url.clone());
+
+    let oauth_client = state.oauth.get_for_domain(&domain_url);
+    let mut metadata = serde_json::to_value(&oauth_client.client_metadata).unwrap_or_default();
 
     // The `client_id` field in the response must exactly match the URL the
     // authorization server fetched.
     let client_id = format!(
         "{}/oauth-client-metadata.json",
-        state.config.public_url.trim_end_matches('/')
+        domain_url.trim_end_matches('/')
     );
     metadata["client_id"] = serde_json::Value::String(client_id);
 
@@ -169,7 +191,7 @@ async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Valu
     if has_logo_data {
         metadata["logo_uri"] = serde_json::Value::String(format!(
             "{}/settings/logo",
-            state.config.public_url.trim_end_matches('/')
+            domain_url.trim_end_matches('/')
         ));
     } else if let Some(uri) = crate::admin::settings::get_setting(pool, "logo_uri", backend).await {
         metadata["logo_uri"] = serde_json::Value::String(uri);
@@ -187,19 +209,20 @@ async fn client_metadata(State(state): State<AppState>) -> Json<serde_json::Valu
 }
 
 async fn get_profile(State(state): State<AppState>, claims: Claims) -> Result<Response, AppError> {
-    let rate_key = claims
-        .client_key()
-        .map(|k| k.to_string())
-        .unwrap_or_else(|| claims.did().to_string());
-    let check = state
-        .rate_limiter
-        .check(&rate_key, state.rate_limiter.default_cost_for_type("query"));
+    let check = if let Some(client_key) = claims.client_key() {
+        let cost = state
+            .rate_limiter
+            .default_cost_for_type(client_key, "query");
+        Some(state.rate_limiter.check(client_key, cost))
+    } else {
+        None
+    };
 
-    if let CheckResult::Limited {
+    if let Some(CheckResult::Limited {
         retry_after,
         limit,
         reset,
-    } = check
+    }) = check
     {
         return Err(AppError::RateLimited {
             retry_after,
@@ -212,11 +235,11 @@ async fn get_profile(State(state): State<AppState>, claims: Claims) -> Result<Re
         profile::resolve_profile(&state.http, &state.config.plc_url, claims.did()).await?;
     let mut response = Json(profile).into_response();
 
-    if let CheckResult::Allowed {
+    if let Some(CheckResult::Allowed {
         remaining,
         limit,
         reset,
-    } = check
+    }) = check
     {
         let h = response.headers_mut();
         h.insert("RateLimit-Limit", limit.into());

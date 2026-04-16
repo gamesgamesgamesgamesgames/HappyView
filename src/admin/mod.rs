@@ -2,13 +2,13 @@ mod api_clients;
 mod api_keys;
 pub(crate) mod auth;
 mod backfill;
+mod domains;
 mod events;
 mod labelers;
 mod lexicons;
 mod network_lexicons;
 pub(crate) mod permissions;
 mod plugins;
-mod rate_limits;
 mod records;
 mod script_variables;
 pub mod settings;
@@ -70,11 +70,6 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/labelers/{did}",
             patch(labelers::update).delete(labelers::delete),
         )
-        .route(
-            "/rate-limits",
-            post(rate_limits::upsert).get(rate_limits::list),
-        )
-        .route("/rate-limits/enabled", put(rate_limits::set_enabled))
         .route("/settings", get(settings::list))
         .route(
             "/settings/logo",
@@ -104,4 +99,7 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
                 .put(api_clients::update_api_client)
                 .delete(api_clients::delete_api_client),
         )
+        .route("/domains", post(domains::create).get(domains::list))
+        .route("/domains/{id}", delete(domains::delete))
+        .route("/domains/{id}/primary", post(domains::set_primary))
 }

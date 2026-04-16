@@ -3,6 +3,8 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod dns;
+pub mod domain;
+pub mod domain_middleware;
 pub mod error;
 pub mod event_log;
 pub mod external_auth;
@@ -54,6 +56,7 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub db: sqlx::AnyPool,
     pub db_backend: DatabaseBackend,
+    pub domain_cache: domain::DomainCache,
     pub lexicons: LexiconRegistry,
     pub collections_tx: watch::Sender<Vec<String>>,
     pub labeler_subscriptions_tx: watch::Sender<()>,

@@ -267,10 +267,12 @@ pub async fn xrpc_get(
     let cost = if let Some(ref lex) = lexicon {
         lex.token_cost.unwrap_or_else(|| {
             let type_str = format!("{:?}", lex.lexicon_type).to_lowercase();
-            state.rate_limiter.default_cost_for_type(&type_str)
+            state
+                .rate_limiter
+                .default_cost_for_type(&rate_key, &type_str)
         })
     } else {
-        state.rate_limiter.default_cost_for_type("proxy")
+        state.rate_limiter.default_cost_for_type(&rate_key, "proxy")
     };
 
     let check = state.rate_limiter.check(&rate_key, cost);
@@ -349,10 +351,12 @@ pub async fn xrpc_post(
     let cost = if let Some(ref lex) = lexicon {
         lex.token_cost.unwrap_or_else(|| {
             let type_str = format!("{:?}", lex.lexicon_type).to_lowercase();
-            state.rate_limiter.default_cost_for_type(&type_str)
+            state
+                .rate_limiter
+                .default_cost_for_type(&rate_key, &type_str)
         })
     } else {
-        state.rate_limiter.default_cost_for_type("proxy")
+        state.rate_limiter.default_cost_for_type(&rate_key, "proxy")
     };
 
     let check = state.rate_limiter.check(&rate_key, cost);

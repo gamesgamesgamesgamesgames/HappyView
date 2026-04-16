@@ -17,17 +17,20 @@ pub async fn upload_blob(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
-    let rate_key = claims.did().to_string();
-    let check = state.rate_limiter.check(
-        &rate_key,
-        state.rate_limiter.default_cost_for_type("procedure"),
-    );
+    let check = if let Some(client_key) = claims.client_key() {
+        let cost = state
+            .rate_limiter
+            .default_cost_for_type(client_key, "procedure");
+        Some(state.rate_limiter.check(client_key, cost))
+    } else {
+        None
+    };
 
-    if let CheckResult::Limited {
+    if let Some(CheckResult::Limited {
         retry_after,
         limit,
         reset,
-    } = check
+    }) = check
     {
         return Err(AppError::RateLimited {
             retry_after,
@@ -45,11 +48,11 @@ pub async fn upload_blob(
 
     let mut response = pds_post_blob(&state, &session, content_type, body).await?;
 
-    if let CheckResult::Allowed {
+    if let Some(CheckResult::Allowed {
         remaining,
         limit,
         reset,
-    } = check
+    }) = check
     {
         let h = response.headers_mut();
         h.insert("RateLimit-Limit", limit.into());

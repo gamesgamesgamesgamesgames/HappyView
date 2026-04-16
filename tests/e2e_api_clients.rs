@@ -580,10 +580,10 @@ async fn oauth_registry_get_or_default_returns_default_for_unknown() {
         .state
         .oauth
         .get_or_default(Some("https://unknown.example.com/metadata.json"));
-    let default = app.state.oauth.default_client();
+    let default = app.state.oauth.primary_client();
 
     // Should be the same Arc (default client)
-    assert!(std::sync::Arc::ptr_eq(&client, default));
+    assert!(std::sync::Arc::ptr_eq(&client, &default));
 }
 
 #[tokio::test]
@@ -593,9 +593,9 @@ async fn oauth_registry_get_or_default_returns_default_for_none() {
     let app = TestApp::new().await;
 
     let client = app.state.oauth.get_or_default(None);
-    let default = app.state.oauth.default_client();
+    let default = app.state.oauth.primary_client();
 
-    assert!(std::sync::Arc::ptr_eq(&client, default));
+    assert!(std::sync::Arc::ptr_eq(&client, &default));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use std::sync::Arc;
 
@@ -27,14 +28,16 @@ pub struct ApiClientOAuthParams {
 /// shows the correct domain. The default client is HappyView's own identity,
 /// used for dashboard auth.
 pub struct OAuthClientRegistry {
-    default_client: Arc<HappyViewOAuthClient>,
+    primary_client: ArcSwap<HappyViewOAuthClient>,
+    domain_clients: DashMap<String, Arc<HappyViewOAuthClient>>,
     clients: DashMap<String, Arc<HappyViewOAuthClient>>,
 }
 
 impl OAuthClientRegistry {
-    pub fn new(default_client: Arc<HappyViewOAuthClient>) -> Self {
+    pub fn new(primary_client: Arc<HappyViewOAuthClient>) -> Self {
         Self {
-            default_client,
+            primary_client: ArcSwap::new(primary_client),
+            domain_clients: DashMap::new(),
             clients: DashMap::new(),
         }
     }
@@ -54,21 +57,63 @@ impl OAuthClientRegistry {
         self.clients.get(client_id_url).map(|r| r.value().clone())
     }
 
-    /// Look up a client by `client_id_url`, falling back to the default.
+    /// Look up a client by `client_id_url`, falling back to the primary client.
     pub fn get_or_default(&self, client_id_url: Option<&str>) -> Arc<HappyViewOAuthClient> {
         if let Some(url) = client_id_url {
             self.clients
                 .get(url)
                 .map(|r| r.value().clone())
-                .unwrap_or_else(|| self.default_client.clone())
+                .unwrap_or_else(|| self.primary_client.load_full())
         } else {
-            self.default_client.clone()
+            self.primary_client.load_full()
         }
     }
 
-    /// Get the default (HappyView dashboard) client.
-    pub fn default_client(&self) -> &Arc<HappyViewOAuthClient> {
-        &self.default_client
+    /// Get the primary (HappyView dashboard) client.
+    pub fn primary_client(&self) -> Arc<HappyViewOAuthClient> {
+        self.primary_client.load_full()
+    }
+
+    /// Register a domain-specific OAuth client.
+    /// Inserts into both `domain_clients` (keyed by domain URL, for `get_for_domain`)
+    /// and `clients` (keyed by client_id_url, for `get_or_default`).
+    pub fn register_domain_client(&self, domain_url: String, client: Arc<HappyViewOAuthClient>) {
+        let client_id_url = format!(
+            "{}/oauth-client-metadata.json",
+            domain_url.trim_end_matches('/')
+        );
+        self.domain_clients.insert(domain_url, Arc::clone(&client));
+        self.clients.insert(client_id_url, client);
+    }
+
+    /// Remove a domain-specific OAuth client from both maps.
+    pub fn remove_domain_client(&self, domain_url: &str) {
+        self.domain_clients.remove(domain_url);
+        let client_id_url = format!(
+            "{}/oauth-client-metadata.json",
+            domain_url.trim_end_matches('/')
+        );
+        self.clients.remove(&client_id_url);
+    }
+
+    /// Look up a domain-specific OAuth client.
+    pub fn get_domain_client(&self, domain_url: &str) -> Option<Arc<HappyViewOAuthClient>> {
+        self.domain_clients
+            .get(domain_url)
+            .map(|r| r.value().clone())
+    }
+
+    /// Get the OAuth client for a domain, falling back to the primary client.
+    pub fn get_for_domain(&self, domain_url: &str) -> Arc<HappyViewOAuthClient> {
+        self.domain_clients
+            .get(domain_url)
+            .map(|r| r.value().clone())
+            .unwrap_or_else(|| self.primary_client.load_full())
+    }
+
+    /// Replace the primary OAuth client (e.g. when admin changes the primary domain).
+    pub fn set_primary_client(&self, client: Arc<HappyViewOAuthClient>) {
+        self.primary_client.store(client);
     }
 
     /// Build and register a single OAuth client from API client metadata.

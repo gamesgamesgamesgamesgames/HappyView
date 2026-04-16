@@ -325,6 +325,24 @@ pub(super) struct UpdatePluginSecretsBody {
 }
 
 // ---------------------------------------------------------------------------
+// Domain types
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub(super) struct DomainResponse {
+    pub(super) id: String,
+    pub(super) url: String,
+    pub(super) is_primary: bool,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct CreateDomainBody {
+    pub(super) url: String,
+}
+
+// ---------------------------------------------------------------------------
 // API client types
 // ---------------------------------------------------------------------------
 
@@ -379,32 +397,4 @@ pub(super) struct CreateApiClientResponse {
     pub(super) client_secret: String,
     pub(super) name: String,
     pub(super) client_id_url: String,
-}
-
-// ---------------------------------------------------------------------------
-// Rate limit types
-// ---------------------------------------------------------------------------
-
-#[derive(Deserialize)]
-pub(super) struct UpsertRateLimitBody {
-    pub(super) capacity: u32,
-    pub(super) refill_rate: f64,
-    pub(super) default_query_cost: u32,
-    pub(super) default_procedure_cost: u32,
-    pub(super) default_proxy_cost: u32,
-}
-
-#[derive(Deserialize)]
-pub(super) struct SetEnabledBody {
-    pub(super) enabled: bool,
-}
-
-#[derive(Serialize)]
-pub(super) struct RateLimitsResponse {
-    pub(super) enabled: bool,
-    pub(super) capacity: i32,
-    pub(super) refill_rate: f64,
-    pub(super) default_query_cost: i32,
-    pub(super) default_procedure_cost: i32,
-    pub(super) default_proxy_cost: i32,
 }

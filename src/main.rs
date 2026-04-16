@@ -5,9 +5,10 @@ use happyview::config::Config;
 use happyview::db;
 use happyview::dns::NativeDnsResolver;
 use happyview::lexicon::{LexiconRegistry, ParsedLexicon, ProcedureAction};
-use happyview::rate_limit::{RateLimitConfig, RateLimiter};
+use happyview::rate_limit::{RateLimitDefaults, RateLimiter};
 use happyview::resolve::{fetch_lexicon_from_pds, resolve_nsid_authority};
 use happyview::{AppState, jetstream, labeler, server};
+use sqlx::Row;
 use tokio::sync::watch;
 use tracing::{info, warn};
 
@@ -264,9 +265,9 @@ async fn main() {
         }
     }
 
-    // Initialize rate limiter from DB.
-    let rl_state = RateLimiter::load_from_db(&db_pool).await;
-    let rate_limiter = RateLimiter::new(rl_state.enabled, rl_state.global);
+    // Seed and load per-instance default token costs from instance_settings.
+    let defaults = seed_and_load_rate_limit_defaults(&db_pool, db_backend).await;
+    let rate_limiter = RateLimiter::new(defaults);
     tokio::spawn(rate_limiter.clone().spawn_cleanup());
 
     // Load per-client rate limit configs and identities from api_clients table.
@@ -279,7 +280,6 @@ async fn main() {
         .await
         .unwrap_or_default();
 
-        let global = rate_limiter.global_config();
         for (client_key, secret_hash, client_uri, capacity, refill_rate) in client_rows {
             rate_limiter.register_client_identity(
                 client_key.clone(),
@@ -291,16 +291,72 @@ async fn main() {
             if let (Some(cap), Some(refill)) = (capacity, refill_rate) {
                 rate_limiter.register_client_config(
                     client_key,
-                    RateLimitConfig {
+                    happyview::rate_limit::RateLimitConfig {
                         capacity: cap as u32,
                         refill_rate: refill,
-                        default_query_cost: global.default_query_cost,
-                        default_procedure_cost: global.default_procedure_cost,
-                        default_proxy_cost: global.default_proxy_cost,
+                        default_query_cost: defaults.query_cost,
+                        default_procedure_cost: defaults.procedure_cost,
+                        default_proxy_cost: defaults.proxy_cost,
                     },
                 );
             }
         }
+    }
+
+    // Seed and load domain cache
+    let domain_cache = happyview::domain::DomainCache::new();
+    {
+        let count_sql = happyview::db::adapt_sql("SELECT COUNT(*) FROM domains", db_backend);
+        let row = sqlx::query(&count_sql)
+            .fetch_one(&db_pool)
+            .await
+            .expect("Failed to count domains");
+        let count: i64 = row.try_get(0).unwrap_or(0);
+
+        if count == 0 {
+            let id = uuid::Uuid::new_v4().to_string();
+            let now = happyview::db::now_rfc3339();
+            let insert_sql = happyview::db::adapt_sql(
+                "INSERT INTO domains (id, url, is_primary, created_at, updated_at) VALUES (?, ?, 1, ?, ?)",
+                db_backend,
+            );
+            sqlx::query(&insert_sql)
+                .bind(&id)
+                .bind(&config.public_url)
+                .bind(&now)
+                .bind(&now)
+                .execute(&db_pool)
+                .await
+                .expect("Failed to insert primary domain");
+            info!("Seeded primary domain: {}", config.public_url);
+        }
+
+        let select_sql = happyview::db::adapt_sql(
+            "SELECT id, url, is_primary, created_at, updated_at FROM domains",
+            db_backend,
+        );
+        let rows = sqlx::query(&select_sql)
+            .fetch_all(&db_pool)
+            .await
+            .expect("Failed to load domains");
+
+        let domains: Vec<happyview::domain::Domain> = rows
+            .into_iter()
+            .map(|row| {
+                let is_primary_int: i32 = row.try_get("is_primary").unwrap_or(0);
+                happyview::domain::Domain {
+                    id: row.try_get("id").unwrap_or_default(),
+                    url: row.try_get("url").unwrap_or_default(),
+                    is_primary: is_primary_int != 0,
+                    created_at: row.try_get("created_at").unwrap_or_default(),
+                    updated_at: row.try_get("updated_at").unwrap_or_default(),
+                }
+            })
+            .collect();
+
+        let domain_count = domains.len();
+        domain_cache.load(domains).await;
+        info!("Loaded {} domain(s) into cache", domain_count);
     }
 
     // Build atrium-oauth client
@@ -394,8 +450,9 @@ async fn main() {
     let (labeler_subscriptions_tx, labeler_subscriptions_rx) = watch::channel(());
 
     // Build the OAuth client registry and load API clients from DB
-    let oauth_registry = Arc::new(happyview::auth::OAuthClientRegistry::new(Arc::new(
-        oauth_client,
+    let oauth_client_arc = Arc::new(oauth_client);
+    let oauth_registry = Arc::new(happyview::auth::OAuthClientRegistry::new(Arc::clone(
+        &oauth_client_arc,
     )));
     oauth_registry
         .load_from_db(
@@ -406,6 +463,64 @@ async fn main() {
             db_pool.clone(),
         )
         .await;
+
+    // Register the primary domain's OAuth client in domain_clients
+    if let Some(ref pd) = domain_cache.primary().await {
+        oauth_registry.register_domain_client(pd.url.clone(), Arc::clone(&oauth_client_arc));
+    }
+
+    // Build OAuth clients for all non-primary domains
+    let all_domains = domain_cache.all().await;
+    for domain in &all_domains {
+        if domain.is_primary {
+            continue; // Already registered above
+        }
+
+        let domain_callback_url = format!("{}/auth/callback", domain.url.trim_end_matches('/'));
+        let domain_client_id = format!(
+            "{}/oauth-client-metadata.json",
+            domain.url.trim_end_matches('/')
+        );
+
+        let domain_http = Arc::new(DefaultHttpClient::default());
+        let domain_resolver = OAuthResolverConfig {
+            did_resolver: CommonDidResolver::new(CommonDidResolverConfig {
+                plc_directory_url: config.plc_url.clone(),
+                http_client: Arc::clone(&domain_http),
+            }),
+            handle_resolver: AtprotoHandleResolver::new(AtprotoHandleResolverConfig {
+                dns_txt_resolver: NativeDnsResolver::new(),
+                http_client: Arc::clone(&domain_http),
+            }),
+            authorization_server_metadata: Default::default(),
+            protected_resource_metadata: Default::default(),
+        };
+
+        match atrium_oauth::OAuthClient::new(OAuthClientConfig {
+            client_metadata: AtprotoClientMetadata {
+                client_id: domain_client_id,
+                client_uri: Some(domain.url.clone()),
+                redirect_uris: vec![domain_callback_url],
+                token_endpoint_auth_method: AuthMethod::None,
+                grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+                scopes: vec![Scope::Known(KnownScope::Atproto)],
+                jwks_uri: None,
+                token_endpoint_auth_signing_alg: None,
+            },
+            keys: None,
+            state_store: oauth_state_store.clone(),
+            session_store: DbSessionStore::new(db_pool.clone(), db_backend),
+            resolver: domain_resolver,
+        }) {
+            Ok(client) => {
+                info!(domain = %domain.url, "Registered domain OAuth client");
+                oauth_registry.register_domain_client(domain.url.clone(), Arc::new(client));
+            }
+            Err(e) => {
+                tracing::error!(domain = %domain.url, error = %e, "Failed to create domain OAuth client");
+            }
+        }
+    }
 
     let official_registry: happyview::plugin::official_registry::SharedRegistry =
         std::sync::Arc::new(tokio::sync::RwLock::new(
@@ -424,6 +539,7 @@ async fn main() {
         http,
         db: db_pool,
         db_backend,
+        domain_cache: domain_cache.clone(),
         lexicons,
         collections_tx,
         labeler_subscriptions_tx,
@@ -459,4 +575,69 @@ async fn main() {
         .expect("failed to bind");
 
     axum::serve(listener, app).await.expect("server error");
+}
+
+async fn seed_and_load_rate_limit_defaults(
+    pool: &sqlx::AnyPool,
+    backend: happyview::db::DatabaseBackend,
+) -> RateLimitDefaults {
+    use happyview::rate_limit::{
+        SEED_DEFAULT_PROCEDURE_COST, SEED_DEFAULT_PROXY_COST, SEED_DEFAULT_QUERY_COST,
+        SETTING_DEFAULT_PROCEDURE_COST, SETTING_DEFAULT_PROXY_COST, SETTING_DEFAULT_QUERY_COST,
+    };
+
+    async fn seed_and_read(
+        pool: &sqlx::AnyPool,
+        backend: happyview::db::DatabaseBackend,
+        key: &str,
+        seed: u32,
+    ) -> u32 {
+        if happyview::admin::settings::get_setting(pool, key, backend)
+            .await
+            .is_none()
+        {
+            let now = happyview::db::now_rfc3339();
+            let sql = happyview::db::adapt_sql(
+                "INSERT INTO instance_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING",
+                backend,
+            );
+            if let Err(e) = sqlx::query(&sql)
+                .bind(key)
+                .bind(seed.to_string())
+                .bind(&now)
+                .execute(pool)
+                .await
+            {
+                warn!(error = %e, key = key, "failed to seed rate-limit default");
+            }
+        }
+        happyview::admin::settings::get_setting(pool, key, backend)
+            .await
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(seed)
+    }
+
+    RateLimitDefaults {
+        query_cost: seed_and_read(
+            pool,
+            backend,
+            SETTING_DEFAULT_QUERY_COST,
+            SEED_DEFAULT_QUERY_COST,
+        )
+        .await,
+        procedure_cost: seed_and_read(
+            pool,
+            backend,
+            SETTING_DEFAULT_PROCEDURE_COST,
+            SEED_DEFAULT_PROCEDURE_COST,
+        )
+        .await,
+        proxy_cost: seed_and_read(
+            pool,
+            backend,
+            SETTING_DEFAULT_PROXY_COST,
+            SEED_DEFAULT_PROXY_COST,
+        )
+        .await,
+    }
 }

@@ -1,9 +1,28 @@
-use arc_swap::ArcSwap;
 use dashmap::DashMap;
-use sqlx::AnyPool;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+/// Hardcoded seed values for the per-instance default token costs. These are
+/// only used by the startup seeding step in `main.rs` to populate fresh
+/// `instance_settings` rows; at runtime the values are read from the DB into
+/// `RateLimitDefaults`.
+pub const SEED_DEFAULT_QUERY_COST: u32 = 1;
+pub const SEED_DEFAULT_PROCEDURE_COST: u32 = 1;
+pub const SEED_DEFAULT_PROXY_COST: u32 = 1;
+
+/// `instance_settings` keys for the seeded defaults.
+pub const SETTING_DEFAULT_QUERY_COST: &str = "rate_limit.default_query_cost";
+pub const SETTING_DEFAULT_PROCEDURE_COST: &str = "rate_limit.default_procedure_cost";
+pub const SETTING_DEFAULT_PROXY_COST: &str = "rate_limit.default_proxy_cost";
+
+/// Default token costs per XRPC request type, loaded from `instance_settings`
+/// at startup. Owned by the `RateLimiter`.
+#[derive(Clone, Copy)]
+pub struct RateLimitDefaults {
+    pub query_cost: u32,
+    pub procedure_cost: u32,
+    pub proxy_cost: u32,
+}
 
 pub struct RateLimitConfig {
     pub capacity: u32,
@@ -44,18 +63,14 @@ pub struct ClientIdentity {
 }
 
 pub struct RateLimiter {
-    enabled: AtomicBool,
+    defaults: RateLimitDefaults,
     buckets: DashMap<String, TokenBucket>,
-    global_config: ArcSwap<RateLimitConfig>,
-    /// Per-client config overrides, keyed by client_key (e.g. "hvc_...")
+    /// Per-client config, keyed by client_key (e.g. "hvc_..."). Presence in
+    /// this map is the *only* thing that enables rate limiting for a key —
+    /// unregistered keys are always allowed.
     client_configs: DashMap<String, RateLimitConfig>,
     /// Registered client identities, keyed by client_key
     client_identities: DashMap<String, ClientIdentity>,
-}
-
-pub struct RateLimiterState {
-    pub enabled: bool,
-    pub global: RateLimitConfig,
 }
 
 fn now_unix() -> u64 {
@@ -66,27 +81,23 @@ fn now_unix() -> u64 {
 }
 
 impl RateLimiter {
-    pub fn new(enabled: bool, global: RateLimitConfig) -> Arc<Self> {
+    pub fn new(defaults: RateLimitDefaults) -> Arc<Self> {
         Arc::new(Self {
-            enabled: AtomicBool::new(enabled),
+            defaults,
             buckets: DashMap::new(),
-            global_config: ArcSwap::new(Arc::new(global)),
             client_configs: DashMap::new(),
             client_identities: DashMap::new(),
         })
     }
 
-    pub fn check(&self, key: &str, cost: u32) -> CheckResult {
-        if !self.enabled.load(Ordering::Relaxed) {
-            return CheckResult::Disabled;
-        }
+    pub fn defaults(&self) -> RateLimitDefaults {
+        self.defaults
+    }
 
-        // Use per-client config if available, otherwise fall back to global
-        let (capacity, refill_rate) = if let Some(client_cfg) = self.client_configs.get(key) {
-            (client_cfg.capacity, client_cfg.refill_rate)
-        } else {
-            let global = self.global_config.load();
-            (global.capacity, global.refill_rate)
+    pub fn check(&self, key: &str, cost: u32) -> CheckResult {
+        let (capacity, refill_rate) = match self.client_configs.get(key) {
+            Some(cfg) => (cfg.capacity, cfg.refill_rate),
+            None => return CheckResult::Disabled,
         };
         let cost_f64 = cost as f64;
 
@@ -103,11 +114,9 @@ impl RateLimiter {
                 last_access: now,
             });
 
-        // Hot-reload config changes
         bucket.capacity = capacity;
         bucket.refill_rate = refill_rate;
 
-        // Refill tokens
         let elapsed = now.duration_since(bucket.last_refill).as_secs_f64();
         bucket.tokens = (bucket.tokens + elapsed * refill_rate).min(capacity as f64);
         bucket.last_refill = now;
@@ -137,56 +146,42 @@ impl RateLimiter {
         }
     }
 
-    /// Get the default cost for a given request type.
-    pub fn default_cost_for_type(&self, request_type: &str) -> u32 {
-        let config = self.global_config.load();
+    /// Get the default cost for a request type. Looks up the per-client
+    /// override if one is registered, otherwise falls back to the seeded
+    /// instance defaults.
+    pub fn default_cost_for_type(&self, client_key: &str, request_type: &str) -> u32 {
+        if let Some(cfg) = self.client_configs.get(client_key) {
+            return match request_type {
+                "query" => cfg.default_query_cost,
+                "procedure" => cfg.default_procedure_cost,
+                "proxy" => cfg.default_proxy_cost,
+                _ => 1,
+            };
+        }
         match request_type {
-            "query" => config.default_query_cost,
-            "procedure" => config.default_procedure_cost,
-            "proxy" => config.default_proxy_cost,
+            "query" => self.defaults.query_cost,
+            "procedure" => self.defaults.procedure_cost,
+            "proxy" => self.defaults.proxy_cost,
             _ => 1,
         }
     }
 
-    /// Get a snapshot of the current global config.
-    pub fn global_config(&self) -> Arc<RateLimitConfig> {
-        self.global_config.load_full()
-    }
-
-    pub fn set_enabled(&self, enabled: bool) {
-        self.enabled.store(enabled, Ordering::Relaxed);
-    }
-
-    pub fn is_enabled(&self) -> bool {
-        self.enabled.load(Ordering::Relaxed)
-    }
-
-    pub fn update_config(&self, global: RateLimitConfig) {
-        self.global_config.store(Arc::new(global));
-    }
-
-    /// Register a per-client rate limit config override.
     pub fn register_client_config(&self, client_key: String, config: RateLimitConfig) {
         self.client_configs.insert(client_key, config);
     }
 
-    /// Remove a per-client rate limit config override.
     pub fn remove_client_config(&self, client_key: &str) {
         self.client_configs.remove(client_key);
     }
 
-    /// Register a client identity (key, secret hash, and client URI).
     pub fn register_client_identity(&self, client_key: String, identity: ClientIdentity) {
         self.client_identities.insert(client_key, identity);
     }
 
-    /// Remove a client identity.
     pub fn remove_client_identity(&self, client_key: &str) {
         self.client_identities.remove(client_key);
     }
 
-    /// Validate a client key + secret combination. Returns true if the secret
-    /// hash matches the stored hash for this client key.
     pub fn validate_client_secret(&self, client_key: &str, secret: &str) -> bool {
         use sha2::{Digest, Sha256};
         if let Some(identity) = self.client_identities.get(client_key) {
@@ -197,11 +192,8 @@ impl RateLimiter {
         }
     }
 
-    /// Validate a client key + origin combination. Returns true if the origin
-    /// matches the registered client_uri for this client key.
     pub fn validate_client_origin(&self, client_key: &str, origin: &str) -> bool {
         if let Some(identity) = self.client_identities.get(client_key) {
-            // Compare origins: strip trailing slash for consistency
             let registered = identity.client_uri.trim_end_matches('/');
             let provided = origin.trim_end_matches('/');
             registered == provided
@@ -210,14 +202,13 @@ impl RateLimiter {
         }
     }
 
-    /// Check whether a client key is registered.
     pub fn is_valid_client_key(&self, client_key: &str) -> bool {
         self.client_identities.contains_key(client_key)
     }
 
     pub async fn spawn_cleanup(self: Arc<Self>) {
         let interval = tokio::time::Duration::from_secs(60);
-        let stale_threshold = std::time::Duration::from_secs(300); // 5 minutes
+        let stale_threshold = std::time::Duration::from_secs(300);
         loop {
             tokio::time::sleep(interval).await;
             let now = Instant::now();
@@ -225,317 +216,128 @@ impl RateLimiter {
                 .retain(|_, bucket| now.duration_since(bucket.last_access) < stale_threshold);
         }
     }
-
-    pub async fn load_from_db(db: &AnyPool) -> RateLimiterState {
-        // Load enabled flag
-        let enabled: bool = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM rate_limit_settings WHERE key = 'enabled'",
-        )
-        .fetch_optional(db)
-        .await
-        .ok()
-        .flatten()
-        .map(|v| v == "true")
-        .unwrap_or(true);
-
-        // Load global rate limit config (method IS NULL row)
-        let row: Option<(i32, f64, i32, i32, i32)> = sqlx::query_as(
-            "SELECT capacity, refill_rate, default_query_cost, default_procedure_cost, default_proxy_cost FROM rate_limits WHERE method IS NULL",
-        )
-        .fetch_optional(db)
-        .await
-        .unwrap_or(None);
-
-        let global = match row {
-            Some((capacity, refill_rate, query_cost, procedure_cost, proxy_cost)) => {
-                RateLimitConfig {
-                    capacity: capacity as u32,
-                    refill_rate,
-                    default_query_cost: query_cost as u32,
-                    default_procedure_cost: procedure_cost as u32,
-                    default_proxy_cost: proxy_cost as u32,
-                }
-            }
-            None => RateLimitConfig {
-                capacity: 100,
-                refill_rate: 2.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        };
-
-        RateLimiterState { enabled, global }
-    }
-
-    /// Reload all config from DB and apply to the live limiter.
-    pub async fn reload_from_db(&self, db: &AnyPool) {
-        let state = Self::load_from_db(db).await;
-        self.set_enabled(state.enabled);
-        self.update_config(state.global);
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn basic_allow_and_exhaust() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 3,
-                refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-
-        // Should allow 3 requests (bucket starts full, cost=1 each)
-        for _ in 0..3 {
-            assert!(matches!(rl.check("k", 1), CheckResult::Allowed { .. }));
+    fn defaults() -> RateLimitDefaults {
+        RateLimitDefaults {
+            query_cost: 1,
+            procedure_cost: 1,
+            proxy_cost: 1,
         }
-        // 4th should be limited
-        assert!(matches!(rl.check("k", 1), CheckResult::Limited { .. }));
+    }
+
+    fn cfg(capacity: u32, refill_rate: f64) -> RateLimitConfig {
+        RateLimitConfig {
+            capacity,
+            refill_rate,
+            default_query_cost: 1,
+            default_procedure_cost: 1,
+            default_proxy_cost: 1,
+        }
+    }
+
+    #[test]
+    fn unregistered_key_is_not_rate_limited() {
+        let rl = RateLimiter::new(defaults());
+        for _ in 0..1000 {
+            assert!(matches!(rl.check("anything", 1), CheckResult::Disabled));
+        }
+    }
+
+    #[test]
+    fn registered_client_is_rate_limited() {
+        let rl = RateLimiter::new(defaults());
+        rl.register_client_config("hvc_a".to_string(), cfg(3, 0.001));
+
+        for _ in 0..3 {
+            assert!(matches!(rl.check("hvc_a", 1), CheckResult::Allowed { .. }));
+        }
+        assert!(matches!(rl.check("hvc_a", 1), CheckResult::Limited { .. }));
     }
 
     #[test]
     fn cost_deducts_multiple_tokens() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 10,
-                refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
+        let rl = RateLimiter::new(defaults());
+        rl.register_client_config("hvc_a".to_string(), cfg(10, 0.001));
 
-        // Cost of 5 should allow 2 requests (10 tokens total)
         assert!(matches!(
-            rl.check("k", 5),
+            rl.check("hvc_a", 5),
             CheckResult::Allowed { remaining: 5, .. }
         ));
         assert!(matches!(
-            rl.check("k", 5),
+            rl.check("hvc_a", 5),
             CheckResult::Allowed { remaining: 0, .. }
         ));
-        // 3rd should be limited
-        assert!(matches!(rl.check("k", 5), CheckResult::Limited { .. }));
-    }
-
-    #[test]
-    fn disabled_returns_disabled() {
-        let rl = RateLimiter::new(
-            false,
-            RateLimitConfig {
-                capacity: 1,
-                refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-        assert!(matches!(rl.check("k", 1), CheckResult::Disabled));
-    }
-
-    #[test]
-    fn default_cost_for_type() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 100,
-                refill_rate: 10.0,
-                default_query_cost: 2,
-                default_procedure_cost: 5,
-                default_proxy_cost: 3,
-            },
-        );
-
-        assert_eq!(rl.default_cost_for_type("query"), 2);
-        assert_eq!(rl.default_cost_for_type("procedure"), 5);
-        assert_eq!(rl.default_cost_for_type("proxy"), 3);
-        assert_eq!(rl.default_cost_for_type("unknown"), 1);
-    }
-
-    #[test]
-    fn per_client_config_override() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 10,
-                refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-
-        // Register a client with lower capacity
-        rl.register_client_config(
-            "hvc_client1".to_string(),
-            RateLimitConfig {
-                capacity: 2,
-                refill_rate: 0.001,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-
-        // Client key should use client config (capacity=2)
-        assert!(matches!(
-            rl.check("hvc_client1", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("hvc_client1", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("hvc_client1", 1),
-            CheckResult::Limited { .. }
-        ));
-
-        // Other key should use global config (capacity=10)
-        for _ in 0..10 {
-            assert!(matches!(
-                rl.check("other_key", 1),
-                CheckResult::Allowed { .. }
-            ));
-        }
-        assert!(matches!(
-            rl.check("other_key", 1),
-            CheckResult::Limited { .. }
-        ));
-    }
-
-    #[test]
-    fn per_client_config_fallback_to_global() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 3,
-                refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-
-        // No client config registered — should use global (capacity=3)
-        for _ in 0..3 {
-            assert!(matches!(
-                rl.check("hvc_unregistered", 1),
-                CheckResult::Allowed { .. }
-            ));
-        }
-        assert!(matches!(
-            rl.check("hvc_unregistered", 1),
-            CheckResult::Limited { .. }
-        ));
-    }
-
-    #[test]
-    fn register_and_remove_client_config() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 10,
-                refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-
-        rl.register_client_config(
-            "hvc_temp".to_string(),
-            RateLimitConfig {
-                capacity: 1,
-                refill_rate: 0.001,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
-
-        // Should be limited after 1 request (client config capacity=1)
-        assert!(matches!(
-            rl.check("hvc_temp", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("hvc_temp", 1),
-            CheckResult::Limited { .. }
-        ));
-
-        // Remove client config — new bucket should use global (capacity=10)
-        rl.remove_client_config("hvc_temp");
-        // Note: the old bucket still exists and is exhausted, but capacity was
-        // updated to global. A new bucket would get global capacity.
+        assert!(matches!(rl.check("hvc_a", 5), CheckResult::Limited { .. }));
     }
 
     #[test]
     fn different_clients_get_separate_buckets() {
-        let rl = RateLimiter::new(
-            true,
-            RateLimitConfig {
-                capacity: 2,
-                refill_rate: 0.001,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
-            },
-        );
+        let rl = RateLimiter::new(defaults());
+        rl.register_client_config("hvc_a".to_string(), cfg(2, 0.001));
+        rl.register_client_config("hvc_b".to_string(), cfg(2, 0.001));
 
-        // Exhaust client A
-        assert!(matches!(
-            rl.check("clientA", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("clientA", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("clientA", 1),
-            CheckResult::Limited { .. }
-        ));
+        assert!(matches!(rl.check("hvc_a", 1), CheckResult::Allowed { .. }));
+        assert!(matches!(rl.check("hvc_a", 1), CheckResult::Allowed { .. }));
+        assert!(matches!(rl.check("hvc_a", 1), CheckResult::Limited { .. }));
 
-        // Client B should still have tokens
-        assert!(matches!(
-            rl.check("clientB", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("clientB", 1),
-            CheckResult::Allowed { .. }
-        ));
-        assert!(matches!(
-            rl.check("clientB", 1),
-            CheckResult::Limited { .. }
-        ));
+        assert!(matches!(rl.check("hvc_b", 1), CheckResult::Allowed { .. }));
+        assert!(matches!(rl.check("hvc_b", 1), CheckResult::Allowed { .. }));
+        assert!(matches!(rl.check("hvc_b", 1), CheckResult::Limited { .. }));
     }
 
     #[test]
-    fn toggle_enabled() {
-        let rl = RateLimiter::new(
-            true,
+    fn remove_client_config_disables_limiting() {
+        let rl = RateLimiter::new(defaults());
+        rl.register_client_config("hvc_temp".to_string(), cfg(1, 0.001));
+        assert!(matches!(
+            rl.check("hvc_temp", 1),
+            CheckResult::Allowed { .. }
+        ));
+        assert!(matches!(
+            rl.check("hvc_temp", 1),
+            CheckResult::Limited { .. }
+        ));
+
+        rl.remove_client_config("hvc_temp");
+        assert!(matches!(rl.check("hvc_temp", 1), CheckResult::Disabled));
+    }
+
+    #[test]
+    fn default_cost_for_type_uses_seeded_defaults_when_no_client_override() {
+        let rl = RateLimiter::new(RateLimitDefaults {
+            query_cost: 2,
+            procedure_cost: 5,
+            proxy_cost: 3,
+        });
+        assert_eq!(rl.default_cost_for_type("nope", "query"), 2);
+        assert_eq!(rl.default_cost_for_type("nope", "procedure"), 5);
+        assert_eq!(rl.default_cost_for_type("nope", "proxy"), 3);
+    }
+
+    #[test]
+    fn default_cost_for_type_uses_per_client_override() {
+        let rl = RateLimiter::new(RateLimitDefaults {
+            query_cost: 2,
+            procedure_cost: 5,
+            proxy_cost: 3,
+        });
+        rl.register_client_config(
+            "hvc_a".to_string(),
             RateLimitConfig {
-                capacity: 1,
+                capacity: 100,
                 refill_rate: 1.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
+                default_query_cost: 7,
+                default_procedure_cost: 8,
+                default_proxy_cost: 9,
             },
         );
-        assert!(rl.is_enabled());
-        rl.set_enabled(false);
-        assert!(!rl.is_enabled());
-        assert!(matches!(rl.check("k", 1), CheckResult::Disabled));
+        assert_eq!(rl.default_cost_for_type("hvc_a", "query"), 7);
+        assert_eq!(rl.default_cost_for_type("hvc_a", "procedure"), 8);
+        assert_eq!(rl.default_cost_for_type("hvc_a", "proxy"), 9);
     }
 }

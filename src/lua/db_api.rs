@@ -687,17 +687,15 @@ mod tests {
             http: reqwest::Client::new(),
             db: test_db.clone(),
             db_backend: DatabaseBackend::Sqlite,
+            domain_cache: crate::domain::DomainCache::new(),
             lexicons: LexiconRegistry::new(),
             collections_tx: tx,
             labeler_subscriptions_tx: labeler_tx,
             rate_limiter: crate::rate_limit::RateLimiter::new(
-                false,
-                crate::rate_limit::RateLimitConfig {
-                    capacity: 100,
-                    refill_rate: 2.0,
-                    default_query_cost: 1,
-                    default_procedure_cost: 1,
-                    default_proxy_cost: 1,
+                crate::rate_limit::RateLimitDefaults {
+                    query_cost: 1,
+                    procedure_cost: 1,
+                    proxy_cost: 1,
                 },
             ),
             oauth: std::sync::Arc::new(crate::auth::OAuthClientRegistry::new(std::sync::Arc::new(

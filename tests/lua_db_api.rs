@@ -76,13 +76,10 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
         collections_tx: tx,
         labeler_subscriptions_tx: labeler_tx,
         rate_limiter: happyview::rate_limit::RateLimiter::new(
-            false,
-            happyview::rate_limit::RateLimitConfig {
-                capacity: 100,
-                refill_rate: 2.0,
-                default_query_cost: 1,
-                default_procedure_cost: 1,
-                default_proxy_cost: 1,
+            happyview::rate_limit::RateLimitDefaults {
+                query_cost: 1,
+                procedure_cost: 1,
+                proxy_cost: 1,
             },
         ),
         oauth: std::sync::Arc::new(happyview::auth::OAuthClientRegistry::new(
@@ -100,6 +97,7 @@ async fn test_state_with_pool(pool: sqlx::AnyPool, backend: DatabaseBackend) -> 
         )),
         official_registry_config: happyview::plugin::official_registry::RegistryConfig::production(
         ),
+        domain_cache: happyview::domain::DomainCache::new(),
     }
 }
 

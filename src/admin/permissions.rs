@@ -60,13 +60,6 @@ pub enum Permission {
     #[serde(rename = "labelers:delete")]
     LabelersDelete,
 
-    #[serde(rename = "rate-limits:read")]
-    RateLimitsRead,
-    #[serde(rename = "rate-limits:create")]
-    RateLimitsCreate,
-    #[serde(rename = "rate-limits:delete")]
-    RateLimitsDelete,
-
     #[serde(rename = "settings:manage")]
     SettingsManage,
 
@@ -114,9 +107,6 @@ impl Permission {
             Self::LabelersCreate => "labelers:create",
             Self::LabelersRead => "labelers:read",
             Self::LabelersDelete => "labelers:delete",
-            Self::RateLimitsRead => "rate-limits:read",
-            Self::RateLimitsCreate => "rate-limits:create",
-            Self::RateLimitsDelete => "rate-limits:delete",
             Self::SettingsManage => "settings:manage",
             Self::PluginsRead => "plugins:read",
             Self::PluginsCreate => "plugins:create",
@@ -154,9 +144,6 @@ impl Permission {
             Self::LabelersCreate,
             Self::LabelersRead,
             Self::LabelersDelete,
-            Self::RateLimitsRead,
-            Self::RateLimitsCreate,
-            Self::RateLimitsDelete,
             Self::SettingsManage,
             Self::PluginsRead,
             Self::PluginsCreate,
@@ -209,9 +196,6 @@ impl Template {
                 perms.insert(Permission::LabelersCreate);
                 perms.insert(Permission::LabelersRead);
                 perms.insert(Permission::LabelersDelete);
-                perms.insert(Permission::RateLimitsRead);
-                perms.insert(Permission::RateLimitsCreate);
-                perms.insert(Permission::RateLimitsDelete);
                 perms.insert(Permission::SettingsManage);
                 perms.insert(Permission::PluginsRead);
                 perms.insert(Permission::PluginsCreate);

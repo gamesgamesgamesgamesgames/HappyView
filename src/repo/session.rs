@@ -14,7 +14,7 @@ pub(crate) async fn get_oauth_session(
         Did::new(did.to_string()).map_err(|_| AppError::Auth(format!("invalid DID: {did}")))?;
     state
         .oauth
-        .default_client()
+        .primary_client()
         .restore(&did)
         .await
         .map_err(|e| AppError::Auth(format!("no OAuth session for {}: {e}", did.as_ref())))

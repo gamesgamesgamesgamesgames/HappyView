@@ -94,15 +94,15 @@ pub(super) async fn create_api_client(
     if let (Some(capacity), Some(refill_rate)) =
         (body.rate_limit_capacity, body.rate_limit_refill_rate)
     {
-        let global = state.rate_limiter.global_config();
+        let defaults = state.rate_limiter.defaults();
         state.rate_limiter.register_client_config(
             client_key.clone(),
             crate::rate_limit::RateLimitConfig {
                 capacity: capacity as u32,
                 refill_rate,
-                default_query_cost: global.default_query_cost,
-                default_procedure_cost: global.default_procedure_cost,
-                default_proxy_cost: global.default_proxy_cost,
+                default_query_cost: defaults.query_cost,
+                default_procedure_cost: defaults.procedure_cost,
+                default_proxy_cost: defaults.proxy_cost,
             },
         );
     }
@@ -397,15 +397,15 @@ pub(super) async fn update_api_client(
             },
         );
         if let (Some(cap), Some(refill)) = (capacity, refill_rate) {
-            let global = state.rate_limiter.global_config();
+            let defaults = state.rate_limiter.defaults();
             state.rate_limiter.register_client_config(
                 client_key,
                 crate::rate_limit::RateLimitConfig {
                     capacity: cap as u32,
                     refill_rate: refill,
-                    default_query_cost: global.default_query_cost,
-                    default_procedure_cost: global.default_procedure_cost,
-                    default_proxy_cost: global.default_proxy_cost,
+                    default_query_cost: defaults.query_cost,
+                    default_procedure_cost: defaults.procedure_cost,
+                    default_proxy_cost: defaults.proxy_cost,
                 },
             );
         } else {

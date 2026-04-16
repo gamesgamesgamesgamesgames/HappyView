@@ -75,6 +75,7 @@ async fn authorize(
     State(app_state): State<AppState>,
     Path(plugin_id): Path<String>,
     Query(query): Query<AuthorizeQuery>,
+    domain: Option<axum::extract::Extension<std::sync::Arc<crate::domain::Domain>>>,
     claims: Claims,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let _plugin = app_state
@@ -128,9 +129,13 @@ async fn authorize(
 
     // Build the backend callback URL for OpenID/OAuth return_to
     // This ensures the auth provider redirects back to the backend, not the frontend
+    let domain_url = domain
+        .map(|d| d.0.url.clone())
+        .unwrap_or_else(|| app_state.config.public_url.clone());
+
     let callback_url = format!(
         "{}/external-auth/{}/callback",
-        app_state.config.public_url.trim_end_matches('/'),
+        domain_url.trim_end_matches('/'),
         plugin_id
     );
 

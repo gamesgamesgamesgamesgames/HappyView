@@ -57,6 +57,7 @@ pub fn routes() -> Router<AppState> {
 async fn login(
     State(state): State<AppState>,
     jar: SignedCookieJar<Key>,
+    domain: Option<axum::extract::Extension<std::sync::Arc<crate::domain::Domain>>>,
     Query(query): Query<LoginQuery>,
 ) -> Result<(SignedCookieJar<Key>, Json<serde_json::Value>), AppError> {
     tracing::debug!(handle = %query.handle, redirect_uri = ?query.redirect_uri, scope = ?query.scope, "login request");
@@ -77,8 +78,18 @@ async fn login(
 
     tracing::debug!(scopes = ?scopes, client_id = ?query.client_id, "resolved oauth scopes");
 
+    // For dashboard logins (no explicit client_id), use the domain's OAuth client
+    let domain_url = domain.map(|d| d.0.url.clone());
+    let effective_client_id = if query.client_id.is_some() {
+        query.client_id.clone()
+    } else {
+        domain_url
+            .as_ref()
+            .map(|du| format!("{}/oauth-client-metadata.json", du.trim_end_matches('/')))
+    };
+
     // Select the appropriate OAuth client based on client_id
-    let oauth_client = state.oauth.get_or_default(query.client_id.as_deref());
+    let oauth_client = state.oauth.get_or_default(effective_client_id.as_deref());
 
     // Hold the authorize lock so that authorize() + take_last_state_key() are atomic.
     // This prevents concurrent logins from swapping each other's state keys.
@@ -106,9 +117,9 @@ async fn login(
     // Store the redirect URI in the database, keyed by the OAuth state parameter.
     // This avoids third-party cookie issues when Pentaract (cross-origin) calls this endpoint.
     // Store redirect URI and client_id for the callback to use
-    if query.redirect_uri.is_some() || query.client_id.is_some() {
+    if query.redirect_uri.is_some() || effective_client_id.is_some() {
         let redirect_uri = query.redirect_uri.as_deref().unwrap_or("");
-        tracing::debug!(oauth_state = ?oauth_state, redirect_uri = %redirect_uri, client_id = ?query.client_id, "storing redirect for state");
+        tracing::debug!(oauth_state = ?oauth_state, redirect_uri = %redirect_uri, client_id = ?effective_client_id, "storing redirect for state");
 
         if let Some(oauth_state) = oauth_state {
             let now = now_rfc3339();
@@ -120,7 +131,7 @@ async fn login(
             let _ = sqlx::query(&sql)
                 .bind(&oauth_state)
                 .bind(redirect_uri)
-                .bind(query.client_id.as_deref())
+                .bind(effective_client_id.as_deref())
                 .bind(&now)
                 .bind(&expires_at)
                 .execute(&state.db)
@@ -257,7 +268,7 @@ async fn logout(
         let raw = cookie.value().to_string();
         let did_str = raw.split('\n').next().unwrap_or(&raw).to_string();
         if let Ok(did) = atrium_api::types::string::Did::new(did_str) {
-            let _ = state.oauth.default_client().revoke(&did).await;
+            let _ = state.oauth.primary_client().revoke(&did).await;
         }
     }
 
