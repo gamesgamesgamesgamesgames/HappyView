@@ -33,19 +33,24 @@ const sidebars: SidebarsConfig = {
             {
               type: "doc",
               id: "getting-started/deployment/other",
-              label: "Other",
+              label: "From Source",
+            },
+            {
+              type: "doc",
+              id: "reference/production-deployment",
+              label: "Production",
             },
           ],
         },
         {
           type: "doc",
-          id: "getting-started/authentication",
-          label: "Authentication",
+          id: "getting-started/configuration",
+          label: "Configuration",
         },
         {
           type: "doc",
-          id: "getting-started/configuration",
-          label: "Configuration",
+          id: "getting-started/authentication",
+          label: "Authentication",
         },
         {
           type: "doc",
@@ -70,34 +75,160 @@ const sidebars: SidebarsConfig = {
       label: "Guides",
       items: [
         {
-          type: "doc",
-          id: "guides/lexicons",
-          label: "Lexicons",
+          type: "category",
+          label: "Indexing",
+          items: [
+            {
+              type: "doc",
+              id: "guides/lexicons",
+              label: "Lexicons",
+            },
+            {
+              type: "doc",
+              id: "guides/backfill",
+              label: "Backfill",
+            },
+            {
+              type: "doc",
+              id: "guides/index-hooks",
+              label: "Index Hooks",
+            },
+          ],
         },
         {
-          type: "doc",
-          id: "guides/scripting",
-          label: "Lua Scripting",
+          type: "category",
+          label: "Scripting",
+          items: [
+            {
+              type: "doc",
+              id: "guides/scripting",
+              label: "Lua Scripting",
+            },
+            {
+              type: "category",
+              label: "Script Examples",
+              items: [
+                {
+                  type: "doc",
+                  id: "reference/scripts/get-record",
+                  label: "Get a Record",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/create-record",
+                  label: "Create Record",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/upsert-record",
+                  label: "Upsert Record",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/paginated-list",
+                  label: "Paginated List",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/list-or-fetch",
+                  label: "List or Fetch",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/expanded-query",
+                  label: "Expanded Query",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/update-or-delete",
+                  label: "Update or Delete",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/batch-save",
+                  label: "Batch Save",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/sidecar-records",
+                  label: "Sidecar Records",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/cascading-delete",
+                  label: "Cascading Delete",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/complex-mutations",
+                  label: "Complex Mutations",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/algolia-sync",
+                  label: "Algolia Sync",
+                },
+                {
+                  type: "doc",
+                  id: "reference/scripts/meilisearch-sync",
+                  label: "Meilisearch Sync",
+                },
+              ],
+            },
+          ],
         },
         {
-          type: "doc",
-          id: "guides/index-hooks",
-          label: "Index Hooks",
+          type: "category",
+          label: "Features",
+          items: [
+            {
+              type: "doc",
+              id: "guides/labelers",
+              label: "Labelers",
+            },
+            {
+              type: "doc",
+              id: "guides/plugins",
+              label: "Plugins",
+            },
+          ],
         },
         {
-          type: "doc",
-          id: "guides/backfill",
-          label: "Backfill",
+          type: "category",
+          label: "Administration",
+          items: [
+            {
+              type: "doc",
+              id: "guides/api-keys",
+              label: "API Keys",
+            },
+            {
+              type: "doc",
+              id: "guides/permissions",
+              label: "Permissions",
+            },
+            {
+              type: "doc",
+              id: "guides/event-logs",
+              label: "Event Logs",
+            },
+          ],
         },
         {
-          type: "doc",
-          id: "guides/event-logs",
-          label: "Event Logs",
-        },
-        {
-          type: "doc",
-          id: "guides/plugins",
-          label: "Plugins",
+          type: "category",
+          label: "Database",
+          items: [
+            {
+              type: "doc",
+              id: "guides/database-setup",
+              label: "Database Setup",
+            },
+            {
+              type: "doc",
+              id: "guides/postgres-to-sqlite-migration",
+              label: "Postgres → SQLite Migration",
+            },
+          ],
         },
       ],
     },
@@ -116,77 +247,6 @@ const sidebars: SidebarsConfig = {
           label: "Admin API",
         },
         {
-          type: "category",
-          label: "Script Examples",
-          items: [
-            {
-              type: "doc",
-              id: "reference/scripts/get-record",
-              label: "Get a Record",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/create-record",
-              label: "Create Record",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/upsert-record",
-              label: "Upsert Record",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/paginated-list",
-              label: "Paginated List",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/list-or-fetch",
-              label: "List or Fetch",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/expanded-query",
-              label: "Expanded Query",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/update-or-delete",
-              label: "Update or Delete",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/batch-save",
-              label: "Batch Save",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/sidecar-records",
-              label: "Sidecar Records",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/cascading-delete",
-              label: "Cascading Delete",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/complex-mutations",
-              label: "Complex Mutations",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/algolia-sync",
-              label: "Algolia Sync",
-            },
-            {
-              type: "doc",
-              id: "reference/scripts/meilisearch-sync",
-              label: "Meilisearch Sync",
-            },
-          ],
-        },
-        {
           type: "doc",
           id: "reference/glossary",
           label: "Glossary",
@@ -200,11 +260,6 @@ const sidebars: SidebarsConfig = {
           type: "doc",
           id: "reference/troubleshooting",
           label: "Troubleshooting",
-        },
-        {
-          type: "doc",
-          id: "reference/production-deployment",
-          label: "Production",
         },
       ],
     },

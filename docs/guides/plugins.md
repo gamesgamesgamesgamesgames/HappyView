@@ -119,10 +119,14 @@ Each plugin has a `manifest.json` that describes its metadata:
 | `GET /admin/plugins` | List installed plugins |
 | `POST /admin/plugins` | Install a plugin |
 | `POST /admin/plugins/preview` | Preview plugin before installing |
+| `GET /admin/plugins/official` | Browse the official plugin registry catalog |
 | `DELETE /admin/plugins/{id}` | Remove a plugin |
 | `POST /admin/plugins/{id}/reload` | Reload plugin from source |
+| `POST /admin/plugins/{id}/check-update` | Check whether a newer version is available |
 | `GET /admin/plugins/{id}/secrets` | Get configured secrets (masked) |
 | `PUT /admin/plugins/{id}/secrets` | Update plugin secrets |
+
+The dashboard's **Settings > Plugins** page calls `GET /admin/plugins/official` to populate the install browser, and `POST /admin/plugins/{id}/check-update` to display update badges on installed plugins.
 
 ## Security
 

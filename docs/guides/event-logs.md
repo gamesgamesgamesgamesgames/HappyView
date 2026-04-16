@@ -1,6 +1,6 @@
 # Event Logs
 
-HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Tap connectivity. Events are stored in a Postgres table and queryable via the [admin API](../reference/admin-api.md#event-logs).
+HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Jetstream connectivity. Events are stored in the database and queryable via the [admin API](../reference/admin-api.md#event-logs).
 
 ## Event types
 
@@ -23,7 +23,7 @@ Logged when lexicons are uploaded, updated, or deleted via the [admin API](../re
 | `record.created` | info | Record AT URI | `collection`, `did`, `rkey` |
 | `record.deleted` | info | Record AT URI | `collection`, `did`, `rkey` |
 
-Logged when records are received from Tap and stored or removed from the local database. These are system-triggered events (`actor_did` is null). If a database error occurs during the operation, the same event type is logged with `error` severity and the error message is included in the detail.
+Logged when records are received from Jetstream and stored or removed from the local database. These are system-triggered events (`actor_did` is null). If a database error occurs during the operation, the same event type is logged with `error` severity and the error message is included in the detail.
 
 ### Script events
 
@@ -91,14 +91,14 @@ Logged when [index hooks](index-hooks.md) run. Dead-lettered events indicate a h
 
 See [Backfill](backfill.md) for background on backfill jobs.
 
-### Tap events
+### Jetstream events
 
 | Event Type | Severity | Subject | Detail |
 |---|---|---|---|
-| `tap.connected` | info | — | `url` |
-| `tap.disconnected` | warn | — | `reason` |
+| `jetstream.connected` | info | — | `url` |
+| `jetstream.disconnected` | warn | — | `reason` |
 
-Logged when the WebSocket connection to [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) is established or lost.
+Logged when the WebSocket connection to [Jetstream](https://github.com/bluesky-social/jetstream) is established or lost.
 
 ## Querying events
 
@@ -127,3 +127,9 @@ Event logs are automatically cleaned up based on the `EVENT_LOG_RETENTION_DAYS` 
 Set `EVENT_LOG_RETENTION_DAYS=0` to disable automatic cleanup and keep logs indefinitely.
 
 See [Configuration](../getting-started/configuration.md) for all environment variables.
+
+## Next steps
+
+- [Admin API — Event Logs](../reference/admin-api.md#event-logs) — full query parameters and response format
+- [Permissions](permissions.md) — control which users can read event logs
+- [Troubleshooting](../reference/troubleshooting.md) — using event logs to diagnose issues

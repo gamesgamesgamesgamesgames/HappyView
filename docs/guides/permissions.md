@@ -53,7 +53,7 @@ HappyView defines 20 permissions organized by category:
 |---|---|
 | `backfill:create` | Start backfill jobs |
 | `backfill:read` | View backfill job status |
-| `stats:read` | View record and Tap statistics |
+| `stats:read` | View record statistics |
 | `events:read` | Query the event log |
 
 ## Permission templates

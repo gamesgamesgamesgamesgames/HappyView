@@ -52,7 +52,7 @@ HappyView runs migrations automatically on startup for both backends.
 The default `docker-compose.yml` ships with the Postgres service commented out. To use Postgres:
 
 1. Uncomment the `postgres` service and `pgdata` volume in `docker-compose.yml`
-2. Uncomment the `depends_on: postgres` blocks in the `tap` and `happyview` services
+2. Uncomment the `depends_on: postgres` block in the `happyview` service
 3. Update `DATABASE_URL` in `.env`:
    ```sh
    DATABASE_URL=postgres://happyview:happyview@postgres/happyview
@@ -69,3 +69,9 @@ The default `docker-compose.yml` ships with the Postgres service commented out. 
 Both backends support the same Lua database API (`db.query`, `db.get`, `db.count`). Write SQL in **SQLite syntax** by default. If you are using Postgres, HappyView automatically translates common SQLite patterns to Postgres equivalents at runtime.
 
 If you are migrating existing Lua scripts from Postgres SQL syntax to SQLite syntax, see the [Postgres to SQLite migration guide](postgres-to-sqlite-migration.md).
+
+## Next steps
+
+- [Postgres → SQLite migration](postgres-to-sqlite-migration.md) — switch an existing instance from Postgres to SQLite
+- [Lua scripting](scripting.md) — write queries that target either backend
+- [Configuration](../getting-started/configuration.md) — `DATABASE_URL` and related variables

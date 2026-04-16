@@ -123,7 +123,7 @@ curl -X DELETE http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$
 
 ## Network Lexicons
 
-Network lexicons are fetched from the AT Protocol network via DNS TXT resolution and kept updated via Tap. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for background.
+Network lexicons are fetched from the AT Protocol network via DNS TXT resolution and kept updated via the Jetstream subscription. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for background.
 
 ### Add a network lexicon
 
@@ -218,38 +218,6 @@ curl http://localhost:3000/admin/stats -H "$AUTH"
 }
 ```
 
-## Tap Stats
-
-Aggregate stats from the [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance. Useful for monitoring backfill progress. See [Backfill - Job lifecycle](../guides/backfill.md#job-lifecycle) for context.
-
-### Get Tap stats
-
-```
-GET /admin/tap/stats
-```
-
-```sh
-curl http://localhost:3000/admin/tap/stats -H "$AUTH"
-```
-
-**Response**: `200 OK`
-
-```json
-{
-  "repo_count": 5234,
-  "record_count": 1048576,
-  "outbox_buffer": 42
-}
-```
-
-| Field           | Type   | Description                                           |
-| --------------- | ------ | ----------------------------------------------------- |
-| `repo_count`    | number | Total repos Tap is tracking                           |
-| `record_count`  | number | Total records Tap has indexed                         |
-| `outbox_buffer` | number | Pending events awaiting delivery (high = Tap is busy) |
-
-Returns `502 Bad Gateway` if Tap is unreachable.
-
 ## Backfill
 
 ### Create a backfill job
@@ -311,7 +279,7 @@ curl http://localhost:3000/admin/backfill/status -H "$AUTH"
 
 ## Event Logs
 
-HappyView records an audit trail of system events: lexicon changes, record operations, Lua script executions and errors, user actions, backfill jobs, and Tap connectivity. See the [Event Logs guide](../guides/event-logs.md) for details on event types and retention.
+HappyView records an audit trail of system events: lexicon changes, record operations, Lua script executions and errors, user actions, backfill jobs, and Jetstream connectivity. See the [Event Logs guide](../guides/event-logs.md) for details on event types and retention.
 
 ### List event logs
 
@@ -683,6 +651,530 @@ curl -X DELETE http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvr
 
 **Response**: `204 No Content`
 
+## Instance Settings
+
+Instance settings are key/value entries used to override environment-variable defaults at runtime (for example, the application name, terms-of-service URL, privacy policy URL, and uploaded logo). Settings stored here take precedence over the corresponding environment variables. All endpoints require the `settings:manage` permission.
+
+### List settings
+
+```
+GET /admin/settings
+```
+
+```sh
+curl http://localhost:3000/admin/settings -H "$AUTH"
+```
+
+Returns all key/value pairs stored in the `instance_settings` table.
+
+### Upsert a setting
+
+```
+PUT /admin/settings/{key}
+```
+
+```sh
+curl -X PUT http://localhost:3000/admin/settings/app_name \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "value": "My HappyView" }'
+```
+
+### Delete a setting
+
+```
+DELETE /admin/settings/{key}
+```
+
+Removes the override; the corresponding environment variable (if any) takes effect again.
+
+### Upload / delete logo
+
+```
+PUT /admin/settings/logo
+DELETE /admin/settings/logo
+```
+
+`PUT` accepts a binary image body and stores it as the instance logo (served via the public dashboard). `DELETE` removes the stored logo.
+
+## Domain Management
+
+Manage the domains a HappyView instance serves. Each domain gets its own AT Protocol OAuth client identity. The primary domain is auto-seeded from `PUBLIC_URL` on first boot. All endpoints require the `settings:manage` permission.
+
+### List domains
+
+```
+GET /admin/domains
+```
+
+```sh
+curl http://localhost:3000/admin/domains -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "url": "https://gamesgamesgamesgames.games",
+    "is_primary": true,
+    "created_at": "2026-04-16T00:00:00Z",
+    "updated_at": "2026-04-16T00:00:00Z"
+  }
+]
+```
+
+### Add a domain
+
+```
+POST /admin/domains
+```
+
+```sh
+curl -X POST http://localhost:3000/admin/domains \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "url": "https://api.cartridge.dev" }'
+```
+
+| Field | Type   | Required | Description                                                                                                                          |
+| ----- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `url` | string | yes      | Valid origin (scheme + host, no path or trailing slash). Must be `https` unless `PUBLIC_URL` is a loopback address. |
+
+Returns `400 Bad Request` if the URL is invalid or already registered.
+
+**Response**: `201 Created`
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "url": "https://api.cartridge.dev",
+  "is_primary": false,
+  "created_at": "2026-04-16T00:00:00Z",
+  "updated_at": "2026-04-16T00:00:00Z"
+}
+```
+
+Side effects: builds an OAuth client for the domain, updates the in-memory domain cache.
+
+### Remove a domain
+
+```
+DELETE /admin/domains/{id}
+```
+
+```sh
+curl -X DELETE http://localhost:3000/admin/domains/550e8400-e29b-41d4-a716-446655440001 \
+  -H "$AUTH"
+```
+
+Returns `400 Bad Request` if the domain is primary — set a different domain as primary first. Returns `404 Not Found` if the domain doesn't exist.
+
+**Response**: `204 No Content`
+
+Side effects: removes the domain's OAuth client and cache entry.
+
+### Set primary domain
+
+```
+POST /admin/domains/{id}/primary
+```
+
+```sh
+curl -X POST http://localhost:3000/admin/domains/550e8400-e29b-41d4-a716-446655440001/primary \
+  -H "$AUTH"
+```
+
+Sets the target domain as the primary. Unsets the current primary in a single operation. Returns `404 Not Found` if the domain doesn't exist.
+
+**Response**: `204 No Content`
+
+Side effects: updates the in-memory cache and the OAuth client registry's primary client reference.
+
+## Script Variables
+
+Script variables are encrypted key/value pairs available to Lua scripts via the `vars` global. Use them for secrets like API tokens.
+
+### List script variables
+
+```
+GET /admin/script-variables
+```
+
+Requires `script-variables:read`. Returns a list of variable keys (values are not returned).
+
+### Upsert a script variable
+
+```
+POST /admin/script-variables
+```
+
+Requires `script-variables:create`.
+
+```sh
+curl -X POST http://localhost:3000/admin/script-variables \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "key": "ALGOLIA_API_KEY", "value": "..." }'
+```
+
+The value is encrypted at rest using `TOKEN_ENCRYPTION_KEY`.
+
+### Delete a script variable
+
+```
+DELETE /admin/script-variables/{key}
+```
+
+Requires `script-variables:delete`.
+
+## API Clients
+
+API clients represent third-party applications that call HappyView's XRPC endpoints. **Every XRPC request** — including unauthenticated queries — must identify itself with a registered client via the `X-Client-Key` header (or session cookie, or `client_key` query param). The client key is HappyView's rate-limit bucket and caller identity; a request without one gets `401 Unauthorized`.
+
+Each client has an `hvc_`-prefixed client key and an `hvs_`-prefixed client secret. The secret is only returned once (at creation) and is sha256-hashed in the database. Server-to-server callers pass the secret as `X-Client-Secret`; browser callers rely on the `Origin` header matching the client's registered `client_uri`. Both checks currently log warnings on mismatch rather than rejecting the request, but the rate-limit bucket is applied either way. See [Authentication — XRPC](../getting-started/authentication.md#xrpc-api-client-identification) for the client-side view, and the [API Keys guide](../guides/api-keys.md) for how admin API keys differ from API clients.
+
+### List API clients
+
+```
+GET /admin/api-clients
+```
+
+Requires `api-clients:view`. Returns clients ordered by `created_at` descending. Secrets are never returned.
+
+```sh
+curl http://localhost:3000/admin/api-clients -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+[
+  {
+    "id": "01J9...",
+    "client_key": "hvc_a1b2c3...",
+    "name": "My Game Client",
+    "client_id_url": "https://example.com/client-metadata.json",
+    "client_uri": "https://example.com",
+    "redirect_uris": ["https://example.com/callback"],
+    "scopes": "atproto",
+    "rate_limit_capacity": 200,
+    "rate_limit_refill_rate": 5.0,
+    "is_active": true,
+    "created_by": "did:plc:...",
+    "created_at": "2026-04-13T12:00:00Z",
+    "updated_at": "2026-04-13T12:00:00Z"
+  }
+]
+```
+
+### Create an API client
+
+```
+POST /admin/api-clients
+```
+
+Requires `api-clients:create`. Generates a fresh `client_key` and `client_secret`. **The secret is only returned in this response** — store it immediately.
+
+```sh
+curl -X POST http://localhost:3000/admin/api-clients \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Game Client",
+    "client_id_url": "https://example.com/client-metadata.json",
+    "client_uri": "https://example.com",
+    "redirect_uris": ["https://example.com/callback"],
+    "scopes": "atproto",
+    "rate_limit_capacity": 200,
+    "rate_limit_refill_rate": 5.0
+  }'
+```
+
+| Field                    | Type     | Required | Description                                                                            |
+| ------------------------ | -------- | -------- | -------------------------------------------------------------------------------------- |
+| `name`                   | string   | yes      | Human-readable display name                                                            |
+| `client_id_url`          | string   | yes      | URL to the client's published OAuth client metadata document                           |
+| `client_uri`             | string   | yes      | The client's home/landing URL                                                          |
+| `redirect_uris`          | string[] | yes      | Allowed OAuth redirect URIs                                                            |
+| `scopes`                 | string   | no       | Space-separated OAuth scopes (default `"atproto"`)                                     |
+| `rate_limit_capacity`    | integer  | no       | Per-client token bucket capacity. Falls back to `DEFAULT_RATE_LIMIT_CAPACITY` if unset |
+| `rate_limit_refill_rate` | number   | no       | Tokens added per second. Falls back to `DEFAULT_RATE_LIMIT_REFILL_RATE` if unset       |
+
+**Response**: `201 Created`
+
+```json
+{
+  "id": "01J9...",
+  "client_key": "hvc_a1b2c3...",
+  "client_secret": "hvs_d4e5f6...",
+  "name": "My Game Client",
+  "client_id_url": "https://example.com/client-metadata.json"
+}
+```
+
+The new client is immediately registered with the OAuth registry and rate limiter, so it can authenticate without restarting HappyView.
+
+### Get an API client
+
+```
+GET /admin/api-clients/{id}
+```
+
+Requires `api-clients:view`. Returns the same `ApiClientSummary` shape as the list endpoint, or `404 Not Found`.
+
+### Update an API client
+
+```
+PUT /admin/api-clients/{id}
+```
+
+Requires `api-clients:edit`. All fields are optional — only provided fields are changed. Updating either rate-limit field re-registers the client with the rate limiter using the new values.
+
+| Field                    | Type     | Description                                                              |
+| ------------------------ | -------- | ------------------------------------------------------------------------ |
+| `name`                   | string   | New display name                                                         |
+| `client_uri`             | string   | New home URL                                                             |
+| `redirect_uris`          | string[] | Replace the allowed redirect URIs                                        |
+| `scopes`                 | string   | Replace the OAuth scopes                                                 |
+| `rate_limit_capacity`    | integer  | New bucket capacity. Pass `null` to clear the override                   |
+| `rate_limit_refill_rate` | number   | New refill rate. Pass `null` to clear the override                       |
+| `is_active`              | boolean  | Disable (`false`) or re-enable (`true`) the client without deleting it   |
+
+**Response**: `204 No Content`
+
+The OAuth registry is updated in place. The `client_id_url` is immutable — to change it, delete and recreate the client.
+
+### Delete an API client
+
+```
+DELETE /admin/api-clients/{id}
+```
+
+Requires `api-clients:delete`. Removes the client from the OAuth registry, the rate limiter, and the client identity store.
+
+**Response**: `204 No Content`
+
+## Plugins
+
+Plugins extend HappyView with WebAssembly modules sourced from the [official plugin registry](../guides/plugins.md) or any URL serving a `manifest.json`. Most endpoints take a plugin manifest URL and load (or reload) the plugin in place — no restart needed. Encrypted plugin secrets require `TOKEN_ENCRYPTION_KEY` to be configured.
+
+### List installed plugins
+
+```
+GET /admin/plugins
+```
+
+Requires `plugins:read`. Returns every loaded plugin with its source, required secrets, configuration status, and any pending updates from the official registry cache.
+
+```sh
+curl http://localhost:3000/admin/plugins -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+{
+  "encryption_configured": true,
+  "plugins": [
+    {
+      "id": "steam",
+      "name": "Steam",
+      "version": "1.2.0",
+      "source": "url",
+      "url": "https://example.com/plugins/steam/manifest.json",
+      "sha256": null,
+      "enabled": true,
+      "auth_type": "openid",
+      "required_secrets": [
+        {
+          "key": "PLUGIN_STEAM_API_KEY",
+          "name": "Steam Web API Key",
+          "description": "Get your API key at steamcommunity.com/dev/apikey"
+        }
+      ],
+      "secrets_configured": true,
+      "loaded_at": null,
+      "update_available": false,
+      "latest_version": "1.2.0",
+      "pending_releases": []
+    }
+  ]
+}
+```
+
+`secrets_configured` is `true` if the plugin has no required secrets, or if a row exists for it in `plugin_configs`. `update_available` and `pending_releases` are populated from the cached official registry — call `POST /admin/plugins/{id}/check-update` to refresh them.
+
+### Preview a plugin before installing
+
+```
+POST /admin/plugins/preview
+```
+
+Requires `plugins:create`. Fetches and parses a manifest without installing the plugin, so the dashboard can show what it would register.
+
+```sh
+curl -X POST http://localhost:3000/admin/plugins/preview \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{ "url": "https://example.com/plugins/steam/manifest.json" }'
+```
+
+**Response**: `200 OK`
+
+```json
+{
+  "id": "steam",
+  "name": "Steam",
+  "version": "1.2.0",
+  "description": "Import your Steam game library and playtime data.",
+  "icon_url": "https://example.com/steam-icon.png",
+  "auth_type": "openid",
+  "required_secrets": [
+    { "key": "PLUGIN_STEAM_API_KEY", "name": "Steam Web API Key", "description": "..." }
+  ],
+  "manifest_url": "https://example.com/plugins/steam/manifest.json",
+  "wasm_url": "https://example.com/plugins/steam/steam.wasm"
+}
+```
+
+Returns `400 Bad Request` if the manifest can't be fetched or parsed.
+
+### Install a plugin
+
+```
+POST /admin/plugins
+```
+
+Requires `plugins:create`. Fetches the manifest, downloads the WASM, registers the plugin, and persists it.
+
+```sh
+curl -X POST http://localhost:3000/admin/plugins \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/plugins/steam/manifest.json",
+    "sha256": "abc123..."
+  }'
+```
+
+| Field    | Type   | Required | Description                                                                                  |
+| -------- | ------ | -------- | -------------------------------------------------------------------------------------------- |
+| `url`    | string | yes      | URL to the plugin's `manifest.json`                                                          |
+| `sha256` | string | no       | Optional sha256 of the WASM binary. If provided, install fails when the downloaded hash mismatches |
+
+**Response**: `200 OK` returning the same `PluginSummary` shape as the list endpoint. `secrets_configured` will be `false` if the plugin requires any secrets — call `PUT /admin/plugins/{id}/secrets` to configure them before the plugin can run.
+
+### List official plugins
+
+```
+GET /admin/plugins/official
+```
+
+Requires `plugins:read`. Returns the cached catalog of plugins from the official registry. The cache is refreshed periodically by the server; use `POST /admin/plugins/{id}/check-update` to force-refresh a single entry.
+
+**Response**: `200 OK`
+
+```json
+{
+  "last_refreshed_at": "2026-04-13T11:00:00Z",
+  "plugins": [
+    {
+      "id": "steam",
+      "name": "Steam",
+      "description": "Import your Steam game library and playtime data.",
+      "icon_url": "https://example.com/steam-icon.png",
+      "latest_version": "1.2.0",
+      "manifest_url": "https://example.com/plugins/steam/manifest.json"
+    }
+  ]
+}
+```
+
+### Remove a plugin
+
+```
+DELETE /admin/plugins/{id}
+```
+
+Requires `plugins:delete`. Unregisters the plugin from the runtime and deletes its row from the `plugins` table. Plugin secrets in `plugin_configs` are not removed automatically — they're available again if you reinstall the same plugin.
+
+**Response**: `204 No Content`. Returns `404 Not Found` if no plugin with that id is loaded.
+
+### Reload a plugin
+
+```
+POST /admin/plugins/{id}/reload
+```
+
+Requires `plugins:create`. Re-fetches the plugin from its current source URL and re-registers it. Useful after publishing a new version of a plugin you host yourself.
+
+The body is optional. To point the plugin at a new URL, pass:
+
+```json
+{ "url": "https://example.com/plugins/steam/manifest.json" }
+```
+
+When a new URL is provided, the stored `sha256` is cleared (the new version has its own hash). File-based plugins cannot be reloaded via this endpoint and return `400 Bad Request`.
+
+**Response**: `200 OK` with the refreshed `PluginSummary`.
+
+### Check for plugin updates
+
+```
+POST /admin/plugins/{id}/check-update
+```
+
+Requires `plugins:create`. Forces a cache refresh for one plugin from the official registry, then returns the updated `PluginSummary` with `update_available`, `latest_version`, and `pending_releases` reflecting the latest catalog state.
+
+**Response**: `200 OK` with a `PluginSummary`.
+
+### Get plugin secrets
+
+```
+GET /admin/plugins/{id}/secrets
+```
+
+Requires `plugins:read`. Returns the plugin's configured secrets with values masked (last 4 characters shown for values longer than 8 characters, otherwise fully masked). Requires `TOKEN_ENCRYPTION_KEY` to be configured.
+
+**Response**: `200 OK`
+
+```json
+{
+  "plugin_id": "steam",
+  "secrets": {
+    "PLUGIN_STEAM_API_KEY": "********ABCD"
+  }
+}
+```
+
+### Update plugin secrets
+
+```
+PUT /admin/plugins/{id}/secrets
+```
+
+Requires `plugins:create`. Encrypts the provided secret values with `TOKEN_ENCRYPTION_KEY` (AES-256-GCM) and upserts them into `plugin_configs`.
+
+```sh
+curl -X PUT http://localhost:3000/admin/plugins/steam/secrets \
+  -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secrets": {
+      "PLUGIN_STEAM_API_KEY": "your-new-api-key"
+    }
+  }'
+```
+
+Special handling:
+
+- Values starting with `********` are treated as masked placeholders and the existing encrypted value is preserved (so you can `GET` then `PUT` without re-typing every secret).
+- Empty string values are not stored — use them to clear a secret.
+
+**Response**: `204 No Content`
+
 ## Permissions
 
 Each admin API endpoint requires a specific permission. See the [Permissions guide](../guides/permissions.md) for the full list of permissions and templates.
@@ -697,7 +1189,6 @@ Each admin API endpoint requires a specific permission. See the [Permissions gui
 | `GET /admin/network-lexicons`         | `lexicons:read`              |
 | `DELETE /admin/network-lexicons/{id}` | `lexicons:delete`            |
 | `GET /admin/stats`                    | `stats:read`                 |
-| `GET /admin/tap/stats`               | `stats:read`                 |
 | `POST /admin/backfill`               | `backfill:create`            |
 | `GET /admin/backfill/status`         | `backfill:read`              |
 | `GET /admin/events`                  | `events:read`                |
@@ -717,3 +1208,26 @@ Each admin API endpoint requires a specific permission. See the [Permissions gui
 | `GET /admin/labelers`                | `labelers:read`              |
 | `PATCH /admin/labelers/{did}`        | `labelers:create`            |
 | `DELETE /admin/labelers/{did}`       | `labelers:delete`            |
+| `GET /admin/settings`                | `settings:manage`            |
+| `PUT /admin/settings/{key}`          | `settings:manage`            |
+| `DELETE /admin/settings/{key}`       | `settings:manage`            |
+| `PUT /admin/settings/logo`           | `settings:manage`            |
+| `DELETE /admin/settings/logo`        | `settings:manage`            |
+| `GET /admin/plugins`                 | `plugins:read`               |
+| `POST /admin/plugins`                | `plugins:create`             |
+| `POST /admin/plugins/preview`        | `plugins:read`               |
+| `GET /admin/plugins/official`        | `plugins:read`               |
+| `DELETE /admin/plugins/{id}`         | `plugins:delete`             |
+| `POST /admin/plugins/{id}/reload`    | `plugins:create`             |
+| `POST /admin/plugins/{id}/check-update` | `plugins:read`            |
+| `GET /admin/plugins/{id}/secrets`    | `plugins:read`               |
+| `PUT /admin/plugins/{id}/secrets`    | `plugins:create`             |
+| `GET /admin/domains`                 | `settings:manage`            |
+| `POST /admin/domains`                | `settings:manage`            |
+| `DELETE /admin/domains/{id}`         | `settings:manage`            |
+| `POST /admin/domains/{id}/primary`   | `settings:manage`            |
+| `GET /admin/api-clients`             | `api-clients:view`           |
+| `POST /admin/api-clients`            | `api-clients:create`         |
+| `GET /admin/api-clients/{id}`        | `api-clients:view`           |
+| `PUT /admin/api-clients/{id}`        | `api-clients:edit`           |
+| `DELETE /admin/api-clients/{id}`     | `api-clients:delete`         |

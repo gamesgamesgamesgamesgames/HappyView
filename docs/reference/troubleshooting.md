@@ -20,7 +20,7 @@ Common issues and how to resolve them.
 
 - The query lexicon is missing a `target_collection`. Without it, the query doesn't know which records to read. See [Lexicons - target_collection](../guides/lexicons.md#target-collection).
 - The record-type lexicon hasn't finished backfilling. Check backfill status with `GET /admin/backfill/status` or the dashboard.
-- Records exist on the network but HappyView hasn't indexed them yet. Tap only picks up new events from when the collection filter was added. Use [backfill](../guides/backfill.md) for historical records.
+- Records exist on the network but HappyView hasn't indexed them yet. Jetstream only delivers events from after the collection was added to the filter. Use [backfill](../guides/backfill.md) to import historical records.
 
 ## Procedure returns 401 Unauthorized
 
@@ -82,9 +82,9 @@ See [Backfill](../guides/backfill.md) for how the process works.
 
 **Causes**:
 
-- HappyView receives real-time events via [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap). Make sure Tap is running and connected to HappyView. See the [Tap documentation](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) for configuration.
+- HappyView receives real-time events via [Jetstream](https://github.com/bluesky-social/jetstream). Verify the `JETSTREAM_URL` is reachable and check server logs for `jetstream.disconnected` events.
 - No record-type lexicon exists for the collection. HappyView only indexes collections that have a corresponding record-type lexicon.
-- The Tap connection hasn't synced the new collection filter after a lexicon change. This should happen automatically. Check server logs for connection errors.
+- The Jetstream subscription hasn't reconnected with the new collection filter after a lexicon change. This should happen automatically. Check server logs for connection errors.
 
 ## OAuth or login issues
 

@@ -1,93 +1,82 @@
-# Deployment
+# Production
 
-HappyView requires a database. SQLite is the default; Postgres is also supported, but requires additional setup. The [Quickstart](../getting-started/deployment/railway.md) covers the fastest path with Railway. This page covers other deployment options.
+This page covers what to change when taking a HappyView instance from local development to production. For setup instructions, see [Deployment](../getting-started/deployment/railway.md). This page assumes you already have a working deployment and focuses on hardening and operational concerns.
 
-## Docker
+## Session secret
 
-Build the image:
+Set `SESSION_SECRET` to a strong random value (at least 32 bytes). This signs the session cookies issued during OAuth login; rotating it invalidates every existing session.
 
 ```sh
-docker build -t happyview .
+openssl rand -base64 48
 ```
 
-For local development, see [Docker deployment](../getting-started/deployment/docker.md).
+Never commit the secret to source control. Store it in your platform's secret manager (Railway variables, Docker secrets, Kubernetes secrets, etc.).
 
-### Production Compose example
+## Token encryption key
 
-:::note
-This example omits [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), which is required for real-time record streaming and backfill. See the full `docker-compose.yml` in the repository for a complete configuration including Tap.
-:::
+If you use [plugins](../guides/plugins.md) that require secrets (API keys, OAuth credentials), set `TOKEN_ENCRYPTION_KEY` to a base64-encoded 32-byte key. This encrypts plugin secrets at rest using AES-256-GCM:
 
-Using SQLite (default):
-
-```yaml
-services:
-  happyview:
-    image: happyview:latest
-    ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: "sqlite://data/happyview.db?mode=rwc"
-      PUBLIC_URL: "https://happyview.example.com"
-      SESSION_SECRET: "${SESSION_SECRET}"
-    volumes:
-      - happyview-data:/app/data
-
-volumes:
-  happyview-data:
+```sh
+openssl rand -base64 32
 ```
 
-Using Postgres:
+Without this variable, the dashboard's plugin secret fields are disabled and plugins can only read secrets from environment variables.
 
-```yaml
-services:
-  postgres:
-    image: postgres:17
-    environment:
-      POSTGRES_USER: happyview
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DB: happyview
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+## TLS and `PUBLIC_URL`
 
-  happyview:
-    image: happyview:latest
-    ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: "postgres://happyview:${POSTGRES_PASSWORD}@postgres/happyview"
-      PUBLIC_URL: "https://happyview.example.com"
-      SESSION_SECRET: "${SESSION_SECRET}"
-    depends_on:
-      postgres:
-        condition: service_healthy
+HappyView does not terminate TLS. Put it behind a reverse proxy (nginx, Caddy, Cloudflare Tunnel, a platform-managed load balancer) and set `PUBLIC_URL` to the public HTTPS URL:
 
-volumes:
-  pgdata:
+```sh
+PUBLIC_URL=https://happyview.example.com
 ```
 
-## Railway / Fly.io / other platforms
-
-The general process for any hosting platform:
-
-1. Choose a database: SQLite (default, zero setup) or Postgres 17+ (provision separately)
-2. Set `DATABASE_URL`, `PUBLIC_URL`, and `SESSION_SECRET` environment variables (see [Configuration](../getting-started/configuration.md) for all options)
-3. Deploy the Docker image or build from source
-4. HappyView listens on `PORT` (default `3000`)
-5. Health check: `GET /health` returns `ok`
-
-See the [database setup guide](../guides/database-setup.md) for details on both backends.
-
-For Railway specifically, the [Quickstart](../getting-started/deployment/railway.md) template handles all of this with a single click.
+`PUBLIC_URL` is used to construct OAuth redirect URIs, so it must exactly match the URL users hit — including scheme. A mismatch breaks OAuth login.
 
 ## Database
 
-HappyView supports SQLite (default) and Postgres. The backend is auto-detected from the `DATABASE_URL` scheme (`sqlite://` or `postgres://`). Migrations run automatically on startup. No manual migration step is needed. See the [database setup guide](../guides/database-setup.md) for details.
+SQLite is fine for small to medium instances and is the default. Switch to Postgres if you need:
 
-## TLS
+- Multiple HappyView replicas sharing one database
+- Larger-than-memory working sets
+- External tools that need direct read access to the records table
 
-HappyView does not terminate TLS. Put it behind a reverse proxy (nginx, Caddy, Cloudflare Tunnel, etc.) for HTTPS. Make sure `PUBLIC_URL` matches the public-facing URL (including `https://`).
+See the [database setup guide](../guides/database-setup.md) for configuration details and [Postgres → SQLite migration](../guides/postgres-to-sqlite-migration.md) if you're moving the other direction. Migrations run automatically on startup regardless of backend.
+
+## Rate limits
+
+HappyView has a per-client token-bucket rate limiter for XRPC endpoints. The defaults (set via `DEFAULT_RATE_LIMIT_CAPACITY` and `DEFAULT_RATE_LIMIT_REFILL_RATE`) apply to any [API client](../guides/api-keys.md) that doesn't have per-client overrides. Raise the defaults cautiously — they exist so one misbehaving integrator can't saturate the server.
+
+Per-client overrides are set at client creation or via `PUT /admin/api-clients/{id}` (see [Admin API — API Clients](admin-api.md#api-clients)).
 
 ## Logging
 
-HappyView uses the `RUST_LOG` environment variable to control log output. The default (`happyview=debug,tower_http=debug`) logs all HappyView activity and HTTP requests. For production, consider `happyview=info,tower_http=info` to reduce noise. See [Configuration](../getting-started/configuration.md) for details.
+The default `RUST_LOG` setting (`happyview=debug,tower_http=debug`) is noisy. For production, drop the verbosity:
+
+```sh
+RUST_LOG=happyview=info,tower_http=info
+```
+
+Structured logs go to stdout, so any platform that captures container stdout (Railway, Fly, ECS, Kubernetes) will ingest them without further configuration. For retention and querying, ship stdout to your usual log aggregator.
+
+## Event log retention
+
+The admin [event log](../guides/event-logs.md) is stored in the same database as records. `EVENT_LOG_RETENTION_DAYS` (default `30`) controls automatic cleanup. Set to `0` to keep events indefinitely — useful for compliance-sensitive deployments, but plan for database growth.
+
+## Health checks
+
+`GET /health` returns `200 ok` when HappyView can bind its HTTP listener. Use it as the readiness/liveness probe for your platform.
+
+For a deeper check, hit `GET /xrpc/com.atproto.server.describeServer` — this exercises the database and lexicon registry, and only returns `200` if HappyView can actually serve requests.
+
+## Backups
+
+- **SQLite**: back up the database file (e.g. `data/happyview.db`) plus its `-wal` and `-shm` sidecar files. Use `sqlite3 happyview.db ".backup '/path/backup.db'"` for a consistent snapshot while HappyView is running.
+- **Postgres**: standard `pg_dump` / managed-Postgres snapshots.
+
+Most of what HappyView stores is derivable from the network — lost records can be re-indexed via [backfill](../guides/backfill.md). What you cannot recover from the network: user accounts and permissions, API keys, API clients, plugin secrets, and the Jetstream cursor. Prioritize those in your backup plan.
+
+## Next steps
+
+- [Configuration](../getting-started/configuration.md) — full environment variable reference
+- [Permissions](../guides/permissions.md) — lock down admin access before exposing the dashboard publicly
+- [Troubleshooting](troubleshooting.md) — diagnose issues with a running instance

@@ -52,7 +52,7 @@ curl -X POST http://localhost:3000/admin/lexicons \
   }'
 ```
 
-HappyView now subscribes to `xyz.statusphere.status` via Tap. The `backfill` flag tells HappyView to also index existing status records from the network. You can monitor progress with `GET /admin/backfill/status` or the [dashboard](../getting-started/dashboard.md).
+HappyView now subscribes to `xyz.statusphere.status` via Jetstream. The `backfill` flag tells HappyView to also index existing status records from the network. You can monitor progress with `GET /admin/backfill/status` or the [dashboard](../getting-started/dashboard.md).
 
 :::tip
 Since the `xyz.statusphere.status` lexicon is [published on the AT Protocol network](../guides/lexicons.md#network-lexicons), you can also add it as a network lexicon instead of uploading the JSON manually:

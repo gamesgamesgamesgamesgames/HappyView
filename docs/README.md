@@ -6,17 +6,11 @@ Building an AppView from scratch means wiring up firehose connections, record st
 
 ## Features
 
-- 📜 **Lexicon-Driven**: Upload your lexicon schemas and HappyView generates fully functional XRPC query and procedure endpoints automatically, no code required
-- 🔄 **Real-Time Sync**: Records stream in from the AT Protocol network in real-time via [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), with cryptographic verification and backfill via the admin API
-- 🔐 **OAuth Built In**: AT Protocol OAuth is handled natively via `atrium-oauth`, and writes are proxied back to the user's PDS with automatic DPoP and token refresh
-- 🌙 **Lua Scripting**: Add custom query and procedure logic with Lua scripts that have full access to the record database
-- 🗄️ **Automatic Indexing**: HappyView indexes relevant records into PostgreSQL as they arrive, ready to query
-- 🪝 **Index Hooks**: Attach Lua scripts to record collections that fire on every create, update, or delete — sync to search engines, trigger webhooks, or build materialized views in real time
-- 🌐 **Network Lexicons**: Fetch lexicon schemas directly from the AT Protocol network via DNS authority resolution
-- ⚡ **Hot Reloading**: Upload or update lexicons at runtime, and new endpoints are available immediately with no restart
-- 🏷️ **Label Support**: Subscribe to external [labelers](guides/labelers.md) and surface content labels on records, with self-label detection and color-coded badges in the dashboard
-- 🔌 **Plugin System**: Extend HappyView with WASM [plugins](guides/plugins.md) that integrate with external platforms like Steam, Xbox, and itch.io
-- 🛠️ **Admin Dashboard**: Manage lexicons, monitor record stats, and run backfill jobs through a built-in admin API
+- **Schema-driven endpoints.** Upload a [lexicon](guides/lexicons.md) and HappyView generates XRPC query and procedure routes, storage, and indexing from it — updatable at runtime with no restart.
+- **Network sync built in.** Real-time record streaming via [Jetstream](https://github.com/bluesky-social/jetstream), historical [backfill](guides/backfill.md) from each user's PDS, and AT Protocol OAuth with DPoP-bound proxy writes back to the PDS.
+- **Customize with Lua, hooks, and plugins.** [Lua scripts](guides/scripting.md) for query and procedure logic, [index hooks](guides/index-hooks.md) that fire on every record change, WASM [plugins](guides/plugins.md) for external platform integration, and [labeler](guides/labelers.md) subscriptions for content moderation.
+- **Protocol-native.** Works with any PDS, resolves DIDs through the directory, and fetches [network lexicons](guides/lexicons.md#network-lexicons) via DNS authority resolution.
+- **Full admin surface.** Built-in [dashboard](getting-started/dashboard.md) and [admin API](reference/admin-api.md) for managing lexicons, users, API keys, API clients, backfill jobs, and plugins.
 
 ## Design Principles
 

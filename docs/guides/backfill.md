@@ -1,6 +1,6 @@
 # Backfill
 
-When you add a new record-type lexicon, HappyView starts indexing new records from that moment via [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap). But what about records that already exist on the network? That's what backfill does: HappyView discovers repos via the relay and delegates the actual record fetching to Tap.
+When you add a new record-type lexicon, HappyView starts indexing new records from that moment via [Jetstream](https://github.com/bluesky-social/jetstream). But what about records that already exist on the network? That's what backfill does: HappyView discovers repos via the relay and fetches records directly from each user's PDS.
 
 ## When backfill runs
 
@@ -12,26 +12,26 @@ See the [admin API](../reference/admin-api.md#backfill) for endpoint details.
 ## How it works
 
 1. **Determine target collections**: uses the specified collection, or all record lexicons with `backfill: true`
-2. **Discover DIDs**: HappyView calls the relay's `com.atproto.sync.listReposByCollection` to find repos that contain records for each target collection (paginated, 1000 per page)
-3. **Delegate to Tap**: HappyView sends discovered DIDs to Tap in batches of 1000 via its `/repos/add` endpoint
-4. **Tap fetches records**: Tap handles the actual record fetching from each user's PDS and delivers them to HappyView via the WebSocket channel
+2. **Discover DIDs**: HappyView calls the relay's `com.atproto.sync.listReposByCollection` to find repos that contain records for each target collection (paginated)
+3. **Resolve each PDS**: for each discovered DID, HappyView resolves the DID document via PLC to find the user's PDS endpoint
+4. **Fetch records**: HappyView calls `com.atproto.repo.listRecords` on each PDS for the target collection (paginated) and upserts each record into the local database
+5. **Track progress**: counters for `processed_repos` and `total_records` are updated as the job runs
 
 ## Job lifecycle
 
-HappyView marks a backfill job as "completed" once it finishes discovering repos and handing DIDs off to Tap (steps 1-3). This does **not** mean Tap has finished processing all the records. Tap works through them asynchronously after the handoff.
+A backfill job moves through `pending → running → completed` (or `failed`). Unlike earlier versions of HappyView, the job is only marked `completed` once every discovered repo has been processed end-to-end — there is no separate downstream queue. Progress is visible in real time on the dashboard's Backfill page.
 
-To see whether Tap is still working through the backlog, check the Tap stats on the dashboard's Backfill page or via `GET /admin/tap/stats`. The **outbox buffer** indicates how many events are still queued for delivery; a high number means Tap is actively processing.
+If a job fails midway, the `error` field contains the failure reason. Re-running the backfill resumes from scratch but is idempotent (records are upserted by URI).
 
 ## Re-running backfills
 
-Re-running a backfill for a collection that's already been backfilled is safe. HappyView removes the discovered repos from Tap before re-adding them, which clears Tap's cached state and forces a full re-fetch of all records from each repo's PDS. This means re-running a backfill will restore any records that were previously deleted from HappyView, as well as pick up repos that were added to the network since the last run.
+Re-running a backfill for a collection that's already been backfilled is safe. Each record is upserted by its AT URI, so existing records are refreshed in place and any new records discovered since the last run are added. This also picks up new repos that have joined the network since the previous backfill.
 
 ## Restoring deleted records
 
-Deleting records from HappyView (via the dashboard or API) only removes them from the local database — the records still exist on the AT Protocol network. To restore deleted records, create a backfill job for the affected collection. The backfill will clear Tap's cache for the discovered repos and re-fetch all records from the network, restoring any that were previously deleted.
+Deleting records from HappyView (via the dashboard or API) only removes them from the local database — the records still exist on the AT Protocol network. To restore deleted records, create a backfill job for the affected collection. The backfill will re-discover the repos and re-fetch all records from each PDS, restoring any that were previously deleted.
 
 ## Next steps
 
 - [Lexicons](lexicons.md#backfill-flag): Control whether lexicons trigger backfill on upload
 - [Admin API](../reference/admin-api.md#backfill): Full reference for backfill endpoints
-- [Admin API - Tap Stats](../reference/admin-api.md#tap-stats): Monitor Tap's processing progress

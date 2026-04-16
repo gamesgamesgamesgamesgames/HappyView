@@ -1,18 +1,8 @@
 # Dashboard
 
-HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api.md) offers: managing lexicons, viewing indexed records, and monitoring backfill jobs. It runs as a separate Next.js application alongside the Rust backend.
+HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api.md) offers: managing lexicons, viewing indexed records, and monitoring backfill jobs. It runs as a separate Next.js application alongside the Rust backend and authenticates via AT Protocol OAuth.
 
-## Logging in for the first time
-
-The dashboard uses AT Protocol OAuth. Click **Log in** and enter your handle to authenticate. If no users exist in the database yet, the first authenticated request to any admin endpoint automatically bootstraps that user as the super user with all permissions.
-
-## Settings
-
-The **Settings** page is organized into sub-pages accessible from the collapsible sidebar:
-
-- **Users** — manage user accounts and permissions
-- **ENV Variables** — view and edit script variables
-- **API Keys** — create and revoke API keys
+On a fresh deployment with no users in the database, the first handle to log in is automatically bootstrapped as the super user with all permissions — so log in with the handle you want to own the instance first.
 
 ## Adding a lexicon
 
@@ -29,7 +19,7 @@ A default Lua script is auto-generated when you first set the type to query or p
 
 Toggle **Enable backfill** to index historical records when uploading a record-type lexicon.
 
-**Network** lexicons are fetched from the AT Protocol network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via Tap. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for how resolution works.
+**Network** lexicons are fetched from the AT Protocol network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via the Jetstream subscription. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for how resolution works.
 
 ### JSON editor
 
@@ -44,3 +34,9 @@ The JSON editor provides real-time validation against the AT Protocol Lexicon v1
 The Lua editor provides context-aware code completions, including suggestions for the `Record`, `db`, `input`, and `params` APIs as well as Lua keywords, builtins, and standard library functions. It also offers snippet templates for common constructs like `if`, `for`, and `function`.
 
 See [Lua Scripting](../guides/scripting.md) for the full runtime reference and examples.
+
+## Next steps
+
+- [Lexicons](../guides/lexicons.md) — how lexicons drive HappyView's indexing and routing
+- [Lua Scripting](../guides/scripting.md) — write custom query and procedure logic
+- [Permissions](../guides/permissions.md) — manage user access to admin features

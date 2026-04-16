@@ -1,6 +1,6 @@
 # Architecture
 
-Guide for contributors working on HappyView itself. For a user-facing overview, see the [Introduction](/README.md).
+Guide for contributors working on HappyView itself. For a user-facing overview, see the [Introduction](../README.md).
 
 ## System overview
 
@@ -23,17 +23,19 @@ graph LR
 
   DB[("SQLite / PostgreSQL<br/><small>records · lexicons</small>")]
 
-  Tap["Tap<br/><small>WebSocket</small>"] -->|record events| DB
-  Relay["Relay<br/><small>Firehose</small>"] --> Tap
+  Jetstream["Jetstream<br/><small>WebSocket</small>"] -->|record events| DB
+  Relay["Relay<br/><small>listReposByCollection</small>"] -->|repo discovery| Backfill
+  Backfill["Backfill Worker"] -->|listRecords| PDS
+  Backfill --> DB
 ```
 
-Reads flow top-down through the query handler to the database (SQLite by default, or Postgres). Writes flow through the procedure handler to the user's PDS, then HappyView indexes the record locally. All record data enters the system through Tap, which handles both real-time firehose events and historical backfill. HappyView syncs collection filters to Tap and discovers repos via the relay for backfill, but Tap performs all record fetching.
+Reads flow top-down through the query handler to the database (SQLite by default, or Postgres). Writes flow through the procedure handler to the user's PDS, then HappyView indexes the record locally. Real-time record events stream in via [Jetstream](https://github.com/bluesky-social/jetstream); historical records are backfilled in-process by discovering repos via the relay's `listReposByCollection` and fetching records directly from each PDS.
 
 ## Module overview
 
 ```
 src/
-  main.rs           Startup: config, DB, migrations, build OAuth client, spawn Tap worker, start server
+  main.rs           Startup: config, DB, migrations, build OAuth client, spawn Jetstream worker, start server
   lib.rs            AppState struct (incl. OAuth client + cookie key), module declarations
   config.rs         Environment variable loading
   dns.rs            DNS TXT resolver for atrium handle resolution
@@ -41,7 +43,7 @@ src/
   server.rs         Axum router: fixed routes + admin nest + auth routes + XRPC catch-all + static files
   lexicon.rs        ParsedLexicon, LexiconRegistry (Arc<RwLock<HashMap>>)
   profile.rs        DID document resolution, PDS discovery, profile fetching
-  tap.rs            Tap WebSocket listener, collection filter sync, backfill delegation
+  jetstream.rs      Jetstream WebSocket listener, collection filter sync, cursor persistence
   resolve.rs        NSID authority resolution (DNS TXT → DID → PDS)
   auth/
     mod.rs          Re-exports, COOKIE_NAME constant
@@ -62,7 +64,7 @@ src/
     network_lexicons.rs  Network lexicon tracking (add, list, remove)
     records.rs      Record listing handler
     stats.rs        Record count stats
-    backfill.rs     Backfill job creation (relay discovery + Tap delegation)
+    backfill.rs     Backfill job runner (relay discovery + per-PDS listRecords)
     types.rs        Request/response structs for admin endpoints
   lua/
     mod.rs          Re-exports
@@ -129,14 +131,15 @@ Client request + session cookie or Bearer token
 ### Real-time indexing
 
 ```
-Tap WebSocket connection (tap::spawn)
-  -> Collection filters synced to Tap on startup and lexicon changes
-  -> Record events:
+Jetstream WebSocket connection (jetstream::spawn)
+  -> Collection filters built from indexed lexicons and applied to subscription URL
+  -> Reconnects on collection filter changes (lexicon add/remove)
+  -> Record commit events:
      create/update -> UPSERT into records table
      delete        -> DELETE from records table
   -> Lexicon schema events (com.atproto.lexicon.schema):
      -> Update tracked network lexicons in DB and registry
-  -> Reconnects automatically on errors or collection filter changes
+  -> Cursor persisted to instance_settings for resume on reconnect
 ```
 
 ### Backfill
@@ -144,10 +147,11 @@ Tap WebSocket connection (tap::spawn)
 ```
 POST /admin/backfill
   -> Create backfill_jobs record (status = running)
-  -> Relay listReposByCollection -> list of DIDs
-  -> Send DIDs to Tap in batches of 1000 (POST /repos/add)
-  -> Mark job as completed
-  -> Tap fetches records asynchronously and delivers via WebSocket
+  -> Relay listReposByCollection -> list of DIDs (paginated)
+  -> For each DID: resolve PDS via PLC, listRecords from that PDS (paginated)
+  -> UPSERT each record into records table
+  -> Update processed_repos / total_records counters
+  -> Mark job as completed (or failed with error message)
 ```
 
 ## Database schema

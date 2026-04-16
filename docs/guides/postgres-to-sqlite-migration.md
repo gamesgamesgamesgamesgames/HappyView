@@ -84,3 +84,9 @@ If you were running Postgres via Docker Compose, you can now comment out the `po
 ## Rollback
 
 To switch back to Postgres, revert your `DATABASE_URL` to the Postgres connection string. Your Postgres database remains unchanged — HappyView does not modify it during the migration to SQLite.
+
+## Next steps
+
+- [Database setup](database-setup.md) — choose between SQLite and Postgres for new instances
+- [Backfill](backfill.md) — re-index records from the network after switching backends
+- [Lua scripting](scripting.md) — write SQL that works against either backend

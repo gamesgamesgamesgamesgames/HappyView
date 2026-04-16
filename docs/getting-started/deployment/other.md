@@ -1,11 +1,10 @@
 # Local Development from Source
 
-This guide runs HappyView directly with `cargo run`, with you managing Tap separately. If you'd rather use Docker Compose to run everything together, see [Local Development with Docker](docker.md).
+This guide runs HappyView directly with `cargo run`. If you'd rather use Docker Compose, see [Local Development with Docker](docker.md).
 
 ## Prerequisites
 
 - Rust (stable)
-- A running [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) instance (delivers real-time records and handles backfill). See the [Tap documentation](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) for setup.
 - (Optional) PostgreSQL 17+ if you prefer Postgres over the default SQLite
 
 ## 1. Clone and configure
@@ -23,8 +22,6 @@ Edit `.env` to point at your running services:
 DATABASE_URL=sqlite://data/happyview.db?mode=rwc
 PUBLIC_URL=http://localhost:3000
 SESSION_SECRET=change-me-in-production
-TAP_URL=http://localhost:2480
-TAP_ADMIN_PASSWORD=your-secret-here
 ```
 
 Or if you prefer Postgres:

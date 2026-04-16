@@ -8,7 +8,7 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **DID** (Decentralized Identifier) — A persistent, globally unique identifier for an account (e.g. `did:plc:abc123`).
 
-**Firehose** — A real-time stream of all record events (creates, updates, deletes) across the AT Protocol network. HappyView consumes this via [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap).
+**Firehose** — A real-time stream of all record events (creates, updates, deletes) across the AT Protocol network. HappyView consumes a filtered slice of this via [Jetstream](https://github.com/bluesky-social/jetstream).
 
 **Handle** — A human-readable name for an account (e.g. `user.bsky.social`). Handles resolve to a DID via DNS or the PLC directory.
 
@@ -22,7 +22,7 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **Record** — A single piece of data in an AT Protocol repository, identified by an AT URI (e.g. `at://did:plc:abc/xyz.statusphere.status/abc123`).
 
-**Relay** — A network service that aggregates repository data from many PDSes. HappyView queries the relay during [backfill](../guides/backfill.md) to discover which repos contain records for a given collection, then delegates the actual record fetching to Tap.
+**Relay** — A network service that aggregates repository data from many PDSes. HappyView queries the relay during [backfill](../guides/backfill.md) to discover which repos contain records for a given collection, then fetches each repo's records directly from its PDS.
 
 **rkey** (Record Key) — The unique key for a record within a collection and repo. These are most commonly TIDs (timestamp-based) or NSIDs.
 
@@ -32,11 +32,11 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 ## HappyView-specific terms
 
-**Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and delegates record fetching to Tap. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/backfill.md).
+**Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and fetches each repo's records directly from its PDS. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/backfill.md).
+
+**Jetstream** — A [filtered firehose](https://github.com/bluesky-social/jetstream) maintained by Bluesky that delivers AT Protocol record commit events as JSON over WebSocket. HappyView subscribes to Jetstream with a collection filter built from its indexed record lexicons, and persists a cursor for resume on reconnect.
 
 **Network lexicon** — A lexicon fetched directly from the AT Protocol network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons).
-
-**Tap** — A [firehose consumer and backfill worker](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) that handles real-time record streaming, cryptographic verification, and historical record fetching. HappyView connects to Tap via WebSocket to receive record events, and delegates backfill work to Tap via its HTTP API.
 
 **Permission** — A granular access control right that authorizes a specific action in the admin API. HappyView defines 20 permissions organized by category (e.g. `lexicons:create`, `users:read`). See [Permissions](../guides/permissions.md).
 

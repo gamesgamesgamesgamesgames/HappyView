@@ -22,7 +22,7 @@
 
 ## v1.9.0 — Event Logs
 
-- **Event logging** — system-wide audit trail for lexicon changes, record operations, Lua script executions/errors, admin actions, backfill jobs, and Tap connectivity
+- **Event logging** — system-wide audit trail for lexicon changes, record operations, Lua script executions/errors, admin actions, backfill jobs, and firehose connectivity
 - **`GET /admin/events`** — query event logs with filtering by event type, category, severity, and subject, with cursor pagination
 - **Lua error context** — script errors capture full debugging context: error message, script source, input payload, and caller DID
 - **Automatic retention cleanup** — configurable via `EVENT_LOG_RETENTION_DAYS` (default 30 days)

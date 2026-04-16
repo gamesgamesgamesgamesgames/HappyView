@@ -1,6 +1,6 @@
 # Deploy on Railway
 
-The fastest way to get HappyView running is with Railway. This template deploys HappyView, [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) (real-time data and backfill), and Postgres with a single click:
+The fastest way to get HappyView running is with Railway. This template deploys HappyView and Postgres with a single click:
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview?referralCode=0QOgj_)
 
@@ -16,3 +16,9 @@ After deploying the template, you'll need to configure a few things before the s
    :::
 
 3. Access your HappyView dashboard at the instance's public URL. The first user to log in is automatically bootstrapped as the super user.
+
+## Next steps
+
+- [Configuration](../configuration.md) — full list of environment variables
+- [Dashboard](../dashboard.md) — manage lexicons, users, and plugins via the web UI
+- [Production deployment](../../reference/production-deployment.md) — hardening checklist for production instances
