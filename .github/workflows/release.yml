@@ -8,6 +8,7 @@ on:
       - "packages/docs/**"
       - "packages/oauth-client/**"
       - "packages/oauth-client-browser/**"
+      - "packages/lex-agent/**"
   pull_request:
     branches: [main, dev]
     paths-ignore:
@@ -15,6 +16,7 @@ on:
       - "packages/docs/**"
       - "packages/oauth-client/**"
       - "packages/oauth-client-browser/**"
+      - "packages/lex-agent/**"
 
 env:
   SQLX_OFFLINE: true

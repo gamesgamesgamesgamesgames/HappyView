@@ -7,12 +7,14 @@ on:
       - ".github/workflows/release-sdk.yml"
       - "packages/oauth-client/**"
       - "packages/oauth-client-browser/**"
+      - "packages/lex-agent/**"
   pull_request:
     branches: [main, dev]
     paths:
       - ".github/workflows/release-sdk.yml"
       - "packages/oauth-client/**"
       - "packages/oauth-client-browser/**"
+      - "packages/lex-agent/**"
 
 jobs:
   sdk-tests:
@@ -29,13 +31,13 @@ jobs:
         run: bun install
 
       - name: Build SDK packages
-        run: bun run --filter '@happyview/oauth-*' build
+        run: bun run --filter '@happyview/*' build
 
       - name: Typecheck SDK packages
-        run: bun run --filter '@happyview/oauth-*' typecheck
+        run: bun run --filter '@happyview/*' typecheck
 
       - name: Test SDK packages
-        run: bun run --filter '@happyview/oauth-*' test
+        run: bun run --filter '@happyview/*' test
 
   release-oauth-client:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
@@ -99,7 +101,7 @@ jobs:
         run: bun install
 
       - name: Build SDK packages
-        run: bun run --filter '@happyview/oauth-*' build
+        run: bun run --filter '@happyview/*' build
 
       - name: Resolve workspace dependencies to published versions
         run: |
@@ -126,4 +128,58 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         working-directory: packages/oauth-client-browser
+        run: npx semantic-release
+
+  release-lex-agent:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    needs: [release-oauth-client]
+    runs-on: depot-ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build SDK packages
+        run: bun run --filter '@happyview/*' build
+
+      - name: Resolve workspace dependencies to published versions
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            DIST_TAG="latest"
+          else
+            DIST_TAG="dev"
+          fi
+          CORE_VERSION=$(npm view @happyview/oauth-client@${DIST_TAG} version)
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('packages/lex-agent/package.json', 'utf8'));
+            if (pkg.dependencies['@happyview/oauth-client']?.startsWith('workspace:')) {
+              pkg.dependencies['@happyview/oauth-client'] = '^${CORE_VERSION}';
+              fs.writeFileSync('packages/lex-agent/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            }
+          "
+
+      - name: Configure npm auth for bun publish
+        run: echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > .npmrc
+
+      - name: Release lex-agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/lex-agent
         run: npx semantic-release
