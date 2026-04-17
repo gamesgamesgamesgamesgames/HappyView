@@ -17,7 +17,8 @@ fn post_json_with_headers(
     let mut builder = Request::builder()
         .method("POST")
         .uri(uri)
-        .header("content-type", "application/json");
+        .header("content-type", "application/json")
+        .header("host", "127.0.0.1");
     for (name, value) in headers {
         builder = builder.header(name, value);
     }
@@ -28,7 +29,10 @@ fn post_json_with_headers(
 
 /// Helper to make a DELETE request with headers
 fn delete_with_headers(uri: &str, headers: Vec<(&str, &str)>) -> Request<Body> {
-    let mut builder = Request::builder().method("DELETE").uri(uri);
+    let mut builder = Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .header("host", "127.0.0.1");
     for (name, value) in headers {
         builder = builder.header(name, value);
     }
@@ -267,6 +271,7 @@ async fn test_xrpc_rejects_bearer_auth() {
     let req = Request::builder()
         .method("GET")
         .uri("/xrpc/com.example.test.getStuff")
+        .header("host", "127.0.0.1")
         .header("x-client-key", "hvc_fake")
         .header("authorization", "Bearer hv_some-api-key")
         .body(Body::empty())
@@ -275,7 +280,7 @@ async fn test_xrpc_rejects_bearer_auth() {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     let body = response_json(resp).await;
-    let msg = body["message"].as_str().unwrap_or_default();
+    let msg = body["error"].as_str().unwrap_or_default();
     assert!(
         msg.contains("XRPC routes do not accept Bearer auth"),
         "expected Bearer rejection message, got: {msg}"
@@ -292,6 +297,7 @@ async fn test_xrpc_allows_anonymous_queries() {
     let req = Request::builder()
         .method("GET")
         .uri("/xrpc/com.example.test.getStuff")
+        .header("host", "127.0.0.1")
         .header("x-client-key", "hvc_fake")
         .body(Body::empty())
         .unwrap();
@@ -314,6 +320,7 @@ async fn test_xrpc_procedure_requires_dpop_auth() {
     let req = Request::builder()
         .method("POST")
         .uri("/xrpc/com.example.test.createStuff")
+        .header("host", "127.0.0.1")
         .header("x-client-key", "hvc_fake")
         .header("content-type", "application/json")
         .body(Body::from("{}"))
@@ -322,7 +329,7 @@ async fn test_xrpc_procedure_requires_dpop_auth() {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     let body = response_json(resp).await;
-    let msg = body["message"].as_str().unwrap_or_default();
+    let msg = body["error"].as_str().unwrap_or_default();
     assert!(
         msg.contains("DPoP authentication"),
         "expected DPoP requirement message, got: {msg}"

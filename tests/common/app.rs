@@ -169,6 +169,17 @@ impl TestApp {
         let mut app = Self::new().await;
         // Set a test encryption key (32 bytes)
         app.state.config.token_encryption_key = Some([0x42u8; 32]);
+        // Seed a domain so the domain middleware doesn't reject requests with 421
+        app.state
+            .domain_cache
+            .insert(happyview::domain::Domain {
+                id: uuid::Uuid::new_v4().to_string(),
+                url: "http://127.0.0.1:0".to_string(),
+                is_primary: true,
+                created_at: now_rfc3339(),
+                updated_at: now_rfc3339(),
+            })
+            .await;
         // Rebuild the router with the updated state
         app.router = server::router(app.state.clone());
         app
