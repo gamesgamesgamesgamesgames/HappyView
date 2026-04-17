@@ -1,7 +1,16 @@
 {
   "name": "@happyview/oauth-client-browser",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "HappyView OAuth client for browser-based ATProto DPoP authentication",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gamesgamesgamesgamesgames/happyview.git",
+    "directory": "packages/oauth-client-browser"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -13,7 +22,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "bun test",
@@ -24,7 +35,13 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^16.0.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/bun": "^1.3.12",
+    "semantic-release": "^25.0.3",
+    "semantic-release-monorepo": "^8.0.2",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0"
   }

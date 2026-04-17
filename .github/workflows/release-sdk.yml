@@ -1,0 +1,125 @@
+name: Release SDK
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "packages/oauth-client/**"
+      - "packages/oauth-client-browser/**"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "packages/oauth-client/**"
+      - "packages/oauth-client-browser/**"
+
+jobs:
+  sdk-tests:
+    runs-on: depot-ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build SDK packages
+        run: bun run --filter '@happyview/oauth-*' build
+
+      - name: Typecheck SDK packages
+        run: bun run --filter '@happyview/oauth-*' typecheck
+
+      - name: Test SDK packages
+        run: bun run --filter '@happyview/oauth-*' test
+
+  release-oauth-client:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    needs: [sdk-tests]
+    runs-on: depot-ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build oauth-client
+        run: bun run --filter '@happyview/oauth-client' build
+
+      - name: Release oauth-client
+        env:
+          GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+        working-directory: packages/oauth-client
+        run: npx semantic-release
+
+  release-oauth-client-browser:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    needs: [release-oauth-client]
+    runs-on: depot-ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build SDK packages
+        run: bun run --filter '@happyview/oauth-*' build
+
+      - name: Resolve workspace dependencies
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            DIST_TAG="latest"
+          else
+            DIST_TAG="dev"
+          fi
+          CORE_VERSION=$(npm view @happyview/oauth-client@${DIST_TAG} version)
+          cd packages/oauth-client-browser
+          node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            if (pkg.dependencies['@happyview/oauth-client']?.startsWith('workspace:')) {
+              pkg.dependencies['@happyview/oauth-client'] = '^${CORE_VERSION}';
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            }
+          "
+
+      - name: Release oauth-client-browser
+        env:
+          GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+        working-directory: packages/oauth-client-browser
+        run: npx semantic-release
