@@ -14,7 +14,7 @@ cd happyview
 cp .env.example .env
 ```
 
-Edit `.env` and set at least `PUBLIC_URL` (e.g. `http://localhost:3000`) and `SESSION_SECRET`. The defaults work for everything else. See [Configuration](../configuration.md) for the full list of environment variables.
+Edit `.env` and set at least `PUBLIC_URL` (e.g. `http://localhost:3000`) and `SESSION_SECRET` (at least 64 characters). The defaults work for everything else. See [Configuration](../configuration.md) for the full list of environment variables.
 
 ## 2. Start the stack
 

@@ -191,6 +191,11 @@ const sidebars: SidebarsConfig = {
               id: "guides/plugins",
               label: "Plugins",
             },
+            {
+              type: "doc",
+              id: "guides/developing-plugins",
+              label: "Developing Plugins",
+            },
           ],
         },
         {
@@ -227,6 +232,11 @@ const sidebars: SidebarsConfig = {
               type: "doc",
               id: "guides/postgres-to-sqlite-migration",
               label: "Postgres → SQLite Migration",
+            },
+            {
+              type: "doc",
+              id: "guides/sqlite-to-postgres-migration",
+              label: "SQLite → Postgres Migration",
             },
           ],
         },
@@ -268,9 +278,111 @@ const sidebars: SidebarsConfig = {
           label: "XRPC API",
         },
         {
-          type: "doc",
-          id: "reference/admin-api",
+          type: "category",
           label: "Admin API",
+          items: [
+            {
+              type: "doc",
+              id: "reference/admin-api",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/lexicons",
+              label: "Lexicons",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/stats",
+              label: "Stats",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/backfill",
+              label: "Backfill",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/events",
+              label: "Event Logs",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/api-keys",
+              label: "API Keys",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/users",
+              label: "Users",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/labelers",
+              label: "Labelers",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/settings",
+              label: "Instance Settings",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/domains",
+              label: "Domains",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/script-variables",
+              label: "Script Variables",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/api-clients",
+              label: "API Clients",
+            },
+            {
+              type: "doc",
+              id: "reference/admin/plugins",
+              label: "Plugins",
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "Lua API",
+          items: [
+            {
+              type: "doc",
+              id: "reference/lua/record-api",
+              label: "Record API",
+            },
+            {
+              type: "doc",
+              id: "reference/lua/database-api",
+              label: "Database API",
+            },
+            {
+              type: "doc",
+              id: "reference/lua/http-api",
+              label: "HTTP API",
+            },
+            {
+              type: "doc",
+              id: "reference/lua/atproto-api",
+              label: "AT Protocol API",
+            },
+            {
+              type: "doc",
+              id: "reference/lua/json-api",
+              label: "JSON API",
+            },
+            {
+              type: "doc",
+              id: "reference/lua/standard-libraries",
+              label: "Standard Libraries",
+            },
+          ],
         },
         {
           type: "doc",

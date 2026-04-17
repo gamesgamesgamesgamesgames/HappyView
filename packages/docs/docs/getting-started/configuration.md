@@ -9,7 +9,7 @@ HappyView is configured via environment variables. A `.env` file in the project 
 | `DATABASE_URL` | yes | --- | Database connection string. SQLite (`sqlite://path/to/db?mode=rwc`) or Postgres (`postgres://user:pass@host/db`) |
 | `DATABASE_BACKEND` | no | auto-detected | Force `sqlite` or `postgres`. Auto-detected from `DATABASE_URL` scheme if not set |
 | `PUBLIC_URL` | yes | --- | Public-facing URL for HappyView (used for OAuth callbacks, e.g. `https://happyview.example.com`) |
-| `SESSION_SECRET` | no | dev default | Secret key for signing session cookies. **Must be set in production** |
+| `SESSION_SECRET` | no | dev default | Secret key for signing session cookies (at least 64 characters). **Must be set in production** |
 | `HOST` | no | `0.0.0.0` | Bind host |
 | `PORT` | no | `3000` | Bind port |
 | `JETSTREAM_URL` | no | `wss://jetstream1.us-east.bsky.network` | Jetstream WebSocket URL for real-time record streaming |

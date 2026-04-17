@@ -8,53 +8,53 @@ HappyView defines 20 permissions organized by category:
 
 ### Lexicons
 
-| Permission | Description |
-|---|---|
+| Permission        | Description                                    |
+| ----------------- | ---------------------------------------------- |
 | `lexicons:create` | Upload and upsert lexicons (local and network) |
-| `lexicons:read` | List and view lexicon details |
-| `lexicons:delete` | Delete lexicons |
+| `lexicons:read`   | List and view lexicon details                  |
+| `lexicons:delete` | Delete lexicons                                |
 
 ### Records
 
-| Permission | Description |
-|---|---|
-| `records:read` | List and view indexed records |
-| `records:delete` | Delete individual records |
+| Permission                  | Description                             |
+| --------------------------- | --------------------------------------- |
+| `records:read`              | List and view indexed records           |
+| `records:delete`            | Delete individual records               |
 | `records:delete-collection` | Bulk-delete all records in a collection |
 
 ### Script Variables
 
-| Permission | Description |
-|---|---|
-| `script-variables:create` | Create and update script variables |
-| `script-variables:read` | List script variables (values are masked) |
-| `script-variables:delete` | Delete script variables |
+| Permission                | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `script-variables:create` | Create and update script variables        |
+| `script-variables:read`   | List script variables (values are masked) |
+| `script-variables:delete` | Delete script variables                   |
 
 ### Users
 
-| Permission | Description |
-|---|---|
-| `users:create` | Add new users |
-| `users:read` | List and view user details |
-| `users:update` | Modify user permissions |
-| `users:delete` | Remove users |
+| Permission     | Description                |
+| -------------- | -------------------------- |
+| `users:create` | Add new users              |
+| `users:read`   | List and view user details |
+| `users:update` | Modify user permissions    |
+| `users:delete` | Remove users               |
 
 ### API Keys
 
-| Permission | Description |
-|---|---|
+| Permission        | Description         |
+| ----------------- | ------------------- |
 | `api-keys:create` | Create new API keys |
-| `api-keys:read` | List API keys |
-| `api-keys:delete` | Revoke API keys |
+| `api-keys:read`   | List API keys       |
+| `api-keys:delete` | Revoke API keys     |
 
 ### Operations
 
-| Permission | Description |
-|---|---|
-| `backfill:create` | Start backfill jobs |
-| `backfill:read` | View backfill job status |
-| `stats:read` | View record statistics |
-| `events:read` | Query the event log |
+| Permission        | Description              |
+| ----------------- | ------------------------ |
+| `backfill:create` | Start backfill jobs      |
+| `backfill:read`   | View backfill job status |
+| `stats:read`      | View record statistics   |
+| `events:read`     | Query the event log      |
 
 ## Permission templates
 
@@ -91,7 +91,7 @@ The super user is a special user created automatically when the first person log
 - Cannot be deleted
 - Cannot have their permissions modified by other users
 
-There is always exactly one super user. Super status can be transferred to another user via the transfer endpoint.
+There is always exactly one super user. Super status can be transferred to another user via the dashboard or transfer endpoint in the Admin API.
 
 ## Escalation guards
 
@@ -132,7 +132,7 @@ Go to **Settings > Users** to view and manage user permissions. Click on a user 
 - `PATCH /admin/users/{id}/permissions` — grant or revoke individual permissions
 - `POST /admin/users/transfer-super` — transfer super user status (super user only)
 
-See the [Admin API reference](../reference/admin-api.md#user-management) for full details.
+See the [Admin API — Users](../reference/admin/users.md) for full details.
 
 ## Next steps
 

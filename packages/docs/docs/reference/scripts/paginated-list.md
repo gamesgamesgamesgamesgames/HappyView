@@ -13,7 +13,7 @@ function handle()
     collection = collection,
     did = params.did,
     limit = limit,
-    offset = tonumber(params.cursor) or 0,
+    cursor = params.cursor,
   })
 
   return result
@@ -23,8 +23,8 @@ end
 ## How it works
 
 1. Parse `limit` from the query string, defaulting to 20 and capping at 100.
-2. Call [`db.query`](../../guides/scripting.md#dbquery) with the target collection, optional DID filter, and offset-based pagination.
-3. Return the result directly. `db.query` returns `{ records = [...], cursor = "..." }` where `cursor` is present when more records exist.
+2. Call [`db.query`](../lua/database-api.md#dbquery) with the target collection, optional DID filter, and cursor for pagination.
+3. Return the result directly. `db.query` returns `{ records = [...], cursor = "..." }` where `cursor` is an opaque string present when more records exist.
 
 ## Usage
 
@@ -32,9 +32,9 @@ end
 GET /xrpc/xyz.statusphere.listStatuses
 GET /xrpc/xyz.statusphere.listStatuses?limit=50
 GET /xrpc/xyz.statusphere.listStatuses?did=did:plc:abc&limit=10
-GET /xrpc/xyz.statusphere.listStatuses?cursor=20&limit=20
+GET /xrpc/xyz.statusphere.listStatuses?cursor=<opaque>&limit=20
 ```
 
 ## Use case
 
-A straightforward list endpoint for feeds, timelines, or browsing records by collection. The `cursor` value returned by `db.query` is an offset. Clients pass it back as the `cursor` parameter to fetch the next page. Since all query parameters arrive as strings, use `tonumber()` to convert `limit` and `cursor` to numbers.
+A straightforward list endpoint for feeds, timelines, or browsing records by collection. The `cursor` value returned by `db.query` is an opaque string. Clients pass it back as the `cursor` parameter to fetch the next page — don't parse or modify it.

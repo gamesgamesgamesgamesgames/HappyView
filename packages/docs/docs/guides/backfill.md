@@ -7,7 +7,7 @@ When you add a new record-type lexicon, HappyView starts indexing new records fr
 - **Automatically** when a record-type lexicon is uploaded with `backfill: true` (the default). See [Lexicons - Backfill flag](lexicons.md#backfill-flag).
 - **Manually** via `POST /admin/backfill` or the [dashboard](../getting-started/dashboard.md). You can scope a manual backfill to a specific collection, a specific DID, or both.
 
-See the [admin API](../reference/admin-api.md#backfill) for endpoint details.
+See the [admin API](../reference/admin/backfill.md) for endpoint details.
 
 ## How it works
 
@@ -19,7 +19,7 @@ See the [admin API](../reference/admin-api.md#backfill) for endpoint details.
 
 ## Job lifecycle
 
-A backfill job moves through `pending → running → completed` (or `failed`). Unlike earlier versions of HappyView, the job is only marked `completed` once every discovered repo has been processed end-to-end — there is no separate downstream queue. Progress is visible in real time on the dashboard's Backfill page.
+A backfill job moves through `pending → running → completed` (or `failed`). Unlike earlier versions of HappyView that relied on Tap, the job is only marked `completed` once every discovered repo has been processed end-to-end — there is no separate downstream queue. Progress is visible in real time on the dashboard's Backfill page.
 
 If a job fails midway, the `error` field contains the failure reason. Re-running the backfill resumes from scratch but is idempotent (records are upserted by URI).
 
@@ -34,4 +34,4 @@ Deleting records from HappyView (via the dashboard or API) only removes them fro
 ## Next steps
 
 - [Lexicons](lexicons.md#backfill-flag): Control whether lexicons trigger backfill on upload
-- [Admin API](../reference/admin-api.md#backfill): Full reference for backfill endpoints
+- [Admin API — Backfill](../reference/admin/backfill.md): Full reference for backfill endpoints

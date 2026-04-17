@@ -28,9 +28,9 @@ Common issues and how to resolve them.
 
 **Causes**:
 
-- No session cookie or `Authorization: Bearer` header is present.
-- The session cookie has expired or was signed with a different `SESSION_SECRET`.
-- The API key has been revoked or is invalid.
+- No `Authorization: DPoP` header or `X-Client-Key` header is present.
+- The DPoP proof is invalid or expired.
+- The API client key is not registered or is inactive.
 
 ## Admin endpoints return 403 Forbidden
 
@@ -86,14 +86,44 @@ See [Backfill](../guides/backfill.md) for how the process works.
 - No record-type lexicon exists for the collection. HappyView only indexes collections that have a corresponding record-type lexicon.
 - The Jetstream subscription hasn't reconnected with the new collection filter after a lexicon change. This should happen automatically. Check server logs for connection errors.
 
+## Lua script can't find records
+
+**Symptom**: `db.query` or `db.get` returns empty results inside a Lua script, even though the admin dashboard shows records exist.
+
+**Causes**:
+
+- The `collection` global is only set when the lexicon has a `target_collection`. If you're using `db.raw` with a hardcoded collection name, double-check the spelling matches exactly.
+- `db.get` expects a full AT URI (`at://did:plc:abc/collection/rkey`), not just an rkey.
+- If querying by DID, make sure you're passing the full DID string including the `did:plc:` or `did:web:` prefix.
+
+## Plugin secrets not working
+
+**Symptom**: A plugin fails with authentication errors even though you've configured its secrets.
+
+**Causes**:
+
+- `TOKEN_ENCRYPTION_KEY` is not set. Plugin secrets are encrypted at rest and cannot be read without this key. See [Plugins - Configuration](../guides/plugins.md#plugin-configuration).
+- If `TOKEN_ENCRYPTION_KEY` changed since the secrets were saved, the existing encrypted values are unreadable. Re-enter the secrets via the dashboard or `PUT /admin/plugins/{id}/secrets`.
+- Environment variable secrets (`PLUGIN_<ID>_<KEY>`) are overridden by dashboard-configured secrets. If you've set both, the dashboard values take precedence.
+
 ## OAuth or login issues
 
 HappyView handles AT Protocol OAuth internally via the `atrium-oauth` library. If users can't log in:
 
 1. Verify `PUBLIC_URL` is set correctly and the URL is publicly accessible (required for OAuth callbacks).
 2. Check that the user's PDS authorization server is reachable.
-3. Verify `SESSION_SECRET` hasn't changed since sessions were created (changing it invalidates all existing session cookies).
+3. Verify `SESSION_SECRET` hasn't changed since sessions were created (changing it invalidates all existing dashboard sessions).
 4. Check server logs for OAuth-specific error messages.
+
+## Third-party app can't authenticate
+
+**Symptom**: A third-party app using DPoP authentication gets 401 errors on XRPC endpoints.
+
+**Causes**:
+
+- The app hasn't registered an API client. Every XRPC request needs an `X-Client-Key` header with a valid `hvc_`-prefixed client key. Register one via **Settings > API Clients** or `POST /admin/api-clients`.
+- The DPoP proof is malformed or expired. Proofs include a timestamp and are valid for a short window.
+- The API client has been deactivated (`is_active: false`). Re-enable it via the dashboard or `PUT /admin/api-clients/{id}`.
 
 ## Database connection errors
 
@@ -106,3 +136,21 @@ HappyView handles AT Protocol OAuth internally via the `atrium-oauth` library. I
 - Postgres version is too old. HappyView requires Postgres 17+.
 
 See [Configuration](../getting-started/configuration.md) for environment variable details.
+
+## Switching databases loses data
+
+**Symptom**: After changing `DATABASE_URL` from SQLite to Postgres (or vice versa), all records, lexicons, and users are gone.
+
+**Explanation**: Each database is independent. Switching `DATABASE_URL` points HappyView at a fresh database. Your old data is still in the previous database file or Postgres instance.
+
+**Recovery**: Re-upload your lexicons and run backfills to re-index records from the network. Admin settings, users, and API keys need to be re-created manually. See the [SQLite → Postgres](../guides/sqlite-to-postgres-migration.md) or [Postgres → SQLite](../guides/postgres-to-sqlite-migration.md) migration guides.
+
+## Jetstream disconnects frequently
+
+**Symptom**: Server logs show repeated `jetstream.disconnected` / `jetstream.connected` events.
+
+**Causes**:
+
+- Network instability between HappyView and the Jetstream server. Verify `JETSTREAM_URL` is reachable.
+- The default Jetstream instance may be under heavy load. Consider pointing `JETSTREAM_URL` at a different instance if available.
+- HappyView reconnects automatically and resumes from its last cursor, so brief disconnections don't cause data loss. Prolonged outages may require a backfill to catch up on missed records.

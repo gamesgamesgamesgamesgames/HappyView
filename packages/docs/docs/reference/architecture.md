@@ -31,127 +31,136 @@ graph LR
 
 Reads flow top-down through the query handler to the database (SQLite by default, or Postgres). Writes flow through the procedure handler to the user's PDS, then HappyView indexes the record locally. Real-time record events stream in via [Jetstream](https://github.com/bluesky-social/jetstream); historical records are backfilled in-process by discovering repos via the relay's `listReposByCollection` and fetching records directly from each PDS.
 
-## Module overview
-
-```
-src/
-  main.rs           Startup: config, DB, migrations, build OAuth client, spawn Jetstream worker, start server
-  lib.rs            AppState struct (incl. OAuth client + cookie key), module declarations
-  config.rs         Environment variable loading
-  dns.rs            DNS TXT resolver for atrium handle resolution
-  error.rs          AppError enum (Auth, BadRequest, Forbidden, Internal, NotFound, PdsError)
-  server.rs         Axum router: fixed routes + admin nest + auth routes + XRPC catch-all + static files
-  lexicon.rs        ParsedLexicon, LexiconRegistry (Arc<RwLock<HashMap>>)
-  profile.rs        DID document resolution, PDS discovery, profile fetching
-  jetstream.rs      Jetstream WebSocket listener, collection filter sync, cursor persistence
-  resolve.rs        NSID authority resolution (DNS TXT → DID → PDS)
-  auth/
-    mod.rs          Re-exports, COOKIE_NAME constant
-    middleware.rs   Claims extractor (cookie auth, API key, or service auth JWT)
-    routes.rs       OAuth endpoints (/auth/login, /auth/callback, /auth/logout, /auth/me)
-    oauth_store.rs  Database-backed session and state stores for atrium-oauth
-    service_auth.rs XRPC service-to-service JWT validation (ES256/ES256K)
-  admin/
-    mod.rs          Admin route definitions
-    auth.rs         UserAuth extractor (Claims + DID lookup + permission check + auto-bootstrap)
-    users.rs        User CRUD handlers (create, list, get, delete, update permissions, transfer super)
-    permissions.rs  Permission enum (20 permissions), templates (Viewer, Operator, Manager, FullAccess)
-    api_keys.rs     API key CRUD handlers (create, list, revoke) with scoped permissions
-    events.rs       Event log query handler
-    settings.rs     Instance settings CRUD handlers (list, upsert, delete, logo upload/serve)
-    script_variables.rs  Script variable CRUD handlers (list, upsert, delete)
-    lexicons.rs     Lexicon CRUD handlers
-    network_lexicons.rs  Network lexicon tracking (add, list, remove)
-    records.rs      Record listing handler
-    stats.rs        Record count stats
-    backfill.rs     Backfill job runner (relay discovery + per-PDS listRecords)
-    types.rs        Request/response structs for admin endpoints
-  lua/
-    mod.rs          Re-exports
-    context.rs      Lua context globals (method, params, input, caller_did, collection)
-    db_api.rs       Lua database API (db.query, db.get, db.count)
-    execute.rs      Script execution and sandbox setup
-    record.rs       Lua Record API (constructor, save, delete, load)
-    sandbox.rs      Restricted Lua environment (removed modules, instruction limit)
-    tid.rs          TID generation for Lua scripts
-  repo/
-    mod.rs          Re-exports
-    pds.rs          PDS proxy helpers (JSON POST, blob POST, response forwarding via OAuth session)
-    session.rs      OAuth session restoration from atrium store
-    upload_blob.rs  Blob upload handler
-  xrpc/
-    mod.rs          Re-exports
-    query.rs        Dynamic GET handler (Lua script or default: single record + list)
-    procedure.rs    Dynamic POST handler (Lua script or default: create vs put)
-```
-
 ## Request flow
 
 ### Reads (queries)
 
-```
-Client GET /xrpc/{method}?params
-  -> xrpc::xrpc_get()
-  -> LexiconRegistry lookup (must be Query type)
-  -> If Lua script attached: execute script (has access to db API)
-  -> Else: default SQL query on records table (collection from target_collection)
-  -> JSON response
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant X as xrpc_get()
+    participant R as LexiconRegistry
+    participant L as Lua Script
+    participant D as Database
+
+    C->>X: GET /xrpc/{method}?params
+    X->>R: Lookup (must be Query type)
+    alt Lua script attached
+        R->>L: Execute script
+        L->>D: db.query / db.get / db.raw
+        D-->>L: Results
+        L-->>X: Response table
+    else No script
+        R->>D: Default SQL query (collection from target_collection)
+        D-->>X: Results
+    end
+    X-->>C: JSON response
 ```
 
 ### Writes (procedures)
 
-```
-Client POST /xrpc/{method} + session cookie or Bearer token
-  -> Claims extractor (cookie, API key, or service auth JWT)
-  -> xrpc::xrpc_post()
-  -> LexiconRegistry lookup (must be Procedure type)
-  -> If Lua script attached: execute script (has access to Record API)
-  -> Else: default create/update (auto-detect based on uri field)
-  -> Restore OAuth session from atrium store (by DID)
-  -> atrium handles DPoP proof generation and token refresh
-  -> Proxy to user's PDS (createRecord or putRecord)
-  -> Upsert record locally
-  -> Forward PDS response
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as Claims Extractor
+    participant X as xrpc_post()
+    participant R as LexiconRegistry
+    participant L as Lua Script
+    participant S as OAuth Session
+    participant P as User PDS
+    participant D as Database
+
+    C->>A: POST /xrpc/{method} + DPoP auth + X-Client-Key
+    A->>X: Validated claims
+    X->>R: Lookup (must be Procedure type)
+    alt Lua script attached
+        R->>L: Execute script (Record API)
+        L->>S: Record:save()
+    else No script
+        R->>S: Default create/update (auto-detect from uri field)
+    end
+    S->>P: Proxy write (createRecord or putRecord)
+    P-->>S: PDS response
+    S->>D: Upsert record locally
+    S-->>C: Forward PDS response
 ```
 
 ### Admin endpoints
 
-```
-Client request + session cookie or Bearer token
-  -> AdminAuth extractor:
-     1. Claims validation (cookie, API key, or service auth JWT)
-     2. DID lookup in users table (auto-bootstrap super user if empty)
-     3. Permission check (403 if missing required permission)
-  -> Admin handler
-  -> JSON response
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as AdminAuth Extractor
+    participant U as Users Table
+    participant H as Admin Handler
+    participant D as Database
+
+    C->>A: Request + Bearer token
+    A->>A: Validate claims (API key or service auth JWT)
+    A->>U: DID lookup
+    alt Users table empty
+        U-->>A: Auto-bootstrap as super user
+    else User found
+        U-->>A: Load permissions
+    end
+    A->>A: Permission check (403 if missing)
+    A->>H: Authorized request
+    H->>D: Database operation
+    D-->>H: Result
+    H-->>C: JSON response
 ```
 
 ## Data flow
 
 ### Real-time indexing
 
-```
-Jetstream WebSocket connection (jetstream::spawn)
-  -> Collection filters built from indexed lexicons and applied to subscription URL
-  -> Reconnects on collection filter changes (lexicon add/remove)
-  -> Record commit events:
-     create/update -> UPSERT into records table
-     delete        -> DELETE from records table
-  -> Lexicon schema events (com.atproto.lexicon.schema):
-     -> Update tracked network lexicons in DB and registry
-  -> Cursor persisted to instance_settings for resume on reconnect
+```mermaid
+sequenceDiagram
+    participant J as Jetstream WebSocket
+    participant H as HappyView
+    participant D as Database
+    participant R as LexiconRegistry
+
+    H->>J: Connect (collection filters from indexed lexicons)
+    loop Stream events
+        J->>H: Record commit event
+        alt create / update
+            H->>D: UPSERT into records table
+        else delete
+            H->>D: DELETE from records table
+        end
+    end
+    J->>H: Lexicon schema event (com.atproto.lexicon.schema)
+    H->>D: Update tracked network lexicons
+    H->>R: Update in-memory registry
+    Note over H,D: Cursor persisted to instance_settings for resume on reconnect
+    Note over H,J: Reconnects on collection filter changes (lexicon add/remove)
 ```
 
 ### Backfill
 
-```
-POST /admin/backfill
-  -> Create backfill_jobs record (status = running)
-  -> Relay listReposByCollection -> list of DIDs (paginated)
-  -> For each DID: resolve PDS via PLC, listRecords from that PDS (paginated)
-  -> UPSERT each record into records table
-  -> Update processed_repos / total_records counters
-  -> Mark job as completed (or failed with error message)
+```mermaid
+sequenceDiagram
+    participant A as Admin
+    participant H as HappyView
+    participant D as Database
+    participant Relay as Relay
+    participant PLC as PLC Directory
+    participant PDS as User PDS
+
+    A->>H: POST /admin/backfill
+    H->>D: Create backfill_jobs record (status = running)
+    H->>Relay: listReposByCollection (paginated)
+    Relay-->>H: List of DIDs
+    loop For each DID
+        H->>PLC: Resolve DID document
+        PLC-->>H: PDS endpoint
+        H->>PDS: listRecords (paginated)
+        PDS-->>H: Records
+        H->>D: UPSERT each record
+        H->>D: Update processed_repos / total_records
+    end
+    H->>D: Mark job completed (or failed)
 ```
 
 ## Database schema

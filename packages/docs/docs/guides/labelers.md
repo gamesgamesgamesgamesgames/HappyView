@@ -65,7 +65,7 @@ Labels appear in the **Labels** column on the Records page as color-coded badges
 
 Self-labels (applied by the record author) use an outline badge style to distinguish them from external labels. Hover over a badge to see the source labeler's DID.
 
-Labels are also available in the records API response and in Lua scripts via the `get_labels` and `get_labels_batch` functions. See the [Scripting guide](scripting.md) for details.
+Labels are also available in the records API response and in Lua scripts via the [`atproto.get_labels` and `atproto.get_labels_batch`](../reference/lua/atproto-api.md#atprotoget_labels) functions.
 
 ## Permissions
 
@@ -77,6 +77,6 @@ Labels are also available in the records API response and in Lua scripts via the
 
 ## Next steps
 
-- [Admin API reference](../reference/admin-api.md#labelers) — full endpoint documentation
-- [Scripting](scripting.md) — access labels in Lua scripts with `get_labels` and `get_labels_batch`
+- [Admin API — Labelers](../reference/admin/labelers.md) — full endpoint documentation
+- [AT Protocol API](../reference/lua/atproto-api.md) — access labels in Lua scripts with `get_labels` and `get_labels_batch`
 - [Permissions](permissions.md) — manage user access to labeler operations

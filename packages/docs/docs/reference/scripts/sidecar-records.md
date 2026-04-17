@@ -34,7 +34,7 @@ end
 
 1. Generate a single [`TID()`](../../guides/scripting.md#utility-globals) to use as the rkey for both records.
 2. Create a `Record` for each collection and call `r:set_rkey()` with the shared rkey.
-3. Save both records in parallel with [`Record.save_all()`](../../guides/scripting.md#static-methods).
+3. Save both records in parallel with [`Record.save_all()`](../lua/record-api.md#static-methods).
 4. Return both URIs so the client knows the identity of each record.
 
 ## Usage

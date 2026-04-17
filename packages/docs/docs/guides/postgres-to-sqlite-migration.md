@@ -46,24 +46,22 @@ The tool scans all `.lua` files in the given directory and rewrites Postgres SQL
 
 ### What the codemod converts automatically
 
-- `$1`, `$2`, etc. parameter placeholders to `?` positional parameters
-- `jsonb` operators (`->`, `->>`, `@>`, `?`) to SQLite `json_extract()` calls
+- `$1`, `$2`, etc. parameter placeholders to `?`
+- JSON operators (`->`, `->>`) and `::jsonb` casts to `json_extract()` calls
 - `ILIKE` to `LIKE` (SQLite `LIKE` is case-insensitive for ASCII by default)
 - `NOW()` to `datetime('now')`
-- `::text`, `::integer`, etc. type casts to SQLite equivalents (`CAST(... AS ...)`)
-- `COALESCE` and other standard SQL functions (no change needed)
+- `NOW() + INTERVAL '...'` / `NOW() - INTERVAL '...'` to `datetime('now', '...')`
 - `TRUE`/`FALSE` literals to `1`/`0`
-- `RETURNING *` clauses (removed, as SQLite has limited RETURNING support)
 
 ### What it flags for manual review
 
 The tool prints warnings for patterns it cannot convert automatically:
 
-- Complex Postgres-specific functions (`array_agg`, `string_agg`, `generate_series`, etc.)
-- Window functions with Postgres-specific syntax
-- `ON CONFLICT` clauses with complex conditions
-- CTEs (`WITH` queries) that use Postgres-specific features
-- Any SQL that the parser cannot confidently transform
+- JSONB `?` (contains-key) operator — consider using `json_each()` with an `EXISTS` subquery
+- `make_interval()` — Postgres-specific, needs manual conversion
+- `SIMILAR TO` — use `LIKE` or `GLOB` instead
+- `ANY()` / `ALL()` array operators — no direct SQLite equivalent
+- Type casts other than `::jsonb` (e.g., `::text`, `::integer`) — may need manual conversion to `CAST(... AS ...)`
 
 Review the flagged lines and update them manually.
 
@@ -87,6 +85,7 @@ To switch back to Postgres, revert your `DATABASE_URL` to the Postgres connectio
 
 ## Next steps
 
+- [SQLite → Postgres migration](sqlite-to-postgres-migration.md) — migrate in the opposite direction
 - [Database setup](database-setup.md) — choose between SQLite and Postgres for new instances
 - [Backfill](backfill.md) — re-index records from the network after switching backends
 - [Lua scripting](scripting.md) — write SQL that works against either backend

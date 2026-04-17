@@ -13,7 +13,7 @@ function handle()
     collection = "xyz.statusphere.status",
     did = params.did,
     limit = limit,
-    offset = tonumber(params.cursor) or 0,
+    cursor = params.cursor,
   })
 
   -- Collect unique DIDs from the statuses
@@ -51,7 +51,7 @@ end
 1. Query statuses from the target collection with pagination, same as a normal list query.
 2. Extract the unique DIDs from the returned status URIs using `string.match`.
 3. Build an AT URI for each DID's `app.bsky.actor.profile/self` record (this is where Bluesky profiles live).
-4. Load all profiles in parallel with [`Record.load_all`](../../guides/scripting.md#static-methods). Profiles that aren't indexed locally return `nil` and are skipped.
+4. Load all profiles in parallel with [`Record.load_all`](../lua/record-api.md#static-methods). Profiles that aren't indexed locally return `nil` and are skipped.
 5. Return statuses and profiles as separate keys, with the cursor from the status query.
 
 ## Usage
@@ -59,7 +59,7 @@ end
 ```
 GET /xrpc/xyz.statusphere.listStatusesWithProfiles?limit=10
 GET /xrpc/xyz.statusphere.listStatusesWithProfiles?did=did:plc:abc
-GET /xrpc/xyz.statusphere.listStatusesWithProfiles?cursor=20&limit=20
+GET /xrpc/xyz.statusphere.listStatusesWithProfiles?cursor=<opaque>&limit=20
 ```
 
 ```json
@@ -72,7 +72,7 @@ GET /xrpc/xyz.statusphere.listStatusesWithProfiles?cursor=20&limit=20
     { "uri": "at://did:plc:abc/app.bsky.actor.profile/self", "displayName": "Alice", "avatar": "..." },
     { "uri": "at://did:plc:def/app.bsky.actor.profile/self", "displayName": "Bob", "avatar": "..." }
   ],
-  "cursor": "10"
+  "cursor": "MjAyNi0wMS0wMVQxMjowMDowMFp8YXQ6Ly9kaWQ6..."
 }
 ```
 

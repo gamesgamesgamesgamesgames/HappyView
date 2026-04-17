@@ -18,15 +18,15 @@ function handle()
     collection = collection,
     did = params.did,
     limit = tonumber(params.limit) or 20,
-    offset = tonumber(params.cursor) or 0,
+    cursor = params.cursor,
   })
 end
 ```
 
 ## How it works
 
-1. If a `uri` query parameter is provided, fetch that single record with [`db.get`](../../guides/scripting.md#dbget) and return it. If it doesn't exist, return a structured error (using `error()` would trigger a 500 response).
-2. Otherwise, list records from the target collection using [`db.query`](../../guides/scripting.md#dbquery), with optional filtering by `did` and pagination via `limit`/`offset`. Since query parameters arrive as strings, `tonumber()` converts them to numbers.
+1. If a `uri` query parameter is provided, fetch that single record with [`db.get`](../lua/database-api.md#dbget) and return it. If it doesn't exist, return a structured error (using `error()` would trigger a 500 response).
+2. Otherwise, list records from the target collection using [`db.query`](../lua/database-api.md#dbquery), with optional filtering by `did` and cursor-based pagination. The `cursor` is an opaque string from a previous response — pass it through directly. Since `limit` arrives as a string, `tonumber()` converts it to a number.
 
 ## Usage
 

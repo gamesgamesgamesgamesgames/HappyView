@@ -7,7 +7,7 @@ If a query or procedure lexicon has a [Lua script](../guides/scripting.md) attac
 ## Auth
 
 - **Queries** (`GET /xrpc/{method}`): unauthenticated
-- **Procedures** (`POST /xrpc/{method}`): require authentication (session cookie, API key, or service auth JWT)
+- **Procedures** (`POST /xrpc/{method}`): require DPoP authentication (`Authorization: DPoP` + `DPoP` proof header + `X-Client-Key`)
 - **getProfile**: requires auth
 - **uploadBlob**: requires auth
 
@@ -101,13 +101,13 @@ Media blobs are automatically enriched with a `url` field pointing to the user's
 ### List records
 
 ```
-GET /xrpc/{method}?limit=20&cursor=0&did=optional
+GET /xrpc/{method}?limit=20&cursor=<opaque>&did=optional
 ```
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `limit` | integer | 20 | Max records to return (max 100) |
-| `cursor` | string | `0` | Pagination cursor (opaque, pass from previous response) |
+| `cursor` | string | --- | Opaque pagination cursor from a previous response |
 | `did` | string | --- | Filter records by DID |
 
 ```sh
@@ -125,11 +125,11 @@ curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=10&did=did:p
       "createdAt": "2025-01-01T12:00:00Z"
     }
   ],
-  "cursor": "10"
+  "cursor": "MjAyNS0wMS0wMVQxMjowMDowMFp8YXQ6Ly9kaWQ6..."
 }
 ```
 
-The `cursor` field is present only when more records exist.
+The `cursor` field is an opaque string present only when more records exist. Pass it back as-is to fetch the next page.
 
 ## Dynamic procedure endpoints
 
@@ -184,7 +184,7 @@ All error responses return JSON with an `error` field:
 | Status | Meaning | Common causes |
 |--------|---------|---------------|
 | `400 Bad Request` | Invalid input | Missing required fields, malformed JSON, invalid AT URI |
-| `401 Unauthorized` | Authentication failed | Missing or invalid session cookie, API key, or service auth JWT |
+| `401 Unauthorized` | Authentication failed | Missing or invalid client identification or DPoP authentication |
 | `404 Not Found` | Method or record not found | XRPC method has no matching lexicon, or the requested record doesn't exist |
 | `500 Internal Server Error` | Server-side failure | Lua script error, database error, or upstream PDS failure |
 

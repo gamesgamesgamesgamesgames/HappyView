@@ -1,6 +1,6 @@
 # Event Logs
 
-HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Jetstream connectivity. Events are stored in the database and queryable via the [admin API](../reference/admin-api.md#event-logs).
+HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Jetstream connectivity. Events are stored in the database and queryable via the [admin API](../reference/admin/events.md).
 
 ## Event types
 
@@ -14,7 +14,7 @@ Events follow a `category.action` naming convention. Each event has a severity l
 | `lexicon.updated` | info | Lexicon NSID | `revision`, `has_script`, `source` |
 | `lexicon.deleted` | info | Lexicon NSID | — |
 
-Logged when lexicons are uploaded, updated, or deleted via the [admin API](../reference/admin-api.md#lexicons). The `actor_did` is the user who performed the action.
+Logged when lexicons are uploaded, updated, or deleted via the [admin API](../reference/admin/lexicons.md). The `actor_did` is the user who performed the action.
 
 ### Record events
 
@@ -118,7 +118,7 @@ curl "http://localhost:3000/admin/events?category=lexicon" -H "$AUTH"
 curl "http://localhost:3000/admin/events?limit=20&cursor=2026-03-01T11:59:00Z" -H "$AUTH"
 ```
 
-See the [Admin API reference](../reference/admin-api.md#list-event-logs) for full parameter documentation.
+See the [Admin API reference](../reference/admin/events.md#list-event-logs) for full parameter documentation.
 
 ## Retention
 
@@ -130,6 +130,6 @@ See [Configuration](../getting-started/configuration.md) for all environment var
 
 ## Next steps
 
-- [Admin API — Event Logs](../reference/admin-api.md#event-logs) — full query parameters and response format
+- [Admin API — Event Logs](../reference/admin/events.md) — full query parameters and response format
 - [Permissions](permissions.md) — control which users can read event logs
 - [Troubleshooting](../reference/troubleshooting.md) — using event logs to diagnose issues

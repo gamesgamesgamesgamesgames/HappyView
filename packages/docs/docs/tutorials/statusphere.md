@@ -125,7 +125,7 @@ curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=5"
       "createdAt": "2025-01-01T11:30:00Z"
     }
   ],
-  "cursor": "5"
+  "cursor": "MjAyNS0wMS0wMVQxMjowMDowMFp8YXQ6Ly9kaWQ6..."
 }
 ```
 
@@ -149,7 +149,7 @@ function handle()
     collection = collection,
     did = params.did,
     limit = tonumber(params.limit) or 20,
-    offset = tonumber(params.cursor) or 0,
+    cursor = params.cursor,
   })
 end
 ```
@@ -190,7 +190,7 @@ SCRIPT='function handle()
     collection = collection,
     did = params.did,
     limit = tonumber(params.limit) or 20,
-    offset = tonumber(params.cursor) or 0,
+    cursor = params.cursor,
   })
 end'
 

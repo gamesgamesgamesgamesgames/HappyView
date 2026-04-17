@@ -4,7 +4,7 @@ This page covers what to change when taking a HappyView instance from local deve
 
 ## Session secret
 
-Set `SESSION_SECRET` to a strong random value (at least 32 bytes). This signs the session cookies issued during OAuth login; rotating it invalidates every existing session.
+Set `SESSION_SECRET` to a random string of at least 64 characters. This signs the session cookies issued during OAuth login; rotating it invalidates every existing session.
 
 ```sh
 openssl rand -base64 48
@@ -46,7 +46,7 @@ See the [database setup guide](../guides/database-setup.md) for configuration de
 
 HappyView has a per-client token-bucket rate limiter for XRPC endpoints. The defaults (set via `DEFAULT_RATE_LIMIT_CAPACITY` and `DEFAULT_RATE_LIMIT_REFILL_RATE`) apply to any [API client](../guides/api-keys.md) that doesn't have per-client overrides. Raise the defaults cautiously — they exist so one misbehaving integrator can't saturate the server.
 
-Per-client overrides are set at client creation or via `PUT /admin/api-clients/{id}` (see [Admin API — API Clients](admin-api.md#api-clients)).
+Per-client overrides are set at client creation or via `PUT /admin/api-clients/{id}` (see [Admin API — API Clients](admin/api-clients.md)).
 
 ## Logging
 

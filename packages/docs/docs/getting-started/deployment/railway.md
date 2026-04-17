@@ -8,7 +8,10 @@ The fastest way to get HappyView running is with Railway. This template deploys 
 
 After deploying the template, you'll need to configure a few things before the stack works properly:
 
-1. **Set your session secret.** In the HappyView service variables, set `SESSION_SECRET` to a strong random value. This is used to sign session cookies.
+1. **Set your session secret.** In the HappyView service variables, set `SESSION_SECRET` to a random string of at least 64 characters. This is used to sign session cookies.
+   ```sh
+   openssl rand -base64 48
+   ```
 
 2. **Assign a public domain.** In the Railway dashboard, add a public domain to the HappyView service. The service needs a publicly accessible URL for OAuth callbacks. Set `PUBLIC_URL` to this domain (e.g. `https://happyview-production.up.railway.app`).
    :::note
