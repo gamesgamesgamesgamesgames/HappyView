@@ -9,9 +9,9 @@ HappyView has two distinct authentication surfaces:
 
 | Endpoint type                       | Client identification    | User authentication                                                                  |
 | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| Queries (`GET /xrpc/{method}`)      | `X-Client-Key` required  | Optional — provide a session if the query needs to know who the user is             |
-| Procedures (`POST /xrpc/{method}`)  | `X-Client-Key` required  | Required — a live OAuth session so HappyView can proxy writes to the user's PDS     |
-| Admin API (`/admin/*`)              | —                        | Required — must be a HappyView user with the right [permissions](../guides/permissions.md) |
+| Queries (`GET /xrpc/{method}`)      | `X-Client-Key` required  | Optional — DPoP auth if the query needs to know who the user is                     |
+| Procedures (`POST /xrpc/{method}`)  | `X-Client-Key` required  | Required — DPoP auth so HappyView can proxy writes to the user's PDS               |
+| Admin API (`/admin/*`)              | —                        | Required — session cookie, admin API key, or service auth JWT with the right [permissions](../guides/permissions.md) |
 | Health check (`GET /health`)        | —                        | —                                                                                    |
 
 ## XRPC: API client identification
@@ -48,16 +48,47 @@ curl 'https://happyview.example.com/xrpc/com.example.feed.getHot' \
   -H 'X-Client-Secret: hvs_d4e5f6...'
 ```
 
-### Logging a user in so you can call procedures
+### Authenticating users for procedures
 
-Queries that don't care who is calling need nothing more than the client key. Procedures — and queries whose Lua scripts read the caller's DID — need a real AT Protocol OAuth session. The shape of the flow:
+Queries that don't care who is calling need nothing more than the client key. Procedures — and queries whose Lua scripts read the caller's DID — need a real AT Protocol OAuth session.
 
-1. Publish a client metadata document at your API client's `client_id_url`.
-2. Redirect the user to HappyView's OAuth authorize endpoint with your `hvc_…` key as `client_id`.
-3. Exchange the authorization code at the token endpoint using your client key + `hvs_…` secret.
-4. HappyView sets a signed session cookie containing the user's DID and your client key. Subsequent XRPC requests made with that cookie are automatically attributed to your client — you don't need to also send `X-Client-Key`.
+XRPC routes only accept **DPoP auth** (`Authorization: DPoP <token>` + `DPoP` proof header + `X-Client-Key`). Bearer tokens, service auth JWTs, and session cookies are not accepted on XRPC endpoints.
+
+Third-party apps authenticate users through the [DPoP key provisioning](#dpop-key-provisioning-for-third-party-apps) flow: your app gets a DPoP keypair from HappyView, runs a standard OAuth flow with the user's PDS using that keypair, then registers the resulting tokens back with HappyView.
+
+The [JavaScript SDK](../sdk/overview.md) handles this entire flow for you:
+
+```typescript
+import { Client } from "@atproto/lex";
+import { HappyViewBrowserClient } from "@happyview/oauth-client-browser";
+import { createAgent } from "@happyview/lex-agent";
+
+const oauthClient = new HappyViewBrowserClient({
+  instanceUrl: "https://happyview.example.com",
+  clientKey: "hvc_your_client_key",
+});
+
+// Login — redirects to the user's PDS for authorization
+await oauthClient.login("alice.bsky.social");
+
+// On /oauth/callback — complete the token exchange
+const session = await oauthClient.callback();
+
+// Create a type-safe Lex client
+const agent = createAgent(session);
+const lex = new Client(agent);
+
+// Make authenticated XRPC calls
+await lex.xrpc(myLexicons.com.example.createPost, {
+  input: { text: "Hello from HappyView!" },
+});
+```
 
 For procedures, HappyView proxies the write to the user's PDS using the stored OAuth session (see [Proxying procedures](#proxying-procedures-to-the-users-pds) below).
+
+:::note
+The HappyView dashboard uses a separate cookie-based OAuth flow where HappyView itself acts as the OAuth server. This is only for the dashboard — third-party apps always use DPoP key provisioning.
+:::
 
 ## Admin API: user authentication
 
@@ -112,6 +143,10 @@ A request that only carries an `X-Client-Key` header (no session cookie or DPoP 
 Third-party apps that want HappyView to make PDS writes on behalf of their users use the **DPoP key provisioning** flow instead of cookie auth. This avoids browser-based redirects through HappyView's domain, which can be blocked by Firefox's Bounce Tracker Protection.
 
 The idea: the app gets a DPoP keypair from HappyView, uses that keypair during its own OAuth flow with the user's PDS, then registers the resulting tokens back with HappyView. From that point on, XRPC requests authenticated with `Authorization: DPoP <access_token>` plus a `DPoP` proof header and `X-Client-Key` will have HappyView proxy writes using the stored session.
+
+:::tip
+The [JavaScript SDK](../sdk/overview.md) handles this entire flow for you. The raw HTTP flow below is useful for understanding the protocol or building a non-JavaScript client.
+:::
 
 ### API clients: confidential vs public
 
@@ -245,6 +280,7 @@ This deletes the stored session and the associated DPoP key.
 
 ## Next steps
 
+- [JavaScript SDK](../sdk/overview.md) — authenticate and make XRPC calls from JavaScript
 - [Permissions](../guides/permissions.md) — full list of permissions and what each one grants
 - [API Keys](../guides/api-keys.md) — create scoped admin API keys for automation
 - [Admin API — API Clients](../reference/admin-api.md#api-clients) — register API clients and configure rate limits

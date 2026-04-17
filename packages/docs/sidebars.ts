@@ -234,6 +234,32 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "JavaScript SDK",
+      items: [
+        {
+          type: "doc",
+          id: "sdk/overview",
+          label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "sdk/lex-agent",
+          label: "Lex Agent",
+        },
+        {
+          type: "doc",
+          id: "sdk/oauth-client",
+          label: "OAuth Client",
+        },
+        {
+          type: "doc",
+          id: "sdk/oauth-client-browser",
+          label: "Browser Client",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Reference",
       items: [
         {
