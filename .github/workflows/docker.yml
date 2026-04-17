@@ -10,6 +10,7 @@ env:
 
 jobs:
   happyview:
+    if: startsWith(github.event.release.tag_name, 'v')
     permissions:
       contents: read
       packages: write
