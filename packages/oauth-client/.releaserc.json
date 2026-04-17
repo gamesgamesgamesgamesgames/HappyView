@@ -7,7 +7,10 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    ["@semantic-release/npm", { "provenance": true }],
+    ["@semantic-release/exec", {
+      "prepareCmd": "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n')\"",
+      "publishCmd": "bun publish --access public --tag ${nextRelease.channel || 'latest'}"
+    }],
     "@semantic-release/github"
   ]
 }
