@@ -2,9 +2,8 @@
 /data
 /target
 .env
-web/node_modules/
-web/.next/
-web/out/
-/build/
-/node_modules/
-/.docusaurus/
+node_modules/
+.next/
+dist/
+build/
+.docusaurus/

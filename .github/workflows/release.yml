@@ -4,17 +4,11 @@ on:
   push:
     branches: [main, dev]
     paths-ignore:
-      - "docs/**"
-      - "docusaurus.config.ts"
-      - "sidebars.ts"
-      - "static/**"
+      - "packages/docs/**"
   pull_request:
     branches: [main, dev]
     paths-ignore:
-      - "docs/**"
-      - "docusaurus.config.ts"
-      - "sidebars.ts"
-      - "static/**"
+      - "packages/docs/**"
 
 env:
   SQLX_OFFLINE: true
@@ -99,6 +93,28 @@ jobs:
         working-directory: web
         run: npm ci && npm run build
 
+  sdk:
+    runs-on: depot-ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build SDK packages
+        run: bun run --filter '@happyview/oauth-*' build
+
+      - name: Typecheck SDK packages
+        run: bun run --filter '@happyview/oauth-*' typecheck
+
+      - name: Test SDK packages
+        run: bun run --filter '@happyview/oauth-*' test
+
   lint:
     runs-on: depot-ubuntu-24.04
 
@@ -124,7 +140,7 @@ jobs:
 
   release:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
-    needs: [unit-tests, e2e-tests, frontend, lint]
+    needs: [unit-tests, e2e-tests, frontend, sdk, lint]
     runs-on: depot-ubuntu-24.04
     permissions:
       contents: write

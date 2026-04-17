@@ -1,0 +1,62 @@
+export interface CryptoAdapter {
+  generatePkceVerifier(): Promise<string>;
+  computePkceChallenge(verifier: string): Promise<string>;
+  signEs256(privateKey: JsonWebKey, payload: Uint8Array): Promise<Uint8Array>;
+  sha256(data: Uint8Array): Promise<Uint8Array>;
+  getRandomValues(length: number): Uint8Array;
+}
+
+export interface StorageAdapter {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+export interface HappyViewOAuthClientOptions {
+  instanceUrl: string;
+  clientKey: string;
+  clientSecret?: string;
+  crypto: CryptoAdapter;
+  storage?: StorageAdapter;
+}
+
+export interface DpopProvision {
+  provisionId: string;
+  dpopKey: JsonWebKey;
+}
+
+export interface RegisterSessionParams {
+  provisionId: string;
+  pkceVerifier?: string;
+  did: string;
+  accessToken: string;
+  refreshToken?: string;
+  scopes: string;
+  pdsUrl?: string;
+  issuer?: string;
+  dpopKey: JsonWebKey;
+}
+
+/**
+ * Session data persisted to storage. Note: tokens and keys are stored as-is
+ * via the StorageAdapter. In browser environments using LocalStorageAdapter,
+ * this means they are accessible to any JS on the same origin. Consider using
+ * a StorageAdapter with encryption if XSS is a concern for your application.
+ */
+export interface StoredSession {
+  did: string;
+  dpopKey: JsonWebKey;
+  accessToken: string;
+  clientKey: string;
+  instanceUrl: string;
+}
+
+export interface ProvisionKeyResponse {
+  provision_id: string;
+  dpop_key: JsonWebKey;
+}
+
+export interface RegisterSessionResponse {
+  session_id: string;
+  did: string;
+}
