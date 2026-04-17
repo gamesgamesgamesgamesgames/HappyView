@@ -4,12 +4,14 @@ on:
   push:
     branches: [main, dev]
     paths-ignore:
+      - ".github/workflows/release-sdk.yml"
       - "packages/docs/**"
       - "packages/oauth-client/**"
       - "packages/oauth-client-browser/**"
   pull_request:
     branches: [main, dev]
     paths-ignore:
+      - ".github/workflows/release-sdk.yml"
       - "packages/docs/**"
       - "packages/oauth-client/**"
       - "packages/oauth-client-browser/**"
