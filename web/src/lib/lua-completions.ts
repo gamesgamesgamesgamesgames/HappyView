@@ -26,7 +26,11 @@ export const LUA_BUILTINS = [
   "string", "table", "math", "coroutine", "utf8",
   // HappyView sandbox globals
   "input", "params", "caller_did", "collection", "method",
-  "now", "log", "TID",
+  "now", "log", "TID", "toarray", "env",
+  // Hook-specific globals
+  "action", "uri", "did", "rkey", "record",
+  // HappyView API modules
+  "http", "xrpc", "atproto",
 ];
 
 export const LUA_SNIPPETS: LuaSnippetEntry[] = [
@@ -111,6 +115,7 @@ const STATIC_COMPLETIONS: LuaCompletions = {
     { label: "delete", detail: "method", description: "Delete this record from PDS and database — r:delete()" },
     { label: "set_key_type", detail: "method", description: "Set the record key type (tid, any, nsid, literal:*) — r:set_key_type(type)" },
     { label: "set_rkey", detail: "method", description: "Set a specific rkey for this record — r:set_rkey(key)" },
+    { label: "set_repo", detail: "method", description: "Override the repo DID (instead of caller_did) — r:set_repo(did)" },
     { label: "generate_rkey", detail: "method", description: "Generate an rkey based on _key_type — r:generate_rkey()" },
     { label: "_uri", detail: "string?", description: "AT URI of the record (set after save)" },
     { label: "_cid", detail: "string?", description: "CID of the record (set after save)" },
@@ -136,12 +141,52 @@ const STATIC_COMPLETIONS: LuaCompletions = {
       description: "Count records — db.count(collection, did?) → integer",
       insertText: "count(${1:collection})",
     },
+    {
+      label: "search",
+      detail: "function",
+      description: "Search records by field value — db.search({ collection, field, query, limit? }) → { records }",
+      insertText: "search({\n\tcollection = ${1:collection},\n\tfield = ${2:\"field\"},\n\tquery = ${3:\"search term\"},\n})",
+    },
+    {
+      label: "backlinks",
+      detail: "function",
+      description: "Find records referencing a URI — db.backlinks({ collection, uri, did?, limit?, cursor? }) → { records, cursor? }",
+      insertText: "backlinks({\n\tcollection = ${1:collection},\n\turi = ${2:uri},\n})",
+    },
+    {
+      label: "raw",
+      detail: "function",
+      description: "Execute a raw SQL query — db.raw(sql, params?) → rows[]",
+      insertText: "raw(${1:\"SELECT * FROM records WHERE collection = ?\"}${2:, \\{${3}\\}})",
+    },
+    {
+      label: "backend",
+      detail: "function",
+      description: "Returns the database backend — db.backend() → \"sqlite\" or \"postgres\"",
+      insertText: "backend()",
+    },
   ],
   "db.query": [
     { label: "collection", detail: "string", description: "Collection NSID (required)" },
     { label: "did", detail: "string?", description: "Filter records by DID" },
     { label: "limit", detail: "integer?", description: "Max records to return (max 100, default 20)" },
-    { label: "offset", detail: "integer?", description: "Pagination offset (default 0)" },
+    { label: "offset", detail: "integer?", description: "Pagination offset (default 0, used with custom sort)" },
+    { label: "cursor", detail: "string?", description: "Pagination cursor from previous query" },
+    { label: "sort", detail: "string?", description: "Field name to sort by" },
+    { label: "sortDirection", detail: "string?", description: "Sort direction — \"asc\" or \"desc\" (default \"desc\")" },
+  ],
+  "db.search": [
+    { label: "collection", detail: "string", description: "Collection NSID (required)" },
+    { label: "field", detail: "string", description: "JSON field to search (required)" },
+    { label: "query", detail: "string", description: "Search term (required)" },
+    { label: "limit", detail: "integer?", description: "Max records to return (max 100, default 10)" },
+  ],
+  "db.backlinks": [
+    { label: "collection", detail: "string", description: "Collection NSID (required)" },
+    { label: "uri", detail: "string", description: "Target URI to find references to (required)" },
+    { label: "did", detail: "string?", description: "Filter by DID" },
+    { label: "limit", detail: "integer?", description: "Max records to return (max 100, default 20)" },
+    { label: "cursor", detail: "string?", description: "Pagination cursor" },
   ],
   "db.query_result": [
     { label: "records", detail: "table[]", description: "Array of record tables (each includes uri)" },
@@ -218,6 +263,32 @@ const STATIC_COMPLETIONS: LuaCompletions = {
     { label: "codes", detail: "function", description: "Iterator over UTF-8 codepoints — utf8.codes(s [, lax])" },
     { label: "len", detail: "function", description: "UTF-8 string length — utf8.len(s [, i [, j [, lax]]])" },
     { label: "offset", detail: "function", description: "Byte offset of nth character — utf8.offset(s, n [, i])" },
+  ],
+  // HappyView HTTP API
+  http: [
+    { label: "get", detail: "function", description: "HTTP GET request — http.get(url, options?) → {status, body, headers}", insertText: "get(${1:url})" },
+    { label: "post", detail: "function", description: "HTTP POST request — http.post(url, options?) → {status, body, headers}", insertText: "post(${1:url}, {\n\theaders = { [\"content-type\"] = \"application/json\" },\n\tbody = ${2:body},\n})" },
+    { label: "put", detail: "function", description: "HTTP PUT request — http.put(url, options?) → {status, body, headers}", insertText: "put(${1:url}, {\n\tbody = ${2:body},\n})" },
+    { label: "patch", detail: "function", description: "HTTP PATCH request — http.patch(url, options?) → {status, body, headers}", insertText: "patch(${1:url}, {\n\tbody = ${2:body},\n})" },
+    { label: "delete", detail: "function", description: "HTTP DELETE request — http.delete(url, options?) → {status, body, headers}", insertText: "delete(${1:url})" },
+    { label: "head", detail: "function", description: "HTTP HEAD request — http.head(url, options?) → {status, headers}", insertText: "head(${1:url})" },
+  ],
+  "http.options": [
+    { label: "headers", detail: "table?", description: "Request headers as key-value pairs" },
+    { label: "body", detail: "string?", description: "Request body (for POST, PUT, PATCH, DELETE)" },
+  ],
+  // HappyView XRPC API
+  xrpc: [
+    { label: "query", detail: "function", description: "XRPC query — xrpc.query(method, params?) → {status, body}", insertText: "query(${1:\"com.atproto.repo.describeRepo\"}, {\n\t${2}\n})" },
+    { label: "procedure", detail: "function", description: "XRPC procedure (requires caller_did) — xrpc.procedure(method, input, params?) → {status, body}", insertText: "procedure(${1:\"method\"}, {\n\t${2}\n})" },
+  ],
+  // HappyView AT Protocol API
+  atproto: [
+    { label: "resolve_service_endpoint", detail: "function", description: "Resolve a DID to its PDS endpoint URL — atproto.resolve_service_endpoint(did) → string or nil", insertText: "resolve_service_endpoint(${1:did})" },
+    { label: "get_labels", detail: "function", description: "Get labels for a URI — atproto.get_labels(uri) → label[]", insertText: "get_labels(${1:uri})" },
+    { label: "get_labels_batch", detail: "function", description: "Get labels for multiple URIs — atproto.get_labels_batch({uri1, uri2}) → {[uri]: label[]}", insertText: "get_labels_batch(${1:uris})" },
+    { label: "sign", detail: "function", description: "Sign a record (requires attestation signer) — atproto.sign(record) → signature", insertText: "sign(${1:record})" },
+    { label: "verify_signature", detail: "function", description: "Verify a record signature — atproto.verify_signature(record, sig, repo_did) → boolean", insertText: "verify_signature(${1:record}, ${2:sig}, ${3:repo_did})" },
   ],
 };
 

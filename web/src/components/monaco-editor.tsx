@@ -317,10 +317,13 @@ export function MonacoEditor({
                     position.column - 1,
                   );
 
-                  // Inside db.query({ ... }) — suggest option keys
-                  if (/db\.query\(\s*\{[^}]*$/.test(textBeforeCursor)) {
+                  // Inside db.query/search/backlinks({ ... }) — suggest option keys
+                  const dbOptionsMatch = textBeforeCursor.match(
+                    /db\.(query|search|backlinks)\(\s*\{[^}]*$/,
+                  );
+                  if (dbOptionsMatch) {
                     const optionEntries =
-                      completionsRef.current?.["db.query"] ?? [];
+                      completionsRef.current?.[`db.${dbOptionsMatch[1]}`] ?? [];
                     if (optionEntries.length) {
                       // Check for collection = " inside db.query — offer NSID completions
                       const collectionQuoteMatch = textBeforeCursor.match(
@@ -366,7 +369,7 @@ export function MonacoEditor({
                     }
                   }
 
-                  // Collection NSID completions for collection = " (outside db.query) and db.count
+                  // Collection NSID completions for collection = " (outside db options) and db.count
                   const collectionAssignMatch = textBeforeCursor.match(
                     /(?:db\.count\(\s*"([^"]*)$|collection\s*=\s*"([^"]*)$)/,
                   );

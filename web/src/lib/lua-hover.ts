@@ -52,12 +52,21 @@ export const HOVER_DOCS = new Map<string, HoverEntry>([
   // ── HappyView sandbox globals ─────────────────────────────────────────
   ["input", { signature: "input", description: "Procedure input table (from request body)" }],
   ["params", { signature: "params", description: "Query parameters table (from URL query string)" }],
-  ["caller_did", { signature: "caller_did", description: "DID of the authenticated caller" }],
+  ["caller_did", { signature: "caller_did", description: "DID of the authenticated caller (nil for unauthenticated queries)" }],
   ["collection", { signature: "collection", description: "Target collection NSID for this lexicon" }],
   ["method", { signature: "method", description: "XRPC method name being called" }],
+  ["env", { signature: "env", description: "Script variables table (configured per-lexicon in the dashboard)" }],
   ["now", { signature: "now()", description: "Current UTC timestamp as ISO 8601 string" }],
   ["log", { signature: "log(···)", description: "Log values to server console" }],
   ["TID", { signature: "TID()", description: "Generate a new TID (timestamp identifier)" }],
+  ["toarray", { signature: "toarray(table)", description: "Mark a table as a JSON array for serialization (ensures empty tables serialize as [] not {})" }],
+
+  // ── Hook-specific globals ────────────────────────────────────────────
+  ["action", { signature: "action", description: "Hook action type — \"create\", \"update\", or \"delete\"" }],
+  ["uri", { signature: "uri", description: "AT URI of the record being processed" }],
+  ["did", { signature: "did", description: "DID of the repo owner" }],
+  ["rkey", { signature: "rkey", description: "Record key of the record being processed" }],
+  ["record", { signature: "record", description: "Record data table (nil on delete actions)" }],
 
   // ── string module ─────────────────────────────────────────────────────
   ["string.byte", { signature: "string.byte(s [, i [, j]])", description: "Returns internal numeric codes of characters", module: "string" }],
@@ -139,10 +148,34 @@ export const HOVER_DOCS = new Map<string, HoverEntry>([
   ["Record:delete", { signature: "record:delete()", description: "Delete this record from PDS and database" }],
   ["Record:set_key_type", { signature: "record:set_key_type(type)", description: "Set the record key type (tid, any, nsid, literal:*)" }],
   ["Record:set_rkey", { signature: "record:set_rkey(key)", description: "Set a specific rkey for this record" }],
+  ["Record:set_repo", { signature: "record:set_repo(did)", description: "Override the repo DID (write to a different user's repo instead of caller_did)" }],
   ["Record:generate_rkey", { signature: "record:generate_rkey()", description: "Generate an rkey based on the record's _key_type" }],
 
   // ── HappyView db API ──────────────────────────────────────────────────
-  ["db.query", { signature: "db.query({collection, did?, limit?, offset?})", description: "Query records — returns {records, cursor?}", module: "db" }],
+  ["db.query", { signature: "db.query({collection, did?, limit?, offset?, cursor?, sort?, sortDirection?})", description: "Query records — returns {records, cursor?}", module: "db" }],
   ["db.get", { signature: "db.get(uri)", description: "Get a single record by AT URI — returns record or nil", module: "db" }],
   ["db.count", { signature: "db.count(collection [, did])", description: "Count records in a collection", module: "db" }],
+  ["db.search", { signature: "db.search({collection, field, query, limit?})", description: "Search records by field value — returns {records}", module: "db" }],
+  ["db.backlinks", { signature: "db.backlinks({collection, uri, did?, limit?, cursor?})", description: "Find records that reference a URI via record_refs — returns {records, cursor?}", module: "db" }],
+  ["db.raw", { signature: "db.raw(sql [, params])", description: "Execute a raw SQL query — returns array of row tables", module: "db" }],
+  ["db.backend", { signature: "db.backend()", description: "Returns the database backend — \"sqlite\" or \"postgres\"", module: "db" }],
+
+  // ── HappyView HTTP API ───────────────────────────────────────────────
+  ["http.get", { signature: "http.get(url [, options])", description: "HTTP GET request — returns {status, body, headers}", module: "http" }],
+  ["http.post", { signature: "http.post(url [, options])", description: "HTTP POST request — returns {status, body, headers}", module: "http" }],
+  ["http.put", { signature: "http.put(url [, options])", description: "HTTP PUT request — returns {status, body, headers}", module: "http" }],
+  ["http.patch", { signature: "http.patch(url [, options])", description: "HTTP PATCH request — returns {status, body, headers}", module: "http" }],
+  ["http.delete", { signature: "http.delete(url [, options])", description: "HTTP DELETE request — returns {status, body, headers}", module: "http" }],
+  ["http.head", { signature: "http.head(url [, options])", description: "HTTP HEAD request — returns {status, headers}", module: "http" }],
+
+  // ── HappyView XRPC API ──────────────────────────────────────────────
+  ["xrpc.query", { signature: "xrpc.query(method [, params])", description: "Make an XRPC query to a PDS — returns {status, body} where body is JSON string", module: "xrpc" }],
+  ["xrpc.procedure", { signature: "xrpc.procedure(method, input [, params])", description: "Make an XRPC procedure call (requires caller_did) — returns {status, body}", module: "xrpc" }],
+
+  // ── HappyView AT Protocol API ────────────────────────────────────────
+  ["atproto.resolve_service_endpoint", { signature: "atproto.resolve_service_endpoint(did)", description: "Resolve a DID to its PDS endpoint URL — returns string or nil", module: "atproto" }],
+  ["atproto.get_labels", { signature: "atproto.get_labels(uri)", description: "Get labels for a URI — returns array of {src, uri, val, cts}", module: "atproto" }],
+  ["atproto.get_labels_batch", { signature: "atproto.get_labels_batch({uri1, uri2, ...})", description: "Get labels for multiple URIs — returns table keyed by URI", module: "atproto" }],
+  ["atproto.sign", { signature: "atproto.sign(record)", description: "Sign a record (requires attestation signer, procedure scripts only) — returns signature object", module: "atproto" }],
+  ["atproto.verify_signature", { signature: "atproto.verify_signature(record, sig, repo_did)", description: "Verify a record signature — returns boolean", module: "atproto" }],
 ]);
