@@ -80,6 +80,9 @@ jobs:
             fs.writeFileSync('packages/oauth-client-browser/package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      - name: Remove bun.lock to prevent npm workspace parse errors
+        run: rm -f bun.lock
+
       - name: Release oauth-client
         env:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
@@ -132,6 +135,9 @@ jobs:
               fs.writeFileSync('packages/oauth-client-browser/package.json', JSON.stringify(pkg, null, 2) + '\n');
             }
           "
+
+      - name: Remove bun.lock to prevent npm workspace parse errors
+        run: rm -f bun.lock
 
       - name: Release oauth-client-browser
         env:
