@@ -64,11 +64,13 @@ jobs:
       - name: Build oauth-client
         run: bun run --filter '@happyview/oauth-client' build
 
+      - name: Configure npm auth for bun publish
+        run: echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > .npmrc
+
       - name: Release oauth-client
         env:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          BUN_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         working-directory: packages/oauth-client
         run: npx semantic-release
 
@@ -99,10 +101,12 @@ jobs:
       - name: Build SDK packages
         run: bun run --filter '@happyview/oauth-*' build
 
+      - name: Configure npm auth for bun publish
+        run: echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > .npmrc
+
       - name: Release oauth-client-browser
         env:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          BUN_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         working-directory: packages/oauth-client-browser
         run: npx semantic-release
