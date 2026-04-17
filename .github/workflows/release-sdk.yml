@@ -64,6 +64,20 @@ jobs:
       - name: Build oauth-client
         run: bun run --filter '@happyview/oauth-client' build
 
+      - name: Resolve workspace protocols for npm compatibility
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('packages/oauth-client-browser/package.json', 'utf8'));
+            for (const [dep, ver] of Object.entries(pkg.dependencies || {})) {
+              if (ver.startsWith('workspace:')) {
+                const depPkg = JSON.parse(fs.readFileSync('packages/oauth-client/package.json', 'utf8'));
+                pkg.dependencies[dep] = '^' + depPkg.version;
+              }
+            }
+            fs.writeFileSync('packages/oauth-client-browser/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
       - name: Release oauth-client
         env:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
@@ -108,12 +122,12 @@ jobs:
             DIST_TAG="dev"
           fi
           CORE_VERSION=$(npm view @happyview/oauth-client@${DIST_TAG} version)
-          cd packages/oauth-client-browser
           node -e "
-            const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('packages/oauth-client-browser/package.json', 'utf8'));
             if (pkg.dependencies['@happyview/oauth-client']?.startsWith('workspace:')) {
               pkg.dependencies['@happyview/oauth-client'] = '^${CORE_VERSION}';
-              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              fs.writeFileSync('packages/oauth-client-browser/package.json', JSON.stringify(pkg, null, 2) + '\n');
             }
           "
 
