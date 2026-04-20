@@ -271,7 +271,7 @@ async fn run_backfill_job(state: AppState, job_id: String, body: CreateBackfillB
         vec![col.clone()]
     } else {
         let sql = adapt_sql(
-            "SELECT id FROM lexicons WHERE backfill = 1 AND json_extract(lexicon_json, '$.defs.main.type') = 'record'",
+            "SELECT id FROM lexicons WHERE json_extract(lexicon_json, '$.defs.main.type') = 'record'",
             backend,
         );
         let rows: Vec<(String,)> = match sqlx::query_as(&sql).fetch_all(&state.db).await {
