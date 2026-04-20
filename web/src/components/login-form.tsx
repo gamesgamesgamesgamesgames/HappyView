@@ -28,7 +28,7 @@ export function LoginForm({
     setLoading(true)
     setError(null)
     try {
-      await login(handle.trim())
+      await login(handle.trim().toLowerCase())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Login failed")
       setLoading(false)
