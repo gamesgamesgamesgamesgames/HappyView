@@ -379,6 +379,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: "doc",
+              id: "reference/lua/utility-globals",
+              label: "Utility Globals",
+            },
+            {
+              type: "doc",
               id: "reference/lua/standard-libraries",
               label: "Standard Libraries",
             },
