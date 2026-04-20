@@ -174,7 +174,14 @@ function CreateDialog({
       <ResponsiveDialogTrigger asChild>
         <Button>Create Backfill Job</Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent>
+      <ResponsiveDialogContent
+        onInteractOutside={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("[data-slot='combobox-item'], [data-slot='combobox-content']")) {
+            e.preventDefault();
+          }
+        }}
+      >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Create Backfill Job</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -186,19 +193,23 @@ function CreateDialog({
           {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex flex-col gap-2">
             <Label>Collection (optional)</Label>
-            <Combobox value={collection} onValueChange={setCollection}>
+            <Combobox
+              value={collection}
+              onValueChange={setCollection}
+              items={recordLexicons}
+            >
               <ComboboxInput
                 placeholder="Select or type a collection..."
                 showClear
               />
               <ComboboxContent>
+                <ComboboxEmpty>No matching lexicons.</ComboboxEmpty>
                 <ComboboxList>
-                  <ComboboxEmpty>No matching lexicons.</ComboboxEmpty>
-                  {recordLexicons.map((id) => (
-                    <ComboboxItem key={id} value={id}>
-                      {id}
+                  {(item: string) => (
+                    <ComboboxItem key={item} value={item}>
+                      {item}
                     </ComboboxItem>
-                  ))}
+                  )}
                 </ComboboxList>
               </ComboboxContent>
             </Combobox>
