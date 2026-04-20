@@ -39,18 +39,21 @@ end
 ```sh
 # Create
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setRecord \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "status": "hello" }'
 
 # Update
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setRecord \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "uri": "at://did:plc:abc/xyz.statusphere.record/abc123", "status": "updated" }'
 
 # Delete
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setRecord \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "uri": "at://did:plc:abc/xyz.statusphere.record/abc123", "delete": true }'

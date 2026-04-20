@@ -145,7 +145,7 @@ Requires `plugins:read`. Returns the cached catalog of plugins from the official
 DELETE /admin/plugins/{id}
 ```
 
-Requires `plugins:delete`. Unregisters the plugin from the runtime and deletes its row from the `plugins` table. Plugin secrets in `plugin_configs` are not removed automatically — they're available again if you reinstall the same plugin.
+Requires `plugins:delete`. Unregisters the plugin from the runtime and deletes its row from the `plugins` table. Secrets stay in `plugin_configs`, so they're reused if you reinstall.
 
 **Response**: `204 No Content`. Returns `404 Not Found` if no plugin with that id is loaded.
 

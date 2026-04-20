@@ -19,7 +19,7 @@ Click **Add Lexicon** and choose **Local** or **Network**.
 
 The Lua panel only appears when the lexicon's `defs.main.type` is `query` or `procedure`. For record-type lexicons, only the JSON panel is shown.
 
-A default Lua script is auto-generated when you first set the type to query or procedure. The template updates automatically when the type changes, but once you manually edit the script your changes are preserved.
+HappyView generates a default Lua script when you first set the type to query or procedure. The template updates when the type changes, but once you edit the script your changes are preserved.
 
 Toggle **Enable backfill** to index historical records when uploading a record-type lexicon.
 
@@ -35,7 +35,7 @@ The JSON editor provides real-time validation against the AT Protocol Lexicon v1
 
 ### Lua editor
 
-The Lua editor provides context-aware code completions, including suggestions for the `Record`, `db`, `input`, and `params` APIs as well as Lua keywords, builtins, and standard library functions. It also offers snippet templates for common constructs like `if`, `for`, and `function`.
+The Lua editor provides context-aware code completions, including suggestions for the `Record`, `db`, `input`, and `params` APIs as well as Lua keywords, builtins, and standard library functions. It also has snippets for `if`, `for`, `function`, etc.
 
 See [Lua Scripting](../guides/scripting.md) for the full runtime reference and examples.
 

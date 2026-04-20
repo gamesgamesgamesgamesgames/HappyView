@@ -73,7 +73,7 @@ For a deeper check, hit `GET /xrpc/com.atproto.server.describeServer` — this e
 - **SQLite**: back up the database file (e.g. `data/happyview.db`) plus its `-wal` and `-shm` sidecar files. Use `sqlite3 happyview.db ".backup '/path/backup.db'"` for a consistent snapshot while HappyView is running.
 - **Postgres**: standard `pg_dump` / managed-Postgres snapshots.
 
-Most of what HappyView stores is derivable from the network — lost records can be re-indexed via [backfill](../guides/backfill.md). What you cannot recover from the network: user accounts and permissions, API keys, API clients, plugin secrets, and the Jetstream cursor. Prioritize those in your backup plan.
+Most of what HappyView stores is derivable from the network — lost records can be re-indexed via [backfill](../guides/backfill.md). You can't recover from the network: user accounts and permissions, API keys, API clients, plugin secrets, and the Jetstream cursor. Prioritize those in your backup plan.
 
 ## Next steps
 

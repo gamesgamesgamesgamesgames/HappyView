@@ -1,6 +1,6 @@
 # Admin API: Domains
 
-Manage the domains a HappyView instance serves. Each domain gets its own AT Protocol OAuth client identity. The primary domain is auto-seeded from `PUBLIC_URL` on first boot. All endpoints require the `settings:manage` permission.
+Manage the domains a HappyView instance serves. Each domain gets its own AT Protocol OAuth client identity. The primary domain is set from `PUBLIC_URL` on first boot. All endpoints require the `settings:manage` permission.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)
@@ -62,7 +62,7 @@ Returns `400 Bad Request` if the URL is invalid or already registered.
 }
 ```
 
-Side effects: builds an OAuth client for the domain, updates the in-memory domain cache.
+Also builds an OAuth client for the domain and updates the in-memory cache.
 
 ## Remove a domain
 
@@ -79,7 +79,7 @@ Returns `400 Bad Request` if the domain is primary — set a different domain as
 
 **Response**: `204 No Content`
 
-Side effects: removes the domain's OAuth client and cache entry.
+Also removes the domain's OAuth client and cache entry.
 
 ## Set primary domain
 
@@ -96,4 +96,4 @@ Sets the target domain as the primary. Unsets the current primary in a single op
 
 **Response**: `204 No Content`
 
-Side effects: updates the in-memory cache and the OAuth client registry's primary client reference.
+Also updates the in-memory cache and primary client reference.

@@ -38,4 +38,4 @@ GET /xrpc/xyz.statusphere.listRecords?uri=at://did:plc:abc/xyz.statusphere.recor
 
 ## Use case
 
-This is a good default query script when you want a single endpoint that serves double duty: list browsing for feeds/timelines and direct record fetching for detail views.
+Useful when one endpoint needs to handle both listing and single-record fetches.

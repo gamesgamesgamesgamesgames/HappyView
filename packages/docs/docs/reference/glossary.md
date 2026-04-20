@@ -10,7 +10,7 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **Firehose** — A real-time stream of all record events (creates, updates, deletes) across the AT Protocol network. HappyView consumes a filtered slice of this via [Jetstream](https://github.com/bluesky-social/jetstream).
 
-**Handle** — A human-readable name for an account (e.g. `user.bsky.social`). Handles resolve to a DID via DNS or the PLC directory.
+**Handle** — A human-readable name for an account (e.g. `user.bsky.social`). Handles resolve to a DID via a DNS TXT record or an HTTP `.well-known/atproto-did` lookup.
 
 **Lexicon** — A schema definition for AT Protocol data types and API methods. Lexicons define what records look like, what endpoints exist, and what parameters they accept. See [Lexicons](../guides/lexicons.md).
 
@@ -30,11 +30,11 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **XRPC** — The HTTP-based RPC protocol used by the AT Protocol. Query methods map to GET requests, procedure methods map to POST requests. See [XRPC API](xrpc-api.md).
 
+**Jetstream** — A [filtered firehose](https://github.com/bluesky-social/jetstream) that delivers atproto record commit events as JSON over WebSocket. Not part of the core AT Protocol spec, but widely used. HappyView subscribes to Jetstream with a collection filter built from its indexed record lexicons, and persists a cursor for resume on reconnect.
+
 ## HappyView-specific terms
 
 **Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and fetches each repo's records directly from its PDS. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/backfill.md).
-
-**Jetstream** — A [filtered firehose](https://github.com/bluesky-social/jetstream) maintained by Bluesky that delivers AT Protocol record commit events as JSON over WebSocket. HappyView subscribes to Jetstream with a collection filter built from its indexed record lexicons, and persists a cursor for resume on reconnect.
 
 **Network lexicon** — A lexicon fetched directly from the AT Protocol network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons).
 

@@ -22,6 +22,7 @@ end
 
 ```sh
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.createRecord \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "text": "Hello world", "createdAt": "2025-01-01T00:00:00Z" }'

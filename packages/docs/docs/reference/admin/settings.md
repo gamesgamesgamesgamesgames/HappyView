@@ -1,6 +1,6 @@
 # Admin API: Instance Settings
 
-Instance settings are key/value entries used to override environment-variable defaults at runtime (for example, the application name, terms-of-service URL, privacy policy URL, and uploaded logo). Settings stored here take precedence over the corresponding environment variables. All endpoints require the `settings:manage` permission.
+Instance settings override environment variables at runtime — things like app name, ToS URL, privacy policy URL, and logo. Settings stored here take precedence over their env var equivalents. All endpoints require the `settings:manage` permission.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

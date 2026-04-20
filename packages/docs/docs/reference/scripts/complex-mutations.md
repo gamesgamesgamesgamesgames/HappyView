@@ -68,6 +68,7 @@ end
 
 ```sh
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.updatePost \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

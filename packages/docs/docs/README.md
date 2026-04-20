@@ -6,11 +6,15 @@ Building an AppView from scratch means wiring up real-time event streams, record
 
 ## Features
 
-- **Schema-driven endpoints.** Upload a [lexicon](guides/lexicons.md) and HappyView generates XRPC query and procedure routes, storage, and indexing from it — updatable at runtime with no restart.
-- **Network sync built in.** Real-time record streaming via [Jetstream](https://github.com/bluesky-social/jetstream), historical [backfill](guides/backfill.md) from each user's PDS, and AT Protocol OAuth with DPoP-bound proxy writes back to the PDS.
-- **Customize with Lua, hooks, and plugins.** [Lua scripts](guides/scripting.md) for query and procedure logic, [index hooks](guides/index-hooks.md) that fire on every record change, WASM [plugins](guides/plugins.md) for external platform integration, and [labeler](guides/labelers.md) subscriptions for content moderation.
-- **Protocol-native.** Works with any PDS, resolves DIDs through the directory, and fetches [network lexicons](guides/lexicons.md#network-lexicons) via DNS authority resolution.
-- **Full admin surface.** Built-in [dashboard](getting-started/dashboard.md) and [admin API](reference/admin-api.md) for managing lexicons, users, API keys, API clients, backfill jobs, and plugins.
+- **Schema-driven endpoints:** Upload a [lexicon](guides/lexicons.md) and HappyView generates XRPC query and procedure routes, storage, and indexing from it — updatable at runtime with no restart.
+
+- **Network sync built in:** Real-time record streaming via [Jetstream](https://github.com/bluesky-social/jetstream), historical [backfill](guides/backfill.md) from each user's PDS, and AT Protocol OAuth with DPoP-bound proxy writes back to the PDS.
+
+- **Customize with Lua, hooks, and plugins:** [Lua scripts](guides/scripting.md) for query and procedure logic, [index hooks](guides/index-hooks.md) that fire on every record change, WASM [plugins](guides/plugins.md) for external platform integration, and [labeler](guides/labelers.md) subscriptions for content moderation.
+
+- **Protocol-native:** Works with any PDS, resolves DIDs through the directory, and fetches [network lexicons](guides/lexicons.md#network-lexicons) via DNS authority resolution.
+
+- **Full admin surface:** Built-in [dashboard](getting-started/dashboard.md) and [admin API](reference/admin-api.md) for managing lexicons, users, API keys, API clients, backfill jobs, and plugins.
 
 ## Design Principles
 

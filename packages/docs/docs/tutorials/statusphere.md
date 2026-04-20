@@ -2,7 +2,7 @@
 
 [Statusphere](https://github.com/bluesky-social/statusphere-example-app) is an example AT Protocol application where users set their current status as a single emoji. It's a great way to learn how HappyView works because the data model is simple but the queries are interesting.
 
-In this tutorial, you'll set up HappyView to act as the AppView for Statusphere. By the end, you'll have automatically indexed records and automatically generated XPRC endpoints.
+In this tutorial, you'll set up HappyView to act as the AppView for Statusphere. By the end, you'll have indexed records and working XRPC endpoints.
 
 :::tip
 This tutorial assumes you have a running HappyView instance. If you don't, start with the [Quickstart](../getting-started/deployment/railway.md) or one of the local development guides ([Docker](../getting-started/deployment/docker.md), [from source](../getting-started/deployment/other.md)).

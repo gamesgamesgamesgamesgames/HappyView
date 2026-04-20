@@ -62,7 +62,7 @@ const config: Config = {
       additionalLanguages: ["lua"],
     },
     footer: {
-      copyright: `Copyright \u00a9 ${new Date().getFullYear()} [Birbhouse Games](https://birb.house).`,
+      copyright: `Copyright \u00a9 ${new Date().getFullYear()} <a href="https://birb.house">Birbhouse Games</a>.`,
     },
   } satisfies Preset.ThemeConfig,
 };

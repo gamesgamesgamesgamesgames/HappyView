@@ -41,6 +41,7 @@ end
 
 ```sh
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.createPost \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "text": "Hello world", "lang": "en", "source": "web" }'

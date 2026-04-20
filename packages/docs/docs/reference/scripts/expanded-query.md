@@ -78,6 +78,6 @@ GET /xrpc/xyz.statusphere.listStatusesWithProfiles?cursor=<opaque>&limit=20
 
 ## Use case
 
-This pattern avoids N+1 queries (fetching each author's profile individually) on the client side. Instead of fetching statuses and then making a separate request for each user's profile, the client gets everything in one call. The deduplication step ensures each profile is loaded only once even if multiple statuses are from the same user.
+This avoids N+1 queries on the client side — the client gets statuses and profiles in one call. The deduplication step loads each profile only once even if multiple statuses share an author.
 
-Note that `Record.load_all` reads from HappyView's local index. Profiles only appear if `app.bsky.actor.profile` is also being indexed. If a profile hasn't been indexed yet, it's silently omitted from the response.
+`Record.load_all` reads from HappyView's local index. Profiles only appear if `app.bsky.actor.profile` is also indexed. Missing profiles are skipped.

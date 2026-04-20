@@ -42,6 +42,7 @@ end
 ```sh
 # Create: no rkey, so a new TID is generated
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "status": "hello" }'
@@ -49,6 +50,7 @@ curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
 
 # Update: pass the rkey back to update the same record
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "rkey": "3abc123", "status": "updated" }'

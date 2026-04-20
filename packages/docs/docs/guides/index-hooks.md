@@ -1,8 +1,8 @@
 # Index Hooks
 
-Index hooks are Lua scripts that run automatically whenever a record in a collection is created, updated, or deleted on the network. They run **before** the record is indexed, giving you the ability to filter out unwanted records, transform record data before storage, or trigger side effects like syncing with external services.
+Index hooks are Lua scripts that run whenever a record in a collection is created, updated, or deleted. They run **before** the record is indexed, giving you the ability to filter out unwanted records, transform record data before storage, or trigger side effects like syncing with external services.
 
-Unlike [query and procedure scripts](scripting.md) that run in response to XRPC requests, index hooks are triggered by incoming Jetstream events.
+Index hooks fire on **all** record events for the collection — including records created by HappyView procedure endpoints, not just events from the network. Unlike [query and procedure scripts](scripting.md) that run in response to XRPC requests, index hooks are triggered by incoming Jetstream events (which include events caused by HappyView's own PDS writes).
 
 ## Attaching a hook
 
@@ -19,6 +19,7 @@ function handle()
   else
     log(action .. " " .. uri)
   end
+  return true
 end
 ```
 

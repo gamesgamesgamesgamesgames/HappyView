@@ -93,14 +93,18 @@ db.raw("INSERT INTO my_table (id, value) VALUES ($1, $2) ON CONFLICT (id) DO UPD
 
 Parameters are passed as an array and bound to `$1`, `$2`, etc. Supported parameter types: strings, integers, numbers, booleans, and nil.
 
+### SQL dialect
+
+Write SQL in **SQLite syntax** — HappyView translates it to Postgres at runtime if you're using Postgres. See [Database Setup](../../guides/database-setup.md) for details on what gets translated. If you need database-specific SQL that can't be translated, check `db.is_postgres()` at runtime.
+
 ### Column type mapping
 
-| Postgres type          | Lua type |
-| ---------------------- | -------- |
-| `TEXT`, `VARCHAR`      | string   |
-| `INT4`, `INT8`         | integer  |
-| `FLOAT4`, `FLOAT8`     | number   |
-| `BOOL`                 | boolean  |
-| `JSON`, `JSONB`        | table    |
-| `TIMESTAMPTZ`          | string (ISO 8601) |
-| Other                  | string (fallback)  |
+| SQLite type            | Postgres type          | Lua type |
+| ---------------------- | ---------------------- | -------- |
+| `TEXT`                 | `TEXT`, `VARCHAR`      | string   |
+| `INTEGER`              | `INT4`, `INT8`         | integer  |
+| `REAL`                 | `FLOAT4`, `FLOAT8`     | number   |
+| `INTEGER` (0/1)        | `BOOL`                 | boolean  |
+| `TEXT` (JSON)          | `JSON`, `JSONB`        | table    |
+| `TEXT` (ISO 8601)      | `TIMESTAMPTZ`          | string (ISO 8601) |
+| Other                  | Other                  | string (fallback)  |

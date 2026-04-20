@@ -1,8 +1,10 @@
 # Admin API: API Clients
 
-API clients represent third-party applications that call HappyView's XRPC endpoints. **Every XRPC request** — including unauthenticated queries — must identify itself with a registered client via the `X-Client-Key` header (or `client_key` query param). The client key is HappyView's rate-limit bucket and caller identity; a request without one gets `401 Unauthorized`.
+API clients identify third-party applications that call HappyView's XRPC endpoints. Every request — authenticated or not — needs an `X-Client-Key` header (or `client_key` query param). Requests without one get `401 Unauthorized`. The client key is HappyView's rate-limit bucket.
 
-Each client has an `hvc_`-prefixed client key and an `hvs_`-prefixed client secret. The secret is only returned once (at creation) and is sha256-hashed in the database. Server-to-server callers pass the secret as `X-Client-Secret`; browser callers rely on the `Origin` header matching the client's registered `client_uri`. Both checks currently log warnings on mismatch rather than rejecting the request, but the rate-limit bucket is applied either way. See [Authentication — XRPC](../../getting-started/authentication.md#xrpc-api-client-identification) for the client-side view, and the [API Keys guide](../../guides/api-keys.md) for how admin API keys differ from API clients.
+A single API client represents your application, not individual users. Create one client for your app and use the same client key across all instances. Users authenticate separately via OAuth — the client key identifies _your app_, not _who is using it_.
+
+Each client has an `hvc_`-prefixed client key and an `hvs_`-prefixed client secret. The secret is only returned at creation and is sha256-hashed in the database. Server-to-server callers pass the secret as `X-Client-Secret`. Browser callers use the `Origin` header, which is matched against the client's `client_uri`. Mismatches currently log warnings rather than rejecting the request, but rate limiting applies either way. See [Authentication — XRPC](../../getting-started/authentication.md#xrpc-api-client-identification) for the client-side view, and the [API Keys guide](../../guides/api-keys.md) for how admin API keys differ from API clients.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)
@@ -49,7 +51,7 @@ curl http://localhost:3000/admin/api-clients -H "$AUTH"
 POST /admin/api-clients
 ```
 
-Requires `api-clients:create`. Generates a fresh `client_key` and `client_secret`. **The secret is only returned in this response** — store it immediately.
+Requires `api-clients:create`. Generates a `client_key` and `client_secret`. Store the secret — it won't be shown again.
 
 ```sh
 curl -X POST http://localhost:3000/admin/api-clients \

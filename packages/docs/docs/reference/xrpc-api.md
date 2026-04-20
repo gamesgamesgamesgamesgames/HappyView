@@ -37,6 +37,7 @@ Returns the authenticated user's profile, resolved from their PDS via PLC direct
 
 ```sh
 curl http://localhost:3000/xrpc/app.bsky.actor.getProfile \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -62,6 +63,7 @@ Proxies a blob upload to the authenticated user's PDS. Maximum size: 50MB.
 
 ```sh
 curl -X POST http://localhost:3000/xrpc/com.atproto.repo.uploadBlob \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: image/png" \
   --data-binary @image.png
@@ -80,7 +82,8 @@ GET /xrpc/{method}?uri={at-uri}
 ```
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?uri=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fxyz.statusphere.status%2Fabc123"
+curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?uri=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fxyz.statusphere.status%2Fabc123" \
+  -H "X-Client-Key: $CLIENT_KEY"
 ```
 
 **Response**: `200 OK`
@@ -111,7 +114,8 @@ GET /xrpc/{method}?limit=20&cursor=<opaque>&did=optional
 | `did` | string | --- | Filter records by DID |
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=10&did=did:plc:abc"
+curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=10&did=did:plc:abc" \
+  -H "X-Client-Key: $CLIENT_KEY"
 ```
 
 **Response**: `200 OK`
@@ -145,6 +149,7 @@ When the body does **not** contain a `uri` field, a new record is created.
 
 ```sh
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "status": "\ud83d\ude0a", "createdAt": "2025-01-01T12:00:00Z" }'
@@ -158,6 +163,7 @@ When the body **contains** a `uri` field, the existing record is updated.
 
 ```sh
 curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+  -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

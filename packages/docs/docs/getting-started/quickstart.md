@@ -24,10 +24,10 @@ Lexicons tell HappyView what data to index and what endpoints to serve. The quic
 
 1. In the dashboard, go to **Lexicons > Add Lexicon > Network**
 2. Enter an NSID (e.g. `xyz.statusphere.status`)
-3. HappyView resolves the schema from the AT Protocol network and shows a preview
+3. HappyView [resolves the schema](https://atproto.com/specs/lexicon#lexicon-publication-and-resolution) from its authority domain records and shows a preview
 4. Click **Add**
 
-HappyView immediately starts indexing records for that collection. A backfill job is created to fetch historical records, and new records stream in via Jetstream in real time.
+HappyView starts indexing records for that collection. A backfill job fetches historical records, and new records stream in via Jetstream.
 
 You can also upload lexicons manually via the dashboard or the [admin API](../reference/admin-api.md). See [Lexicons](../guides/lexicons.md) for the full details.
 
@@ -37,7 +37,7 @@ The dashboard home shows a live record count and a per-collection breakdown. For
 
 ## 5. Query your data
 
-Once you have a record lexicon indexed, add a query lexicon to expose a read endpoint. Go to **Lexicons > Add Lexicon > Local** and create a query lexicon with `target_collection` set to your record collection's NSID.
+Once you have a record lexicon indexed, add a query lexicon to expose a read endpoint. Go to **Lexicons > Add Lexicon > Local** and create a query lexicon with `target_collection` set to your record collection's NSID. (`target_collection` is a HappyView-specific field that tells a query or procedure which record collection it operates on.)
 
 Without a Lua script, HappyView generates a default query endpoint that supports `limit`, `cursor`, `did`, and `uri` parameters:
 
@@ -49,7 +49,7 @@ For custom query logic, attach a [Lua script](../guides/scripting.md).
 
 ## Next steps
 
-You now have a working AppView. Here's where to go from here:
+Here's where to go from here:
 
 - [**Statusphere tutorial**](../tutorials/statusphere.md): end-to-end walkthrough building a complete AppView with record, query, and procedure lexicons
 - [**Lexicons guide**](../guides/lexicons.md): target collections, backfill flag, network lexicons

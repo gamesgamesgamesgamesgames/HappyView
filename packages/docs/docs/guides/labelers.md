@@ -1,10 +1,10 @@
 # Labelers
 
-Labelers are external services in the AT Protocol network that apply content labels to records. HappyView can subscribe to labelers and store the labels they emit, making them available on records in the admin dashboard and via Lua scripts.
+Labelers are external services that apply content labels to records. They operate out-of-band — labeler data does not appear in repos or flow through relays. HappyView can subscribe to labelers and store the labels they emit, making them available on records in the admin dashboard and via Lua scripts.
 
 ## How labelers work
 
-A labeler is identified by its DID and runs as a service on the AT Protocol network. When you subscribe to a labeler, HappyView connects directly to the labeler's WebSocket and streams label events in real time. Each label targets a specific record URI and carries a value like `nudity`, `spam`, or any custom string the labeler defines.
+A labeler is identified by its DID. When you subscribe to a labeler, HappyView connects directly to the labeler's WebSocket and streams label events in real time. Each label targets a specific record URI and carries a value like `nudity`, `spam`, or any custom string the labeler defines.
 
 Labels are stored in a `labels` table in the database. HappyView tracks a cursor per labeler subscription so it can resume from where it left off after a restart.
 
