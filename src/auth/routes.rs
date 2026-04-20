@@ -210,6 +210,29 @@ async fn callback(
         .await
         .ok_or_else(|| AppError::Internal("no DID in OAuth session".into()))?;
 
+    // Check if the user is authorized to access the dashboard.
+    // Allow login when no users exist yet (first user will be bootstrapped as admin).
+    // Otherwise, only allow users already in the users table.
+    let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("user count query failed: {e}")))?;
+
+    if user_count.0 > 0 {
+        let user_exists: Option<(i32,)> = sqlx::query_as(&adapt_sql(
+            "SELECT 1 FROM users WHERE did = ?",
+            state.db_backend,
+        ))
+        .bind(did.as_ref())
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(format!("user lookup failed: {e}")))?;
+
+        if user_exists.is_none() {
+            return Ok((jar, Redirect::to("/login?error=not_authorized")));
+        }
+    }
+
     // Look up the client_key for the API client so we can store it in the session cookie
     // for per-client rate limiting.
     let client_key = if let Some(ref cid) = client_id {

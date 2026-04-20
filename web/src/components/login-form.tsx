@@ -15,8 +15,9 @@ import { Input } from "@/components/ui/input"
 
 export function LoginForm({
   className,
+  externalError,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { externalError?: string | null }) {
   const [handle, setHandle] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,8 +46,8 @@ export function LoginForm({
               Sign in with your ATProto account to manage your AppView.
             </FieldDescription>
           </div>
-          {error && (
-            <p className="text-destructive text-center text-sm">{error}</p>
+          {(externalError || error) && (
+            <p className="text-destructive text-center text-sm">{externalError || error}</p>
           )}
           <Field>
             <FieldLabel htmlFor="handle">Handle</FieldLabel>
