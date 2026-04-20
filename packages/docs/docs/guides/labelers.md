@@ -67,13 +67,21 @@ Self-labels (applied by the record author) use an outline badge style to disting
 
 Labels are also available in the records API response and in Lua scripts via the [`atproto.get_labels` and `atproto.get_labels_batch`](../reference/lua/atproto-api.md#atprotoget_labels) functions.
 
+## Using labels in your AppView
+
+Labeler subscriptions give your AppView access to content moderation signals without building your own moderation system. Some ways to use them:
+
+- **Content filtering**: Use labels in query scripts to exclude or down-rank flagged content. Check labels with `atproto.get_labels` and filter results before returning them.
+- **Moderation dashboards**: Display labels alongside records in your admin dashboard to review flagged content. Labels appear automatically on the Records page once a labeler is subscribed.
+- **Custom labelers**: You can subscribe to any labeler that implements the atproto labeler spec, including community-run labelers or one you operate yourself for domain-specific moderation (e.g. labeling game content by age rating).
+
 ## Permissions
 
-| Action                   | Permission        |
-| ------------------------ | ----------------- |
-| View labeler list        | `labelers:read`   |
-| Add or pause/resume      | `labelers:create` |
-| Delete a labeler         | `labelers:delete` |
+| Action              | Permission        |
+| ------------------- | ----------------- |
+| View labeler list   | `labelers:read`   |
+| Add or pause/resume | `labelers:create` |
+| Delete a labeler    | `labelers:delete` |
 
 ## Next steps
 

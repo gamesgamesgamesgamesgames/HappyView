@@ -27,9 +27,11 @@ graph LR
   Relay["Relay<br/><small>listReposByCollection</small>"] -->|repo discovery| Backfill
   Backfill["Backfill Worker"] -->|listRecords| PDS
   Backfill --> DB
+
+  Labeler["Labeler<br/><small>WebSocket (out-of-band)</small>"] -->|label events| DB
 ```
 
-Queries go through the query handler to the database (SQLite by default, or Postgres). Writes go through the procedure handler to the user's PDS, then HappyView indexes the record locally. Real-time record events stream in via [Jetstream](https://github.com/bluesky-social/jetstream); historical records are backfilled in-process by discovering repos via the relay's `listReposByCollection` and fetching records directly from each PDS.
+Queries go through the query handler to the database (SQLite by default, or Postgres). Writes go through the procedure handler to the user's PDS, then HappyView indexes the record locally. Real-time record events stream in via [Jetstream](https://github.com/bluesky-social/jetstream); historical records are backfilled in-process by discovering repos via the relay's `listReposByCollection` and fetching records directly from each PDS. [Labelers](../guides/labelers.md) are external services that emit content labels over a direct WebSocket connection — they operate out-of-band, outside the relay/repo system.
 
 ## Request flow
 
