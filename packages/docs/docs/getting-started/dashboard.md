@@ -1,6 +1,6 @@
 # Dashboard
 
-HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api.md) offers. It runs as a separate Next.js application alongside the Rust backend and authenticates via AT Protocol OAuth.
+HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api.md) offers. It runs as a separate Next.js application alongside the Rust backend and authenticates via atproto OAuth.
 
 On a fresh deployment with no users in the database, the first person to log in to the dashboard is automatically bootstrapped as the super user with all permissions — so log in with the handle you want to own the instance first.
 
@@ -23,11 +23,11 @@ HappyView generates a default Lua script when you first set the type to query or
 
 Toggle **Enable backfill** to index historical records when uploading a record-type lexicon.
 
-**Network** lexicons are fetched from the AT Protocol network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via the Jetstream subscription. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for how resolution works.
+**Network** lexicons are fetched from the atproto network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via the Jetstream subscription. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for how resolution works.
 
 ### JSON editor
 
-The JSON editor provides real-time validation against the AT Protocol Lexicon v1 schema:
+The JSON editor provides real-time validation against the atproto Lexicon v1 schema:
 
 - Validation for Lexicon format
 - Auto-complete for definition types (`record`, `query`, `procedure`, `subscription`), property types (`string`, `integer`, `boolean`, `ref`, `union`, `blob`, `cid-link`, etc.), and schema structure (`defs`, `main`, `properties`, `required`)
@@ -41,7 +41,7 @@ See [Lua Scripting](../guides/scripting.md) for the full runtime reference and e
 
 ## Records
 
-Navigate to **Records** to browse all indexed AT Protocol records. Records are grouped by collection and searchable. Each record shows its AT URI, author DID, and the raw record JSON.
+Navigate to **Records** to browse all indexed atproto records. Records are grouped by collection and searchable. Each record shows its AT URI, author DID, and the raw record JSON.
 
 ## Backfill
 
@@ -89,7 +89,7 @@ View the current values of all environment variables that affect HappyView's beh
 
 ### Accounts
 
-Manage connected AT Protocol accounts used by the instance.
+Manage connected atproto accounts used by the instance.
 
 ## Next steps
 

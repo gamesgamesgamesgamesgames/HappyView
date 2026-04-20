@@ -370,7 +370,7 @@ const sidebars: SidebarsConfig = {
             {
               type: "doc",
               id: "reference/lua/atproto-api",
-              label: "AT Protocol API",
+              label: "atproto API",
             },
             {
               type: "doc",

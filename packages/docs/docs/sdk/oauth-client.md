@@ -37,7 +37,7 @@ const { provisionId, dpopKey, pkceVerifier } =
 
 For public clients, `pkceVerifier` is included and must be passed back when registering the session. For confidential clients it will be `undefined`.
 
-Use the returned `dpopKey` (a private JWK) as your DPoP keypair during your AT Protocol OAuth flow with the user's PDS.
+Use the returned `dpopKey` (a private JWK) as your DPoP keypair during your atproto OAuth flow with the user's PDS.
 
 ## Session registration
 

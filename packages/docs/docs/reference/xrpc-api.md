@@ -1,6 +1,6 @@
 # XRPC API
 
-[XRPC](https://atproto.com/specs/xrpc) is the HTTP-based RPC protocol used by the AT Protocol. HappyView dynamically registers XRPC endpoints based on your uploaded [lexicons](../guides/lexicons.md): query lexicons become `GET /xrpc/{nsid}` routes, procedure lexicons become `POST /xrpc/{nsid}` routes.
+[XRPC](https://atproto.com/specs/xrpc) is the HTTP-based RPC protocol used by the atproto. HappyView dynamically registers XRPC endpoints based on your uploaded [lexicons](../guides/lexicons.md): query lexicons become `GET /xrpc/{nsid}` routes, procedure lexicons become `POST /xrpc/{nsid}` routes.
 
 If a query or procedure lexicon has a [Lua script](../guides/scripting.md) attached, the script handles the request. Otherwise, HappyView uses built-in default behavior (described below).
 

@@ -1,6 +1,6 @@
 # HappyView
 
-HappyView is the best way to build an [AppView](https://atproto.com/guides/glossary#app-view) for the [AT Protocol](https://atproto.com). Upload your [lexicon](reference/glossary.md#at-protocol-terms) schemas and get a fully functional AppView, complete with [XRPC](reference/glossary.md#at-protocol-terms) endpoints, OAuth, real-time network sync, and historical [backfill](guides/backfill.md), without writing a single line of server code.
+HappyView is the best way to build an [AppView](https://atproto.com/guides/glossary#app-view) for the [AT Protocol](https://atproto.com). Upload your [lexicon](reference/glossary.md#atproto-terms) schemas and get a fully functional AppView, complete with [XRPC](reference/glossary.md#atproto-terms) endpoints, OAuth, real-time network sync, and historical [backfill](guides/backfill.md), without writing a single line of server code.
 
 Building an AppView from scratch means wiring up real-time event streams, record storage, XRPC routing, OAuth flows, and PDS write proxying before you can even think about your application. HappyView handles all of that. Define your data model with lexicons, add custom logic with Lua scripts when you need it, and ship your app.
 
@@ -8,7 +8,7 @@ Building an AppView from scratch means wiring up real-time event streams, record
 
 - **Schema-driven endpoints:** Upload a [lexicon](guides/lexicons.md) and HappyView generates XRPC query and procedure routes, storage, and indexing from it — updatable at runtime with no restart.
 
-- **Network sync built in:** Real-time record streaming via [Jetstream](https://github.com/bluesky-social/jetstream), historical [backfill](guides/backfill.md) from each user's PDS, and AT Protocol OAuth with DPoP-bound proxy writes back to the PDS.
+- **Network sync built in:** Real-time record streaming via [Jetstream](https://github.com/bluesky-social/jetstream), historical [backfill](guides/backfill.md) from each user's PDS, and atproto OAuth with DPoP-bound proxy writes back to the PDS.
 
 - **Customize with Lua, hooks, and plugins:** [Lua scripts](guides/scripting.md) for query and procedure logic, [index hooks](guides/index-hooks.md) that fire on every record change, WASM [plugins](guides/plugins.md) for external platform integration, and [labeler](guides/labelers.md) subscriptions for content moderation.
 
@@ -24,7 +24,7 @@ Building an AppView from scratch means wiring up real-time event streams, record
 
 - **Runtime-configurable**: Lexicons can be added, updated, and removed without restarting the server. New endpoints and sync rules take effect immediately, so you can iterate on your data model in real time.
 
-- **Protocol-native**: HappyView works with _any_ PDS, resolves DIDs through the directory, and follows AT Protocol conventions. It's a first-class citizen of the network, not a wrapper around it.
+- **Protocol-native**: HappyView works with _any_ PDS, resolves DIDs through the directory, and follows atproto conventions. It's a first-class citizen of the network, not a wrapper around it.
 
 ## Next Steps
 

@@ -1,6 +1,6 @@
 # Record API
 
-The `Record` API is only available in **procedure** scripts. It handles creating, updating, loading, and deleting AT Protocol records. Writes are proxied to the caller's PDS and indexed locally.
+The `Record` API is only available in **procedure** scripts. It handles creating, updating, loading, and deleting atproto records. Writes are proxied to the caller's PDS and indexed locally.
 
 ## Constructor
 

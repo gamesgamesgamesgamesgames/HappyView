@@ -78,5 +78,5 @@ Labels are also available in the records API response and in Lua scripts via the
 ## Next steps
 
 - [Admin API — Labelers](../reference/admin/labelers.md) — full endpoint documentation
-- [AT Protocol API](../reference/lua/atproto-api.md) — access labels in Lua scripts with `get_labels` and `get_labels_batch`
+- [atproto API](../reference/lua/atproto-api.md) — access labels in Lua scripts with `get_labels` and `get_labels_batch`
 - [Permissions](permissions.md) — manage user access to labeler operations

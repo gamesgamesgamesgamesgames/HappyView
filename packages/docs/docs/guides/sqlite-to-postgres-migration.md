@@ -50,7 +50,7 @@ Start HappyView with the new `DATABASE_URL`. It will connect to Postgres and run
 
 ## Step 5: Re-index your data
 
-Since HappyView indexes records from the AT Protocol network, the simplest way to populate your new Postgres database is to re-run the backfill:
+Since HappyView indexes records from the atproto network, the simplest way to populate your new Postgres database is to re-run the backfill:
 
 1. Upload your lexicons via the dashboard or admin API (or they will already be there if you exported and re-imported them)
 2. Run a backfill for each collection (dashboard or `POST /admin/backfill`)

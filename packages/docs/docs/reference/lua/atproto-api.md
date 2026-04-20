@@ -1,6 +1,6 @@
-# AT Protocol API
+# atproto API
 
-The `atproto` table provides AT Protocol utility functions. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
+The `atproto` table provides atproto utility functions. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
 
 ## atproto.resolve_service_endpoint
 
@@ -8,7 +8,7 @@ The `atproto` table provides AT Protocol utility functions. Available in queries
 local endpoint = atproto.resolve_service_endpoint(did)
 ```
 
-Resolves a DID to its AT Protocol service endpoint URL by fetching the DID document. Supports both `did:plc:*` (via the PLC directory) and `did:web:*` (via `.well-known/did.json`).
+Resolves a DID to its atproto service endpoint URL by fetching the DID document. Supports both `did:plc:*` (via the PLC directory) and `did:web:*` (via `.well-known/did.json`).
 
 | Parameter | Type   | Description              |
 | --------- | ------ | ------------------------ |

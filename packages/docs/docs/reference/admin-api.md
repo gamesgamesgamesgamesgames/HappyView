@@ -7,7 +7,7 @@ The admin API lets you manage lexicons, monitor records, run backfill jobs, and 
 The admin API supports two authentication methods:
 
 1. **API keys** — read/write tokens starting with `hv_`, passed as `Authorization: Bearer hv_...`. See the [API Keys guide](../guides/api-keys.md) for details.
-2. **Service auth JWT** — AT Protocol inter-service authentication via signed JWTs.
+2. **Service auth JWT** — atproto inter-service authentication via signed JWTs.
 
 In all cases the resolved DID is checked against the `users` table, and the user's permissions are loaded to authorize the request.
 

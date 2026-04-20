@@ -29,7 +29,7 @@ Re-running a backfill for a collection that's already been backfilled is safe. E
 
 ## Restoring deleted records
 
-Deleting records from HappyView (via the dashboard or API) only removes them from the local database — the records still exist on the AT Protocol network. To restore deleted records, create a backfill job for the affected collection. The backfill will re-discover the repos and re-fetch all records from each PDS, restoring any that were previously deleted.
+Deleting records from HappyView (via the dashboard or API) only removes them from the local database — the records still exist on the atproto network. To restore deleted records, create a backfill job for the affected collection. The backfill will re-discover the repos and re-fetch all records from each PDS, restoring any that were previously deleted.
 
 ## Next steps
 

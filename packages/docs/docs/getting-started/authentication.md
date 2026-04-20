@@ -2,7 +2,7 @@
 
 HappyView has two distinct authentication surfaces:
 
-- **XRPC** (`/xrpc/*`) — client-level identification via an **API client key** on every request, plus optional user-level AT Protocol OAuth for endpoints that need a specific user's identity (e.g. procedures that write to a PDS).
+- **XRPC** (`/xrpc/*`) — client-level identification via an **API client key** on every request, plus optional user-level atproto OAuth for endpoints that need a specific user's identity (e.g. procedures that write to a PDS).
 - **Admin API** (`/admin/*`) — user-level authentication via admin API keys or service auth JWTs, gated by [permissions](../guides/permissions.md).
 
 ## Which endpoints require what?
@@ -49,7 +49,7 @@ curl 'https://happyview.example.com/xrpc/com.example.feed.getHot' \
 
 ### Authenticating users for procedures
 
-Queries that don't care who is calling need nothing more than the client key. Procedures — and queries whose Lua scripts read the caller's DID — need a real AT Protocol OAuth session.
+Queries that don't care who is calling need nothing more than the client key. Procedures — and queries whose Lua scripts read the caller's DID — need a real atproto OAuth session.
 
 XRPC routes only accept **DPoP auth** (`Authorization: DPoP <token>` + `DPoP` proof header + `X-Client-Key`). Bearer tokens and service auth JWTs are not accepted on XRPC endpoints.
 
@@ -103,7 +103,7 @@ A key only carries the permissions selected at creation time and can never excee
 
 ### Service auth JWT
 
-HappyView also accepts standard AT Protocol inter-service auth JWTs in the `Authorization` header. Another AppView, relay, or PDS can sign a short-lived ES256 or ES256K JWT with its DID's signing key; HappyView resolves the issuer's DID document, verifies the signature against the `#atproto` verification method, and treats the issuer DID as the caller identity.
+HappyView also accepts standard atproto inter-service auth JWTs in the `Authorization` header. Another AppView, relay, or PDS can sign a short-lived ES256 or ES256K JWT with its DID's signing key; HappyView resolves the issuer's DID document, verifies the signature against the `#atproto` verification method, and treats the issuer DID as the caller identity.
 
 For a service auth JWT to validate:
 
@@ -186,7 +186,7 @@ The `dpop_key` is the private JWK. Use it to generate DPoP proofs during your OA
 
 #### 2. Run OAuth with the user's PDS
 
-Use the provisioned DPoP key as your DPoP keypair in a standard AT Protocol OAuth flow with the user's PDS. HappyView is not involved in this step — the app talks directly to the PDS authorization server.
+Use the provisioned DPoP key as your DPoP keypair in a standard atproto OAuth flow with the user's PDS. HappyView is not involved in this step — the app talks directly to the PDS authorization server.
 
 #### 3. Register the session
 

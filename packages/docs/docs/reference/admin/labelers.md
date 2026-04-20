@@ -24,7 +24,7 @@ curl -X POST http://localhost:3000/admin/labelers \
 
 | Field | Type   | Required | Description                   |
 | ----- | ------ | -------- | ----------------------------- |
-| `did` | string | yes      | The labeler's AT Protocol DID |
+| `did` | string | yes      | The labeler's atproto DID |
 
 **Response**: `201 Created` (empty body)
 

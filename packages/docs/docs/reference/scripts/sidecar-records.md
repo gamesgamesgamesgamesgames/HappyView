@@ -72,4 +72,4 @@ at:// did:plc:abc /xyz.statusphere.postMetadata /3abc123
                                                  ^^^^^^^ same rkey
 ```
 
-This is a common AT Protocol pattern for keeping a primary record lean while storing auxiliary data (metadata, reactions, settings) in a companion collection.
+This is a common atproto pattern for keeping a primary record lean while storing auxiliary data (metadata, reactions, settings) in a companion collection.

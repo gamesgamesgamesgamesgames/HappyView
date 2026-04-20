@@ -68,7 +68,7 @@ Available in both queries and procedures:
 | ---------------- | ------- | ------------------------------------------------------------------- |
 | `now()`          | string  | Current UTC timestamp in ISO 8601 format                            |
 | `log(message)`   | —       | Log a message (appears in server logs at debug level)               |
-| `TID()`          | string  | Generate a fresh AT Protocol TID (13-character sortable identifier) |
+| `TID()`          | string  | Generate a fresh atproto TID (13-character sortable identifier) |
 | `toarray(table)` | table   | Mark a table as a JSON array for serialization (see [below](#toarray)) |
 
 ### toarray
@@ -85,7 +85,7 @@ You don't need `toarray()` on results from `db.query`, `db.search`, `db.backlink
 
 ## Record API
 
-The `Record` API is only available in **procedure** scripts. It handles creating, updating, loading, and deleting AT Protocol records. Writes are proxied to the caller's PDS and indexed locally.
+The `Record` API is only available in **procedure** scripts. It handles creating, updating, loading, and deleting atproto records. Writes are proxied to the caller's PDS and indexed locally.
 
 See the full [Record API reference](../reference/lua/record-api.md) for constructor, static methods, instance methods, fields, schema validation, and save behavior.
 
@@ -127,11 +127,11 @@ local resp = http.get("https://api.example.com/data")
 local data = json.decode(resp.body)
 ```
 
-## AT Protocol API
+## atproto API
 
-The `atproto` table provides AT Protocol utility functions like DID resolution and label queries.
+The `atproto` table provides atproto utility functions like DID resolution and label queries.
 
-See the full [AT Protocol API reference](../reference/lua/atproto-api.md) for `atproto.resolve_service_endpoint`, `atproto.get_labels`, and `atproto.get_labels_batch`.
+See the full [atproto API reference](../reference/lua/atproto-api.md) for `atproto.resolve_service_endpoint`, `atproto.get_labels`, and `atproto.get_labels_batch`.
 
 ## JSON API
 

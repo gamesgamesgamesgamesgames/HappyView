@@ -1,6 +1,6 @@
 # Admin API: Domains
 
-Manage the domains a HappyView instance serves. Each domain gets its own AT Protocol OAuth client identity. The primary domain is set from `PUBLIC_URL` on first boot. All endpoints require the `settings:manage` permission.
+Manage the domains a HappyView instance serves. Each domain gets its own atproto OAuth client identity. The primary domain is set from `PUBLIC_URL` on first boot. All endpoints require the `settings:manage` permission.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

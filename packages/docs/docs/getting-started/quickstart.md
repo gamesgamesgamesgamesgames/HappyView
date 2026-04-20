@@ -1,6 +1,6 @@
 # Quickstart
 
-This page walks you through the fastest path to a working HappyView instance. By the end, you'll have an AppView that indexes records from the AT Protocol network and serves XRPC endpoints.
+This page walks you through the fastest path to a working HappyView instance. By the end, you'll have an AppView that indexes records from the atproto network and serves XRPC endpoints.
 
 ## 1. Deploy HappyView
 
@@ -16,7 +16,7 @@ If you're just trying HappyView for the first time, start with Railway.
 
 ## 2. Log in to the dashboard
 
-The built-in [dashboard](dashboard.md) is served at your instance's root URL. Log in with your AT Protocol identity — on a fresh deployment, the first handle to authenticate is automatically bootstrapped as the **super user** with all permissions, so use the handle you want to own the instance.
+The built-in [dashboard](dashboard.md) is served at your instance's root URL. Log in with your atproto identity — on a fresh deployment, the first handle to authenticate is automatically bootstrapped as the **super user** with all permissions, so use the handle you want to own the instance.
 
 ## 3. Add your first lexicon
 

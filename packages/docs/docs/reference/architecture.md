@@ -195,7 +195,7 @@ sequenceDiagram
 | Column         | Type          | Description                                      |
 | -------------- | ------------- | ------------------------------------------------ |
 | `id`           | uuid (PK)     |                                                  |
-| `did`          | text (unique) | User's AT Protocol DID                           |
+| `did`          | text (unique) | User's atproto DID                           |
 | `is_super`     | boolean       | Whether this is the super user (only one allowed)|
 | `created_at`   | timestamptz   |                                                  |
 | `last_used_at` | timestamptz   | Updated on each authenticated request            |
@@ -226,7 +226,7 @@ sequenceDiagram
 
 | Column         | Type        | Description                                  |
 | -------------- | ----------- | -------------------------------------------- |
-| `did`          | text (PK)   | User's AT Protocol DID                       |
+| `did`          | text (PK)   | User's atproto DID                       |
 | `session_data` | text        | Serialized OAuth session (managed by atrium) |
 | `created_at`   | timestamptz |                                              |
 | `updated_at`   | timestamptz |                                              |

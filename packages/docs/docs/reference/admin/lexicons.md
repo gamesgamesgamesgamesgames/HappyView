@@ -92,7 +92,7 @@ curl -X DELETE http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$
 
 ## Network Lexicons
 
-Network lexicons are fetched from the AT Protocol network via DNS TXT resolution and kept updated via the Jetstream subscription. See [Lexicons - Network lexicons](../../guides/lexicons.md#network-lexicons) for background.
+Network lexicons are fetched from the atproto network via DNS TXT resolution and kept updated via the Jetstream subscription. See [Lexicons - Network lexicons](../../guides/lexicons.md#network-lexicons) for background.
 
 ### Add a network lexicon
 

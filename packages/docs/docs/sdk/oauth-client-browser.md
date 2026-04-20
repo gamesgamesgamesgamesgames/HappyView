@@ -1,6 +1,6 @@
 # Browser Client
 
-The browser client handles the full OAuth redirect flow for browser apps authenticating with a HappyView instance. It wraps the [OAuth Client](./oauth-client.md) with Web Crypto, localStorage, and AT Protocol handle/DID resolution.
+The browser client handles the full OAuth redirect flow for browser apps authenticating with a HappyView instance. It wraps the [OAuth Client](./oauth-client.md) with Web Crypto, localStorage, and atproto handle/DID resolution.
 
 If you're starting a new app, consider using [`@happyview/lex-agent`](./lex-agent.md) with `@atproto/lex` instead — it provides type-safe XRPC calls and is the recommended way to interact with HappyView. This package is primarily useful if your app already uses `@atproto/oauth-client-browser` and you want to add HappyView authentication alongside it.
 

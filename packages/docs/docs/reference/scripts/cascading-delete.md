@@ -72,4 +72,4 @@ curl -X POST http://localhost:3000/xrpc/xyz.statusphere.deletePost \
 
 Cascading deletes are useful when your data model has parent-child relationships across collections. For example, deleting a post should also clean up its comments, reactions, or metadata records. This keeps the user's repo and the local index consistent.
 
-Note that this only deletes records owned by `caller_did`. AT Protocol records can only be deleted by their owner. If the related records could have more than 100 matches, paginate through all of them before deleting.
+Note that this only deletes records owned by `caller_did`. atproto records can only be deleted by their owner. If the related records could have more than 100 matches, paginate through all of them before deleting.

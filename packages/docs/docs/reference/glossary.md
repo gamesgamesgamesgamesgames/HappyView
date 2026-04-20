@@ -1,18 +1,18 @@
 # Glossary
 
-Key terms used throughout the HappyView documentation. For a broader introduction to the AT Protocol, see the [official ATProto glossary](https://atproto.com/guides/glossary).
+Key terms used throughout the HappyView documentation. For a broader introduction to the atproto, see the [official ATProto glossary](https://atproto.com/guides/glossary).
 
-## AT Protocol terms
+## atproto terms
 
-**AppView** — A backend service that indexes AT Protocol records and serves them through an API. HappyView is an AppView. See the [ATProto docs](https://atproto.com/guides/glossary#app-view) for more.
+**AppView** — A backend service that indexes atproto records and serves them through an API. HappyView is an AppView. See the [ATProto docs](https://atproto.com/guides/glossary#app-view) for more.
 
 **DID** (Decentralized Identifier) — A persistent, globally unique identifier for an account (e.g. `did:plc:abc123`).
 
-**Firehose** — A real-time stream of all record events (creates, updates, deletes) across the AT Protocol network. HappyView consumes a filtered slice of this via [Jetstream](https://github.com/bluesky-social/jetstream).
+**Firehose** — A real-time stream of all record events (creates, updates, deletes) across the atproto network. HappyView consumes a filtered slice of this via [Jetstream](https://github.com/bluesky-social/jetstream).
 
 **Handle** — A human-readable name for an account (e.g. `user.bsky.social`). Handles resolve to a DID via a DNS TXT record or an HTTP `.well-known/atproto-did` lookup.
 
-**Lexicon** — A schema definition for AT Protocol data types and API methods. Lexicons define what records look like, what endpoints exist, and what parameters they accept. See [Lexicons](../guides/lexicons.md).
+**Lexicon** — A schema definition for atproto data types and API methods. Lexicons define what records look like, what endpoints exist, and what parameters they accept. See [Lexicons](../guides/lexicons.md).
 
 **NSID** (Namespaced Identifier) — A reverse-DNS identifier for a lexicon (e.g. `xyz.statusphere.status`). The authority is everything except the last segment.
 
@@ -20,7 +20,7 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **PLC directory** — A public service (e.g. `plc.directory`) that maps DIDs to their DID documents, which contain the user's PDS endpoint and other metadata.
 
-**Record** — A single piece of data in an AT Protocol repository, identified by an AT URI (e.g. `at://did:plc:abc/xyz.statusphere.status/abc123`).
+**Record** — A single piece of data in an atproto repository, identified by an AT URI (e.g. `at://did:plc:abc/xyz.statusphere.status/abc123`).
 
 **Relay** — A network service that aggregates repository data from many PDSes. HappyView queries the relay during [backfill](../guides/backfill.md) to discover which repos contain records for a given collection, then fetches each repo's records directly from its PDS.
 
@@ -28,15 +28,15 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **TID** (Timestamp Identifier) — A 13-character sortable identifier used as a record key. Generated from the current timestamp.
 
-**XRPC** — The HTTP-based RPC protocol used by the AT Protocol. Query methods map to GET requests, procedure methods map to POST requests. See [XRPC API](xrpc-api.md).
+**XRPC** — The HTTP-based RPC protocol used by the atproto. Query methods map to GET requests, procedure methods map to POST requests. See [XRPC API](xrpc-api.md).
 
-**Jetstream** — A [filtered firehose](https://github.com/bluesky-social/jetstream) that delivers atproto record commit events as JSON over WebSocket. Not part of the core AT Protocol spec, but widely used. HappyView subscribes to Jetstream with a collection filter built from its indexed record lexicons, and persists a cursor for resume on reconnect.
+**Jetstream** — A [filtered firehose](https://github.com/bluesky-social/jetstream) that delivers atproto record commit events as JSON over WebSocket. Not part of the core atproto spec, but widely used. HappyView subscribes to Jetstream with a collection filter built from its indexed record lexicons, and persists a cursor for resume on reconnect.
 
 ## HappyView-specific terms
 
 **Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and fetches each repo's records directly from its PDS. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/backfill.md).
 
-**Network lexicon** — A lexicon fetched directly from the AT Protocol network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons).
+**Network lexicon** — A lexicon fetched directly from the atproto network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons).
 
 **Permission** — A granular access control right that authorizes a specific action in the admin API. HappyView defines 20 permissions organized by category (e.g. `lexicons:create`, `users:read`). See [Permissions](../guides/permissions.md).
 

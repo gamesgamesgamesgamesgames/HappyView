@@ -1,8 +1,8 @@
 # Lexicons
 
-Lexicons are the core building block of HappyView. They're [AT Protocol schema definitions](https://atproto.com/specs/lexicon) that describe your data model, and HappyView uses them to decide which records to index from the network and what XRPC endpoints to serve.
+Lexicons are the core building block of HappyView. They're [atproto schema definitions](https://atproto.com/specs/lexicon) that describe your data model, and HappyView uses them to decide which records to index from the network and what XRPC endpoints to serve.
 
-You don't write route handlers or database queries; you upload a lexicon and HappyView generates the infrastructure from it. There are two ways to add lexicons: uploading them via the [admin API](../reference/admin/lexicons.md) or [dashboard](../getting-started/dashboard.md), or fetching them directly from the AT Protocol network via [DNS authority resolution](#network-lexicons).
+You don't write route handlers or database queries; you upload a lexicon and HappyView generates the infrastructure from it. There are two ways to add lexicons: uploading them via the [admin API](../reference/admin/lexicons.md) or [dashboard](../getting-started/dashboard.md), or fetching them directly from the atproto network via [DNS authority resolution](#network-lexicons).
 
 ## Supported lexicon types
 

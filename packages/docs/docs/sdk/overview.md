@@ -12,7 +12,7 @@ HappyView provides JavaScript packages for building third-party apps that authen
 
 **Starting a new app?** Use `@happyview/lex-agent` with `@atproto/lex`. It gives you type-safe XRPC calls through a `Client` that routes requests to your HappyView instance with DPoP authentication. This is the recommended way to interact with HappyView from JavaScript.
 
-**Already using `@atproto/oauth-client-browser`?** Add `@happyview/oauth-client-browser` to get a `HappyViewBrowserClient` that handles the HappyView-specific DPoP key provisioning and session registration on top of the standard AT Protocol OAuth flow.
+**Already using `@atproto/oauth-client-browser`?** Add `@happyview/oauth-client-browser` to get a `HappyViewBrowserClient` that handles the HappyView-specific DPoP key provisioning and session registration on top of the standard atproto OAuth flow.
 
 **Building a server-side app or something more custom?** Use `@happyview/oauth-client` directly and provide your own `CryptoAdapter` and `StorageAdapter`.
 
@@ -21,9 +21,9 @@ HappyView provides JavaScript packages for building third-party apps that authen
 Third-party apps authenticate using HappyView's [DPoP key provisioning](../getting-started/authentication.md#dpop-key-provisioning-for-third-party-apps) flow:
 
 1. The SDK requests a DPoP keypair from the HappyView instance.
-2. Your app runs a standard AT Protocol OAuth flow with the user's PDS using that keypair.
+2. Your app runs a standard atproto OAuth flow with the user's PDS using that keypair.
 3. The SDK registers the resulting tokens with HappyView.
-4. All subsequent XRPC requests are authenticated with DPoP proofs — HappyView handles its own lexicons locally and proxies standard AT Protocol writes to the user's PDS.
+4. All subsequent XRPC requests are authenticated with DPoP proofs — HappyView handles its own lexicons locally and proxies standard atproto writes to the user's PDS.
 
 ## Quick start
 

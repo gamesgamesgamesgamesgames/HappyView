@@ -108,7 +108,7 @@ See [Backfill](../guides/backfill.md) for how the process works.
 
 ## OAuth or login issues
 
-HappyView handles AT Protocol OAuth internally via the `atrium-oauth` library. If users can't log in:
+HappyView handles atproto OAuth internally via the `atrium-oauth` library. If users can't log in:
 
 1. Verify `PUBLIC_URL` is set correctly and the URL is publicly accessible (required for OAuth callbacks).
 2. Check that the user's PDS authorization server is reachable.

@@ -27,7 +27,7 @@ curl -X POST http://localhost:3000/admin/users \
 
 | Field         | Type     | Required | Description                                                                        |
 | ------------- | -------- | -------- | ---------------------------------------------------------------------------------- |
-| `did`         | string   | yes      | The AT Protocol DID of the user to add                                             |
+| `did`         | string   | yes      | The atproto DID of the user to add                                             |
 | `template`    | string   | no       | Permission template: `viewer`, `operator`, `manager`, or `full_access`             |
 | `permissions` | string[] | no       | Explicit list of permissions to grant (used instead of or in addition to `template`) |
 
