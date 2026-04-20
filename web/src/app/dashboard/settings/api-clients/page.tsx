@@ -226,6 +226,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   const [clientUri, setClientUri] = useState("");
   const [redirectUris, setRedirectUris] = useState<string[]>([""]);
   const [scopes, setScopes] = useState<string[]>([""]);
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(true);
   const [rateLimitCapacity, setRateLimitCapacity] = useState(
     String(config.default_rate_limit_capacity)
   );
@@ -245,6 +246,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
       setClientUri("");
       setRedirectUris([""]);
       setScopes([""]);
+      setRateLimitEnabled(true);
       setRateLimitCapacity(String(config.default_rate_limit_capacity));
       setRateLimitRefillRate(String(config.default_rate_limit_refill_rate));
       setError(null);
@@ -272,7 +274,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
       setError("Name, Client ID URL, and Client URI are required.");
       return;
     }
-    if (!rateLimitCapacity || !rateLimitRefillRate) {
+    if (rateLimitEnabled && (!rateLimitCapacity || !rateLimitRefillRate)) {
       setError("Rate limit capacity and refill rate are required.");
       return;
     }
@@ -283,8 +285,8 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
         client_uri: clientUri.trim(),
         redirect_uris: allUris,
         scopes: allScopes,
-        rate_limit_capacity: Number(rateLimitCapacity),
-        rate_limit_refill_rate: Number(rateLimitRefillRate),
+        rate_limit_capacity: rateLimitEnabled ? Number(rateLimitCapacity) : null,
+        rate_limit_refill_rate: rateLimitEnabled ? Number(rateLimitRefillRate) : null,
       });
       setCreated(result);
     } catch (e: unknown) {
@@ -432,6 +434,14 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
             </fieldset>
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
               <legend className="text-sm font-medium px-1">Rate Limiting</legend>
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="rl-enabled"
+                  checked={rateLimitEnabled}
+                  onCheckedChange={setRateLimitEnabled}
+                />
+                <Label htmlFor="rl-enabled" className="cursor-pointer">Enabled</Label>
+              </div>
               <p className="text-muted-foreground text-xs">
                 Each client gets a token bucket. Requests consume tokens and the bucket
                 refills over time. When the bucket is empty, requests are rejected until
@@ -446,6 +456,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                     min={1}
                     value={rateLimitCapacity}
                     onChange={(e) => setRateLimitCapacity(e.target.value)}
+                    disabled={!rateLimitEnabled}
                   />
                   <p className="text-muted-foreground text-xs">
                     Maximum number of tokens. This is the burst limit.
@@ -460,6 +471,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                     step="any"
                     value={rateLimitRefillRate}
                     onChange={(e) => setRateLimitRefillRate(e.target.value)}
+                    disabled={!rateLimitEnabled}
                   />
                   <p className="text-muted-foreground text-xs">
                     Tokens added per second.
@@ -515,6 +527,9 @@ function EditApiClientDialog({
   );
   const [scopes, setScopes] = useState<string[]>(parseScopes(client.scopes));
   const [isActive, setIsActive] = useState(client.is_active);
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(
+    client.rate_limit_capacity != null && client.rate_limit_refill_rate != null
+  );
   const [rateLimitCapacity, setRateLimitCapacity] = useState(
     String(client.rate_limit_capacity ?? config.default_rate_limit_capacity)
   );
@@ -532,6 +547,9 @@ function EditApiClientDialog({
       setRedirectUris(parseRedirectUris(client.redirect_uris));
       setScopes(parseScopes(client.scopes));
       setIsActive(client.is_active);
+      setRateLimitEnabled(
+        client.rate_limit_capacity != null && client.rate_limit_refill_rate != null
+      );
       setRateLimitCapacity(
         String(client.rate_limit_capacity ?? config.default_rate_limit_capacity)
       );
@@ -544,7 +562,7 @@ function EditApiClientDialog({
 
   async function handleSave() {
     setError(null);
-    if (!rateLimitCapacity || !rateLimitRefillRate) {
+    if (rateLimitEnabled && (!rateLimitCapacity || !rateLimitRefillRate)) {
       setError("Rate limit capacity and refill rate are required.");
       return;
     }
@@ -560,8 +578,8 @@ function EditApiClientDialog({
         redirect_uris: allUris,
         scopes: allScopes,
         is_active: isActive,
-        rate_limit_capacity: Number(rateLimitCapacity),
-        rate_limit_refill_rate: Number(rateLimitRefillRate),
+        rate_limit_capacity: rateLimitEnabled ? Number(rateLimitCapacity) : null,
+        rate_limit_refill_rate: rateLimitEnabled ? Number(rateLimitRefillRate) : null,
       });
       setOpen(false);
       onSuccess();
@@ -637,6 +655,14 @@ function EditApiClientDialog({
           </fieldset>
           <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
             <legend className="text-sm font-medium px-1">Rate Limiting</legend>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="edit-rl-enabled"
+                checked={rateLimitEnabled}
+                onCheckedChange={setRateLimitEnabled}
+              />
+              <Label htmlFor="edit-rl-enabled" className="cursor-pointer">Enabled</Label>
+            </div>
             <p className="text-muted-foreground text-xs">
               Each client gets a token bucket. Requests consume tokens and the bucket
               refills over time. When the bucket is empty, requests are rejected until
@@ -651,6 +677,7 @@ function EditApiClientDialog({
                   min={1}
                   value={rateLimitCapacity}
                   onChange={(e) => setRateLimitCapacity(e.target.value)}
+                  disabled={!rateLimitEnabled}
                 />
                 <p className="text-muted-foreground text-xs">
                   Maximum number of tokens. This is the burst limit.
@@ -665,6 +692,7 @@ function EditApiClientDialog({
                   step="any"
                   value={rateLimitRefillRate}
                   onChange={(e) => setRateLimitRefillRate(e.target.value)}
+                  disabled={!rateLimitEnabled}
                 />
                 <p className="text-muted-foreground text-xs">
                   Tokens added per second.

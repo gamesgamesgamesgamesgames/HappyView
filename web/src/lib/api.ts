@@ -373,8 +373,8 @@ export function createApiClient(
     client_uri: string
     redirect_uris: string[]
     scopes?: string
-    rate_limit_capacity: number
-    rate_limit_refill_rate: number
+    rate_limit_capacity: number | null
+    rate_limit_refill_rate: number | null
   }
 ) {
   return apiFetch<CreateApiClientResponse>("/admin/api-clients", {
@@ -390,8 +390,8 @@ export function updateApiClient(
     client_uri?: string
     redirect_uris?: string[]
     scopes?: string
-    rate_limit_capacity?: number
-    rate_limit_refill_rate?: number
+    rate_limit_capacity?: number | null
+    rate_limit_refill_rate?: number | null
     is_active?: boolean
   }
 ) {
