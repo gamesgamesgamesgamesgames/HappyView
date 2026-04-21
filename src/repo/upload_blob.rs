@@ -61,6 +61,7 @@ pub async fn upload_blob(
             &state.db,
             state.db_backend,
             encryption_key,
+            &state.oauth,
             &state.config.plc_url,
             &api_client_id,
             claims.did(),

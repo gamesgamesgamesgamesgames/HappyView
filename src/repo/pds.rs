@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use atrium_xrpc::{InputDataOrBytes, OutputDataOrBytes, XrpcClient, XrpcRequest, http::Method};
 use axum::body::Bytes;
 use axum::http::StatusCode;
@@ -7,6 +9,51 @@ use serde_json::Value;
 use crate::AppState;
 use crate::HappyViewOAuthSession;
 use crate::error::AppError;
+
+/// Abstraction over the two PDS authentication paths.
+///
+/// - `OAuth`: uses atrium's OAuthSession (dashboard cookie auth)
+/// - `Dpop`: uses the manual DPoP session from `dpop_sessions` table (third-party apps)
+#[derive(Clone)]
+pub(crate) enum PdsAuth {
+    OAuth(Arc<HappyViewOAuthSession>),
+    Dpop {
+        api_client_id: String,
+        encryption_key: [u8; 32],
+    },
+}
+
+impl PdsAuth {
+    pub async fn post_json(
+        &self,
+        state: &AppState,
+        user_did: &str,
+        xrpc_method: &str,
+        body: &Value,
+    ) -> Result<reqwest::Response, AppError> {
+        match self {
+            PdsAuth::OAuth(session) => pds_post_json_raw(state, session, xrpc_method, body).await,
+            PdsAuth::Dpop {
+                api_client_id,
+                encryption_key,
+            } => {
+                crate::oauth::pds_write::dpop_pds_post(
+                    &state.http,
+                    &state.db,
+                    state.db_backend,
+                    encryption_key,
+                    &state.oauth,
+                    &state.config.plc_url,
+                    api_client_id,
+                    user_did,
+                    xrpc_method,
+                    body,
+                )
+                .await
+            }
+        }
+    }
+}
 
 /// Forward a PDS response back to the client, preserving status and body.
 pub(crate) async fn forward_pds_response(resp: reqwest::Response) -> Result<Response, AppError> {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Check, Trash2, X } from "lucide-react";
+import { Copy, Check, Trash2, X, ExternalLink } from "lucide-react";
 
 import { useConfig } from "@/lib/config-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import {
   ResponsiveDialog,
@@ -151,6 +152,7 @@ export default function ApiClientsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Client Key</TableHead>
                 <TableHead>Client ID URL</TableHead>
                 <TableHead>Scopes</TableHead>
@@ -163,7 +165,7 @@ export default function ApiClientsPage() {
               {clients.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-muted-foreground text-center"
                   >
                     No API clients yet.
@@ -176,8 +178,13 @@ export default function ApiClientsPage() {
                   className={!client.is_active ? "opacity-50" : undefined}
                 >
                   <TableCell className="font-medium">{client.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {client.client_type === "public" ? "Public" : "Confidential"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="font-mono text-sm">
-                    {client.client_key.slice(0, 12)}...
+                    {client.client_key}
                   </TableCell>
                   <TableCell className="max-w-48 truncate text-sm">
                     {client.client_id_url}
@@ -221,10 +228,12 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   const config = useConfig();
   const happyviewCallbackUri = `${config.public_url.replace(/\/$/, "")}/auth/callback`;
 
+  const [clientType, setClientType] = useState<"confidential" | "public">("confidential");
   const [name, setName] = useState("");
   const [clientIdUrl, setClientIdUrl] = useState("");
   const [clientUri, setClientUri] = useState("");
   const [redirectUris, setRedirectUris] = useState<string[]>([""]);
+  const [allowedOrigins, setAllowedOrigins] = useState<string[]>([""]);
   const [scopes, setScopes] = useState<string[]>([""]);
   const [rateLimitEnabled, setRateLimitEnabled] = useState(true);
   const [rateLimitCapacity, setRateLimitCapacity] = useState(
@@ -241,10 +250,12 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (!nextOpen) {
+      setClientType("confidential");
       setName("");
       setClientIdUrl("");
       setClientUri("");
       setRedirectUris([""]);
+      setAllowedOrigins([""]);
       setScopes([""]);
       setRateLimitEnabled(true);
       setRateLimitCapacity(String(config.default_rate_limit_capacity));
@@ -279,12 +290,15 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
       return;
     }
     try {
+      const filteredOrigins = allowedOrigins.map((o) => o.trim()).filter(Boolean);
       const result = await createApiClient({
         name: name.trim(),
         client_id_url: clientIdUrl.trim(),
         client_uri: clientUri.trim(),
         redirect_uris: allUris,
         scopes: allScopes,
+        client_type: clientType,
+        allowed_origins: clientType === "public" && filteredOrigins.length > 0 ? filteredOrigins : undefined,
         rate_limit_capacity: rateLimitEnabled ? Number(rateLimitCapacity) : null,
         rate_limit_refill_rate: rateLimitEnabled ? Number(rateLimitRefillRate) : null,
       });
@@ -306,7 +320,9 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             {created
-              ? "Save the credentials below. The secret will not be shown again."
+              ? created.client_type === "public"
+                ? "Your public client has been created. Use PKCE for authentication."
+                : "Save the credentials below. The secret will not be shown again."
               : "Register a new application that authenticates through this AppView."}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
@@ -339,36 +355,80 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 or <code className="bg-muted px-1 rounded">client_key</code> query parameter.
               </p>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label>Client Secret</Label>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={created.client_secret}
-                  className="font-mono text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleCopy(created.client_secret, "secret")}
-                  title="Copy to clipboard"
-                >
-                  {copiedField === "secret" ? (
-                    <Check className="size-4" />
-                  ) : (
-                    <Copy className="size-4" />
-                  )}
-                </Button>
+            {created.client_secret ? (
+              <div className="flex flex-col gap-2">
+                <Label>Client Secret</Label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={created.client_secret}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleCopy(created.client_secret!, "secret")}
+                    title="Copy to clipboard"
+                  >
+                    {copiedField === "secret" ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <Copy className="size-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  Keep this secret. Send as the <code className="bg-muted px-1 rounded">X-Client-Secret</code> header
+                  for server-to-server requests. Browser requests are validated by Origin instead.
+                </p>
               </div>
-              <p className="text-muted-foreground text-xs">
-                Keep this secret. Send as the <code className="bg-muted px-1 rounded">X-Client-Secret</code> header
-                for server-to-server requests. Browser requests are validated by Origin instead.
-              </p>
-            </div>
+            ) : (
+              <div className="flex flex-col gap-2 rounded-lg border p-4 bg-muted/50">
+                <p className="text-sm">
+                  This is a public client. Authenticate using PKCE instead of a client secret.
+                </p>
+                <a
+                  href="/docs/getting-started/authentication#pkce"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  PKCE authentication docs
+                  <ExternalLink className="size-3" />
+                </a>
+              </div>
+            )}
           </div>
         ) : (
         <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
             {error && <p className="text-destructive text-sm">{error}</p>}
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+              <legend className="text-sm font-medium px-1">Client Type</legend>
+              <RadioGroup
+                value={clientType}
+                onValueChange={(v) => setClientType(v as "confidential" | "public")}
+                className="flex flex-col gap-3"
+              >
+                <div className="flex items-start gap-3">
+                  <RadioGroupItem value="confidential" id="type-confidential" className="mt-0.5" />
+                  <div className="flex flex-col gap-0.5">
+                    <Label htmlFor="type-confidential" className="cursor-pointer font-medium">Confidential</Label>
+                    <p className="text-muted-foreground text-xs">
+                      Server-side applications that can securely store a client secret.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <RadioGroupItem value="public" id="type-public" className="mt-0.5" />
+                  <div className="flex flex-col gap-0.5">
+                    <Label htmlFor="type-public" className="cursor-pointer font-medium">Public</Label>
+                    <p className="text-muted-foreground text-xs">
+                      Browser or native apps that authenticate using PKCE (no secret).
+                    </p>
+                  </div>
+                </div>
+              </RadioGroup>
+            </fieldset>
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
               <legend className="text-sm font-medium px-1">Application</legend>
               <div className="flex flex-col gap-2">
@@ -418,6 +478,21 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 readonlyValues={[happyviewCallbackUri]}
               />
             </fieldset>
+            {clientType === "public" && (
+              <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+                <legend className="text-sm font-medium px-1">Allowed Origins</legend>
+                <p className="text-muted-foreground text-xs">
+                  Origins permitted to use this client. Requests from unlisted origins will be
+                  rejected. Leave empty to allow any origin.
+                </p>
+                <MultiInput
+                  id="allowed-origins"
+                  values={allowedOrigins}
+                  onChange={setAllowedOrigins}
+                  placeholder="https://myapp.com"
+                />
+              </fieldset>
+            )}
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
               <legend className="text-sm font-medium px-1">Scopes</legend>
               <p className="text-muted-foreground text-xs">
@@ -521,9 +596,17 @@ function EditApiClientDialog({
     return parts.length > 0 ? [...parts, ""] : [""];
   }
 
+  function parseAllowedOrigins(origins: string[] | null): string[] {
+    if (!origins || origins.length === 0) return [""];
+    return [...origins, ""];
+  }
+
   const [name, setName] = useState(client.name);
   const [redirectUris, setRedirectUris] = useState<string[]>(
     parseRedirectUris(client.redirect_uris)
+  );
+  const [allowedOrigins, setAllowedOrigins] = useState<string[]>(
+    parseAllowedOrigins(client.allowed_origins)
   );
   const [scopes, setScopes] = useState<string[]>(parseScopes(client.scopes));
   const [isActive, setIsActive] = useState(client.is_active);
@@ -545,6 +628,7 @@ function EditApiClientDialog({
     if (nextOpen) {
       setName(client.name);
       setRedirectUris(parseRedirectUris(client.redirect_uris));
+      setAllowedOrigins(parseAllowedOrigins(client.allowed_origins));
       setScopes(parseScopes(client.scopes));
       setIsActive(client.is_active);
       setRateLimitEnabled(
@@ -573,10 +657,14 @@ function EditApiClientDialog({
       const extraScopes = scopes.map((s) => s.trim()).filter(Boolean);
       const allScopes = ["atproto", ...extraScopes].join(" ");
 
+      const filteredOrigins = allowedOrigins.map((o) => o.trim()).filter(Boolean);
       await updateApiClient(client.id, {
         name: name.trim() || undefined,
         redirect_uris: allUris,
         scopes: allScopes,
+        allowed_origins: client.client_type === "public"
+          ? (filteredOrigins.length > 0 ? filteredOrigins : null)
+          : undefined,
         is_active: isActive,
         rate_limit_capacity: rateLimitEnabled ? Number(rateLimitCapacity) : null,
         rate_limit_refill_rate: rateLimitEnabled ? Number(rateLimitRefillRate) : null,
@@ -639,6 +727,21 @@ function EditApiClientDialog({
               readonlyValues={[happyviewCallbackUri]}
             />
           </fieldset>
+          {client.client_type === "public" && (
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+              <legend className="text-sm font-medium px-1">Allowed Origins</legend>
+              <p className="text-muted-foreground text-xs">
+                Origins permitted to use this client. Requests from unlisted origins will be
+                rejected. Leave empty to allow any origin.
+              </p>
+              <MultiInput
+                id="edit-allowed-origins"
+                values={allowedOrigins}
+                onChange={setAllowedOrigins}
+                placeholder="https://myapp.com"
+              />
+            </fieldset>
+          )}
           <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
             <legend className="text-sm font-medium px-1">Scopes</legend>
             <p className="text-muted-foreground text-xs">

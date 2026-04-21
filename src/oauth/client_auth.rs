@@ -156,9 +156,22 @@ pub async fn resolve_client_by_key(
 /// Rules:
 /// - `atproto` must be present in token scopes (always implicitly allowed)
 /// - Every non-`atproto` scope in the token must appear in the client's registered scopes
-pub fn validate_scopes(token_scopes: &str, client_scopes: &str) -> Result<(), AppError> {
+/// - `include:X` client scopes are expanded by looking up the permission set
+///   lexicon `X` and extracting its `rpc:` and `repo:` permissions
+pub async fn validate_scopes(
+    token_scopes: &str,
+    client_scopes: &str,
+    lexicons: &crate::lexicon::LexiconRegistry,
+) -> Result<(), AppError> {
     let token_set: std::collections::HashSet<&str> = token_scopes.split_whitespace().collect();
-    let client_set: std::collections::HashSet<&str> = client_scopes.split_whitespace().collect();
+    let mut client_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for scope in client_scopes.split_whitespace() {
+        if let Some(perm_set_id) = scope.strip_prefix("include:") {
+            expand_permission_set(perm_set_id, lexicons, &mut client_set).await;
+        }
+        client_set.insert(scope.to_string());
+    }
 
     if !token_set.contains("atproto") {
         return Err(AppError::BadRequest(
@@ -168,9 +181,9 @@ pub fn validate_scopes(token_scopes: &str, client_scopes: &str) -> Result<(), Ap
 
     for scope in &token_set {
         if *scope == "atproto" {
-            continue; // always allowed
+            continue;
         }
-        if !client_set.contains(scope) {
+        if !client_set.contains(*scope) {
             return Err(AppError::BadRequest(format!(
                 "scope '{}' is not allowed for this client",
                 scope
@@ -179,6 +192,59 @@ pub fn validate_scopes(token_scopes: &str, client_scopes: &str) -> Result<(), Ap
     }
 
     Ok(())
+}
+
+/// Expand a permission set lexicon into individual `rpc:` and `repo:` scopes.
+async fn expand_permission_set(
+    nsid: &str,
+    lexicons: &crate::lexicon::LexiconRegistry,
+    out: &mut std::collections::HashSet<String>,
+) {
+    let lexicon = match lexicons.get(nsid).await {
+        Some(l) => l,
+        None => {
+            tracing::warn!(nsid = %nsid, "permission set lexicon not found in registry");
+            return;
+        }
+    };
+
+    let permissions = match lexicon
+        .raw
+        .get("defs")
+        .and_then(|d| d.get("main"))
+        .and_then(|m| m.get("permissions"))
+        .and_then(|p| p.as_array())
+    {
+        Some(p) => p,
+        None => return,
+    };
+
+    for perm in permissions {
+        let resource = perm.get("resource").and_then(|r| r.as_str()).unwrap_or("");
+        match resource {
+            "rpc" => {
+                if let Some(lxms) = perm.get("lxm").and_then(|l| l.as_array()) {
+                    for lxm in lxms {
+                        if let Some(s) = lxm.as_str() {
+                            out.insert(format!("rpc:{s}"));
+                        }
+                    }
+                }
+            }
+            "repo" => {
+                if let Some(collections) = perm.get("collection").and_then(|c| c.as_array()) {
+                    for col in collections {
+                        if let Some(s) = col.as_str() {
+                            out.insert(format!("repo:{s}?action=create"));
+                            out.insert(format!("repo:{s}?action=update"));
+                            out.insert(format!("repo:{s}?action=delete"));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Verify a PKCE challenge against a verifier.
@@ -194,43 +260,115 @@ pub fn verify_pkce(challenge: &str, verifier: &str) -> bool {
 mod tests {
     use super::*;
 
-    #[test]
-    fn validate_scopes_requires_atproto() {
-        let result = validate_scopes("transition:generic", "atproto transition:generic");
+    fn empty_registry() -> crate::lexicon::LexiconRegistry {
+        crate::lexicon::LexiconRegistry::new()
+    }
+
+    #[tokio::test]
+    async fn validate_scopes_requires_atproto() {
+        let reg = empty_registry();
+        let result =
+            validate_scopes("transition:generic", "atproto transition:generic", &reg).await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn validate_scopes_atproto_only_always_passes() {
-        let result = validate_scopes("atproto", "com.example.whatever");
+    #[tokio::test]
+    async fn validate_scopes_atproto_only_always_passes() {
+        let reg = empty_registry();
+        let result = validate_scopes("atproto", "com.example.whatever", &reg).await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn validate_scopes_subset_passes() {
+    #[tokio::test]
+    async fn validate_scopes_subset_passes() {
+        let reg = empty_registry();
         let result = validate_scopes(
             "atproto com.example.basic",
             "atproto com.example.basic com.example.advanced",
-        );
+            &reg,
+        )
+        .await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn validate_scopes_excess_scope_fails() {
+    #[tokio::test]
+    async fn validate_scopes_excess_scope_fails() {
+        let reg = empty_registry();
         let result = validate_scopes(
             "atproto com.example.basic com.example.advanced",
             "atproto com.example.basic",
-        );
+            &reg,
+        )
+        .await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn validate_scopes_transition_generic_requires_registration() {
-        let result = validate_scopes("atproto transition:generic", "atproto");
+    #[tokio::test]
+    async fn validate_scopes_transition_generic_requires_registration() {
+        let reg = empty_registry();
+        let result = validate_scopes("atproto transition:generic", "atproto", &reg).await;
         assert!(result.is_err());
 
-        let result = validate_scopes("atproto transition:generic", "atproto transition:generic");
+        let result = validate_scopes(
+            "atproto transition:generic",
+            "atproto transition:generic",
+            &reg,
+        )
+        .await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_scopes_expands_include_permission_set() {
+        let reg = empty_registry();
+        let raw = serde_json::json!({
+            "lexicon": 1,
+            "id": "com.example.authBasic",
+            "defs": {
+                "main": {
+                    "type": "permission-set",
+                    "permissions": [
+                        {
+                            "type": "permission",
+                            "resource": "rpc",
+                            "lxm": ["com.example.getProfile", "com.example.putProfile"]
+                        },
+                        {
+                            "type": "permission",
+                            "resource": "repo",
+                            "collection": ["com.example.profile"]
+                        }
+                    ]
+                }
+            }
+        });
+        let parsed = crate::lexicon::ParsedLexicon::parse(
+            raw,
+            1,
+            None,
+            crate::lexicon::ProcedureAction::Upsert,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        reg.upsert(parsed).await;
+
+        let result = validate_scopes(
+            "atproto rpc:com.example.getProfile repo:com.example.profile?action=create",
+            "atproto include:com.example.authBasic",
+            &reg,
+        )
+        .await;
+        assert!(result.is_ok());
+
+        let result = validate_scopes(
+            "atproto rpc:com.example.notAllowed",
+            "atproto include:com.example.authBasic",
+            &reg,
+        )
+        .await;
+        assert!(result.is_err());
     }
 
     #[test]

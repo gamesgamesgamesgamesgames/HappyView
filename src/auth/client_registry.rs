@@ -5,14 +5,18 @@ use std::sync::Arc;
 use atrium_identity::did::{CommonDidResolver, CommonDidResolverConfig};
 use atrium_identity::handle::{AtprotoHandleResolver, AtprotoHandleResolverConfig};
 use atrium_oauth::{
-    AtprotoClientMetadata, AuthMethod, DefaultHttpClient, GrantType, OAuthClientConfig,
-    OAuthResolverConfig,
+    AtprotoClientMetadata, AtprotoLocalhostClientMetadata, AuthMethod, DefaultHttpClient,
+    GrantType, OAuthClientConfig, OAuthResolverConfig,
 };
 
 use crate::HappyViewOAuthClient;
 use crate::auth::oauth_store::{DbSessionStore, DbStateStore};
 use crate::db::{DatabaseBackend, adapt_sql};
 use crate::dns::NativeDnsResolver;
+
+fn is_loopback_url(url: &str) -> bool {
+    url.contains("127.0.0.1") || url.contains("[::1]") || url.contains("localhost")
+}
 
 /// Parameters needed to build an OAuth client for an API client registration.
 pub struct ApiClientOAuthParams {
@@ -55,6 +59,16 @@ impl OAuthClientRegistry {
     /// Look up a client by `client_id_url`.
     pub fn get(&self, client_id_url: &str) -> Option<Arc<HappyViewOAuthClient>> {
         self.clients.get(client_id_url).map(|r| r.value().clone())
+    }
+
+    /// Get the resolved OAuth `client_id` for a registered client.
+    ///
+    /// For loopback clients this returns `http://localhost?scope=...` (the format
+    /// auth servers expect), not the original `client_id_url` key.
+    pub fn get_resolved_client_id(&self, client_id_url: &str) -> Option<String> {
+        self.clients
+            .get(client_id_url)
+            .map(|r| r.value().client_metadata.client_id.clone())
     }
 
     /// Look up a client by `client_id_url`, falling back to the primary client.
@@ -141,17 +155,6 @@ impl OAuthClientRegistry {
             scopes
         };
 
-        let metadata = AtprotoClientMetadata {
-            client_id: client_id_url.to_string(),
-            client_uri: Some(client_uri.to_string()),
-            redirect_uris,
-            token_endpoint_auth_method: AuthMethod::None,
-            grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
-            scopes,
-            jwks_uri: None,
-            token_endpoint_auth_signing_alg: None,
-        };
-
         let http = Arc::new(DefaultHttpClient::default());
         let resolver = OAuthResolverConfig {
             did_resolver: CommonDidResolver::new(CommonDidResolverConfig {
@@ -166,13 +169,37 @@ impl OAuthClientRegistry {
             protected_resource_metadata: Default::default(),
         };
 
-        match atrium_oauth::OAuthClient::new(OAuthClientConfig {
-            client_metadata: metadata,
-            keys: None,
-            state_store: state_store.clone(),
-            session_store: DbSessionStore::new(session_store_pool.clone(), *db_backend),
-            resolver,
-        }) {
+        let client = if is_loopback_url(client_id_url) {
+            atrium_oauth::OAuthClient::new(OAuthClientConfig {
+                client_metadata: AtprotoLocalhostClientMetadata {
+                    redirect_uris: None,
+                    scopes: Some(scopes),
+                },
+                keys: None,
+                state_store: state_store.clone(),
+                session_store: DbSessionStore::new(session_store_pool.clone(), *db_backend),
+                resolver,
+            })
+        } else {
+            atrium_oauth::OAuthClient::new(OAuthClientConfig {
+                client_metadata: AtprotoClientMetadata {
+                    client_id: client_id_url.to_string(),
+                    client_uri: Some(client_uri.to_string()),
+                    redirect_uris,
+                    token_endpoint_auth_method: AuthMethod::None,
+                    grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+                    scopes,
+                    jwks_uri: None,
+                    token_endpoint_auth_signing_alg: None,
+                },
+                keys: None,
+                state_store: state_store.clone(),
+                session_store: DbSessionStore::new(session_store_pool.clone(), *db_backend),
+                resolver,
+            })
+        };
+
+        match client {
             Ok(client) => {
                 self.register(client_id_url.to_string(), Arc::new(client));
                 Ok(())
@@ -217,17 +244,6 @@ impl OAuthClientRegistry {
                 scopes
             };
 
-            let metadata = AtprotoClientMetadata {
-                client_id: client_id_url.clone(),
-                client_uri: Some(client_uri),
-                redirect_uris,
-                token_endpoint_auth_method: AuthMethod::None,
-                grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
-                scopes,
-                jwks_uri: None,
-                token_endpoint_auth_signing_alg: None,
-            };
-
             // Each OAuthClient needs its own resolver instances (they're not Clone)
             let http = Arc::new(DefaultHttpClient::default());
             let resolver = OAuthResolverConfig {
@@ -243,13 +259,37 @@ impl OAuthClientRegistry {
                 protected_resource_metadata: Default::default(),
             };
 
-            match atrium_oauth::OAuthClient::new(OAuthClientConfig {
-                client_metadata: metadata,
-                keys: None,
-                state_store: state_store.clone(),
-                session_store: DbSessionStore::new(session_store_pool.clone(), db_backend),
-                resolver,
-            }) {
+            let client = if is_loopback_url(&client_id_url) {
+                atrium_oauth::OAuthClient::new(OAuthClientConfig {
+                    client_metadata: AtprotoLocalhostClientMetadata {
+                        redirect_uris: None,
+                        scopes: Some(scopes),
+                    },
+                    keys: None,
+                    state_store: state_store.clone(),
+                    session_store: DbSessionStore::new(session_store_pool.clone(), db_backend),
+                    resolver,
+                })
+            } else {
+                atrium_oauth::OAuthClient::new(OAuthClientConfig {
+                    client_metadata: AtprotoClientMetadata {
+                        client_id: client_id_url.clone(),
+                        client_uri: Some(client_uri),
+                        redirect_uris,
+                        token_endpoint_auth_method: AuthMethod::None,
+                        grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
+                        scopes,
+                        jwks_uri: None,
+                        token_endpoint_auth_signing_alg: None,
+                    },
+                    keys: None,
+                    state_store: state_store.clone(),
+                    session_store: DbSessionStore::new(session_store_pool.clone(), db_backend),
+                    resolver,
+                })
+            };
+
+            match client {
                 Ok(client) => {
                     tracing::info!(client_id = %client_id_url, "Registered API client OAuth identity");
                     self.register(client_id_url, Arc::new(client));

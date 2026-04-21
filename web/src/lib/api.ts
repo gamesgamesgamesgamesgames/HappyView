@@ -373,6 +373,8 @@ export function createApiClient(
     client_uri: string
     redirect_uris: string[]
     scopes?: string
+    client_type?: string
+    allowed_origins?: string[]
     rate_limit_capacity: number | null
     rate_limit_refill_rate: number | null
   }
@@ -390,6 +392,7 @@ export function updateApiClient(
     client_uri?: string
     redirect_uris?: string[]
     scopes?: string
+    allowed_origins?: string[] | null
     rate_limit_capacity?: number | null
     rate_limit_refill_rate?: number | null
     is_active?: boolean

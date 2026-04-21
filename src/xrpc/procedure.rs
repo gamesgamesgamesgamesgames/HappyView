@@ -401,6 +401,7 @@ async fn handle_dpop_procedure(
         &state.db,
         state.db_backend,
         encryption_key,
+        &state.oauth,
         &state.config.plc_url,
         api_client_id,
         claims.did(),

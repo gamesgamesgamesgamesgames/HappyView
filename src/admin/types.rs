@@ -375,6 +375,7 @@ pub(super) struct UpdateApiClientBody {
     pub(super) client_uri: Option<String>,
     pub(super) redirect_uris: Option<Vec<String>>,
     pub(super) scopes: Option<String>,
+    pub(super) allowed_origins: Option<Option<Vec<String>>>,
     pub(super) rate_limit_capacity: Option<Option<i32>>,
     pub(super) rate_limit_refill_rate: Option<Option<f64>>,
     pub(super) is_active: Option<bool>,
@@ -403,7 +404,9 @@ pub(super) struct ApiClientSummary {
 pub(super) struct CreateApiClientResponse {
     pub(super) id: String,
     pub(super) client_key: String,
-    pub(super) client_secret: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) client_secret: Option<String>,
     pub(super) name: String,
     pub(super) client_id_url: String,
+    pub(super) client_type: String,
 }

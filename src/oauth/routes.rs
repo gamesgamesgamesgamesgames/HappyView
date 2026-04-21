@@ -224,7 +224,7 @@ async fn register_session(
     }
 
     // Validate scopes
-    client_auth::validate_scopes(&body.scopes, &client.scopes)?;
+    client_auth::validate_scopes(&body.scopes, &client.scopes, &state.lexicons).await?;
 
     // Clean up any existing session's DPoP key before upserting
     // (the ON CONFLICT upsert would orphan the old key otherwise)

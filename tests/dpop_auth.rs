@@ -378,7 +378,7 @@ async fn test_xrpc_dpop_auth_accepted() {
 
     // 3. Generate a DPoP proof for an XRPC GET request
     let request_url = "http://127.0.0.1:0/xrpc/com.example.test.getStuff";
-    let proof = generate_dpop_proof(dpop_key, "GET", request_url, access_token)
+    let proof = generate_dpop_proof(dpop_key, "GET", request_url, access_token, None)
         .expect("failed to generate DPoP proof");
 
     // 4. Make an XRPC request with DPoP auth

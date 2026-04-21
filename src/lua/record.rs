@@ -4,11 +4,10 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::AppState;
-use crate::HappyViewOAuthSession;
 use crate::auth::Claims;
 use crate::db::{adapt_sql, now_rfc3339};
 use crate::record_refs::sync_refs;
-use crate::repo;
+use crate::repo::PdsAuth;
 
 use super::tid::generate_tid;
 
@@ -28,7 +27,7 @@ pub fn register_record_api(
     lua: &Lua,
     state: Arc<AppState>,
     claims: Arc<Claims>,
-    session: Arc<HappyViewOAuthSession>,
+    pds_auth: Arc<PdsAuth>,
 ) -> LuaResult<()> {
     // -- methods table (shared by all Record instances) --
     let methods = lua.create_table()?;
@@ -37,11 +36,11 @@ pub fn register_record_api(
     {
         let state = state.clone();
         let claims = claims.clone();
-        let session = session.clone();
+        let pds_auth = pds_auth.clone();
         let save_fn = lua.create_async_function(move |lua, this: mlua::Table| {
             let state = state.clone();
             let claims = claims.clone();
-            let session = session.clone();
+            let pds_auth = pds_auth.clone();
             async move {
                 let backend = state.db_backend;
                 let collection: String = this.raw_get("_collection")?;
@@ -74,14 +73,10 @@ pub fn register_record_api(
                         "record": data,
                     });
 
-                    let resp = repo::pds_post_json_raw(
-                        &state,
-                        &session,
-                        "com.atproto.repo.putRecord",
-                        &pds_body,
-                    )
-                    .await
-                    .map_err(|e| mlua::Error::runtime(format!("PDS putRecord failed: {e}")))?;
+                    let resp = pds_auth
+                        .post_json(&state, repo, "com.atproto.repo.putRecord", &pds_body)
+                        .await
+                        .map_err(|e| mlua::Error::runtime(format!("PDS putRecord failed: {e}")))?;
 
                     if !resp.status().is_success() {
                         let status = resp.status();
@@ -141,14 +136,10 @@ pub fn register_record_api(
                         pds_body["rkey"] = json!(rkey);
                     }
 
-                    let resp = repo::pds_post_json_raw(
-                        &state,
-                        &session,
-                        "com.atproto.repo.createRecord",
-                        &pds_body,
-                    )
-                    .await
-                    .map_err(|e| mlua::Error::runtime(format!("PDS createRecord failed: {e}")))?;
+                    let resp = pds_auth
+                        .post_json(&state, repo, "com.atproto.repo.createRecord", &pds_body)
+                        .await
+                        .map_err(|e| mlua::Error::runtime(format!("PDS createRecord failed: {e}")))?;
 
                     if !resp.status().is_success() {
                         let status = resp.status();
@@ -215,11 +206,11 @@ pub fn register_record_api(
     {
         let state = state.clone();
         let claims = claims.clone();
-        let session = session.clone();
+        let pds_auth = pds_auth.clone();
         let delete_fn = lua.create_async_function(move |_lua, this: mlua::Table| {
             let state = state.clone();
             let claims = claims.clone();
-            let session = session.clone();
+            let pds_auth = pds_auth.clone();
             async move {
                 let backend = state.db_backend;
                 let uri: String = this.raw_get::<Option<String>>("_uri")?.ok_or_else(|| {
@@ -241,14 +232,10 @@ pub fn register_record_api(
                     "rkey": rkey,
                 });
 
-                let resp = repo::pds_post_json_raw(
-                    &state,
-                    &session,
-                    "com.atproto.repo.deleteRecord",
-                    &pds_body,
-                )
-                .await
-                .map_err(|e| mlua::Error::runtime(format!("PDS deleteRecord failed: {e}")))?;
+                let resp = pds_auth
+                    .post_json(&state, repo, "com.atproto.repo.deleteRecord", &pds_body)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("PDS deleteRecord failed: {e}")))?;
 
                 if !resp.status().is_success() {
                     let status = resp.status();
@@ -451,12 +438,12 @@ pub fn register_record_api(
     {
         let state = state.clone();
         let claims = claims.clone();
-        let session = session.clone();
+        let pds_auth = pds_auth.clone();
         let save_all_fn =
             lua.create_async_function(move |lua, records_table: mlua::Table| {
                 let state = state.clone();
                 let claims = claims.clone();
-                let session = session.clone();
+                let pds_auth = pds_auth.clone();
                 async move {
                     let backend = state.db_backend;
                     // Extract save data from each record (sync)
@@ -484,7 +471,7 @@ pub fn register_record_api(
                     let futs = save_items.iter().map(|(_, collection, existing_uri, rkey, repo_override, data)| {
                         let state = state.clone();
                         let claims = claims.clone();
-                        let session = session.clone();
+                        let pds_auth = pds_auth.clone();
                         let collection = collection.clone();
                         let existing_uri = existing_uri.clone();
                         let rkey = rkey.clone();
@@ -506,16 +493,12 @@ pub fn register_record_api(
                                     "record": data,
                                 });
 
-                                let resp = repo::pds_post_json_raw(
-                                    &state,
-                                    &session,
-                                    "com.atproto.repo.putRecord",
-                                    &pds_body,
-                                )
-                                .await
-                                .map_err(|e| {
-                                    mlua::Error::runtime(format!("PDS putRecord failed: {e}"))
-                                })?;
+                                let resp = pds_auth
+                                    .post_json(&state, repo, "com.atproto.repo.putRecord", &pds_body)
+                                    .await
+                                    .map_err(|e| {
+                                        mlua::Error::runtime(format!("PDS putRecord failed: {e}"))
+                                    })?;
 
                                 if !resp.status().is_success() {
                                     let status = resp.status();
@@ -575,18 +558,14 @@ pub fn register_record_api(
                                     pds_body["rkey"] = json!(rkey);
                                 }
 
-                                let resp = repo::pds_post_json_raw(
-                                    &state,
-                                    &session,
-                                    "com.atproto.repo.createRecord",
-                                    &pds_body,
-                                )
-                                .await
-                                .map_err(|e| {
-                                    mlua::Error::runtime(format!(
-                                        "PDS createRecord failed: {e}"
-                                    ))
-                                })?;
+                                let resp = pds_auth
+                                    .post_json(&state, repo, "com.atproto.repo.createRecord", &pds_body)
+                                    .await
+                                    .map_err(|e| {
+                                        mlua::Error::runtime(format!(
+                                            "PDS createRecord failed: {e}"
+                                        ))
+                                    })?;
 
                                 if !resp.status().is_success() {
                                     let status = resp.status();

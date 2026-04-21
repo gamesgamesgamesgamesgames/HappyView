@@ -57,30 +57,68 @@ pub async fn execute_procedure_script(
     let script_source = script.to_string();
     let input_json = input.clone();
 
-    let session = match repo::get_oauth_session(state, claims.did()).await {
-        Ok(s) => s,
-        Err(e) => {
-            let error_message = format!("{e}");
-            log_event(
-                &state.db,
-                EventLog {
-                    event_type: "script.error".to_string(),
-                    severity: Severity::Error,
-                    actor_did: Some(claims.did().to_string()),
-                    subject: Some(method.to_string()),
-                    detail: serde_json::json!({
-                        "error": error_message,
-                        "script_source": script_source,
-                        "input": input_json,
-                        "caller_did": claims.did(),
-                        "method": method,
-                        "duration_ms": start.elapsed().as_millis() as u64,
-                    }),
-                },
-                backend,
-            )
-            .await;
-            return Err(e);
+    let pds_auth = if let Some(client_key) = claims.client_key() {
+        let encryption_key = state
+            .config
+            .token_encryption_key
+            .as_ref()
+            .ok_or_else(|| AppError::Internal("TOKEN_ENCRYPTION_KEY not configured".into()))?;
+        let api_client_id = match repo::get_dpop_client_id(state, client_key).await {
+            Ok(id) => id,
+            Err(e) => {
+                let error_message = format!("{e}");
+                log_event(
+                    &state.db,
+                    EventLog {
+                        event_type: "script.error".to_string(),
+                        severity: Severity::Error,
+                        actor_did: Some(claims.did().to_string()),
+                        subject: Some(method.to_string()),
+                        detail: serde_json::json!({
+                            "error": error_message,
+                            "script_source": script_source,
+                            "input": input_json,
+                            "caller_did": claims.did(),
+                            "method": method,
+                            "duration_ms": start.elapsed().as_millis() as u64,
+                        }),
+                    },
+                    backend,
+                )
+                .await;
+                return Err(e);
+            }
+        };
+        repo::PdsAuth::Dpop {
+            api_client_id,
+            encryption_key: *encryption_key,
+        }
+    } else {
+        match repo::get_oauth_session(state, claims.did()).await {
+            Ok(s) => repo::PdsAuth::OAuth(Arc::new(s)),
+            Err(e) => {
+                let error_message = format!("{e}");
+                log_event(
+                    &state.db,
+                    EventLog {
+                        event_type: "script.error".to_string(),
+                        severity: Severity::Error,
+                        actor_did: Some(claims.did().to_string()),
+                        subject: Some(method.to_string()),
+                        detail: serde_json::json!({
+                            "error": error_message,
+                            "script_source": script_source,
+                            "input": input_json,
+                            "caller_did": claims.did(),
+                            "method": method,
+                            "duration_ms": start.elapsed().as_millis() as u64,
+                        }),
+                    },
+                    backend,
+                )
+                .await;
+                return Err(e);
+            }
         }
     };
 
@@ -113,7 +151,7 @@ pub async fn execute_procedure_script(
 
     let state_arc = Arc::new(state.clone());
     let claims_arc = Arc::new(claims.clone());
-    let session_arc = Arc::new(session);
+    let pds_auth_arc = Arc::new(pds_auth);
 
     if let Err(e) = db_api::register_db_api(&lua, state_arc.clone()) {
         let error_message = format!("failed to register db API: {e}");
@@ -213,7 +251,7 @@ pub async fn execute_procedure_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = record::register_record_api(&lua, state_arc, claims_arc, session_arc) {
+    if let Err(e) = record::register_record_api(&lua, state_arc, claims_arc, pds_auth_arc) {
         let error_message = format!("failed to register Record API: {e}");
         log_event(
             &state.db,

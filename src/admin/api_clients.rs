@@ -30,11 +30,16 @@ pub(super) async fn create_api_client(
     rand::rng().fill(&mut random_bytes);
     let client_key = format!("hvc_{}", hex::encode(random_bytes));
 
-    // Generate the client secret: "hvs_" + 64 random hex chars.
-    let mut secret_bytes = [0u8; 32];
-    rand::rng().fill(&mut secret_bytes);
-    let client_secret = format!("hvs_{}", hex::encode(secret_bytes));
-    let client_secret_hash = hex::encode(Sha256::digest(client_secret.as_bytes()));
+    // Generate the client secret for confidential clients only.
+    let (client_secret, client_secret_hash) = if body.client_type == "confidential" {
+        let mut secret_bytes = [0u8; 32];
+        rand::rng().fill(&mut secret_bytes);
+        let secret = format!("hvs_{}", hex::encode(secret_bytes));
+        let hash = hex::encode(Sha256::digest(secret.as_bytes()));
+        (Some(secret), hash)
+    } else {
+        (None, String::new())
+    };
 
     let id = Uuid::new_v4().to_string();
     let now = now_rfc3339();
@@ -92,7 +97,7 @@ pub(super) async fn create_api_client(
     state.rate_limiter.register_client_identity(
         client_key.clone(),
         crate::rate_limit::ClientIdentity {
-            secret_hash: client_secret_hash,
+            secret_hash: client_secret_hash.clone(),
             client_uri: body.client_uri.clone(),
         },
     );
@@ -138,6 +143,7 @@ pub(super) async fn create_api_client(
             client_secret,
             name: body.name,
             client_id_url: body.client_id_url,
+            client_type: body.client_type,
         }),
     ))
 }
@@ -317,7 +323,7 @@ pub(super) async fn update_api_client(
 
     // Read current values
     let select_sql = adapt_sql(
-        "SELECT client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, rate_limit_capacity, rate_limit_refill_rate, is_active FROM api_clients WHERE id = ?",
+        "SELECT client_key, client_secret_hash, name, client_id_url, client_uri, redirect_uris, scopes, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active FROM api_clients WHERE id = ?",
         state.db_backend,
     );
 
@@ -329,6 +335,7 @@ pub(super) async fn update_api_client(
         String,
         String,
         String,
+        Option<String>,
         Option<i32>,
         Option<f64>,
         i32,
@@ -347,6 +354,7 @@ pub(super) async fn update_api_client(
         cur_client_uri,
         cur_redirect_uris,
         cur_scopes,
+        cur_allowed_origins,
         cur_capacity,
         cur_refill,
         cur_active,
@@ -362,6 +370,13 @@ pub(super) async fn update_api_client(
         .map(|uris| serde_json::to_string(&uris).unwrap_or_else(|_| "[]".to_string()))
         .unwrap_or(cur_redirect_uris);
     let scopes = body.scopes.unwrap_or(cur_scopes);
+    let allowed_origins_json: Option<String> = match body.allowed_origins {
+        Some(Some(origins)) => {
+            Some(serde_json::to_string(&origins).unwrap_or_else(|_| "[]".to_string()))
+        }
+        Some(None) => None,
+        None => cur_allowed_origins,
+    };
     let capacity = body.rate_limit_capacity.unwrap_or(cur_capacity);
     let refill_rate = body.rate_limit_refill_rate.unwrap_or(cur_refill);
     let is_active = body
@@ -371,7 +386,7 @@ pub(super) async fn update_api_client(
     let now = now_rfc3339();
 
     let update_sql = adapt_sql(
-        "UPDATE api_clients SET name = ?, client_uri = ?, redirect_uris = ?, scopes = ?, rate_limit_capacity = ?, rate_limit_refill_rate = ?, is_active = ?, updated_at = ? WHERE id = ?",
+        "UPDATE api_clients SET name = ?, client_uri = ?, redirect_uris = ?, scopes = ?, allowed_origins = ?, rate_limit_capacity = ?, rate_limit_refill_rate = ?, is_active = ?, updated_at = ? WHERE id = ?",
         state.db_backend,
     );
 
@@ -380,6 +395,7 @@ pub(super) async fn update_api_client(
         .bind(&client_uri)
         .bind(&redirect_uris_json)
         .bind(&scopes)
+        .bind(&allowed_origins_json)
         .bind(capacity)
         .bind(refill_rate)
         .bind(is_active)
