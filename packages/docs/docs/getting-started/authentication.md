@@ -7,12 +7,12 @@ HappyView has two distinct authentication surfaces:
 
 ## Which endpoints require what?
 
-| Endpoint type                      | Client identification   | User authentication                                                                              |
-| ---------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
-| Queries (`GET /xrpc/{method}`)     | `X-Client-Key` required | Optional — DPoP auth if the query needs to know who the user is                                  |
-| Procedures (`POST /xrpc/{method}`) | `X-Client-Key` required | Required — DPoP auth so HappyView can proxy writes to the user's PDS                             |
+| Endpoint type                      | Client identification   | User authentication                                                                                 |
+| ---------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
+| Queries (`GET /xrpc/{method}`)     | `X-Client-Key` required | Optional — DPoP auth if the query needs to know who the user is                                     |
+| Procedures (`POST /xrpc/{method}`) | `X-Client-Key` required | Required — DPoP auth so HappyView can proxy writes to the user's PDS                                |
 | Admin API (`/admin/*`)             | —                       | Required — admin API key or service auth JWT with the right [permissions](../guides/permissions.md) |
-| Health check (`GET /health`)       | —                       | —                                                                                                |
+| Health check (`GET /health`)       | —                       | —                                                                                                   |
 
 ## XRPC: API client identification
 
@@ -131,6 +131,41 @@ A request that only carries an `X-Client-Key` header (no DPoP token) can hit que
 Third-party apps that want HappyView to make PDS writes on behalf of their users use the **DPoP key provisioning** flow. This avoids browser-based redirects through HappyView's domain, which can be blocked by Firefox's Bounce Tracker Protection.
 
 The idea: the app gets a DPoP keypair from HappyView, uses that keypair during its own OAuth flow with the user's PDS, then registers the resulting tokens back with HappyView. From that point on, XRPC requests authenticated with `Authorization: DPoP <access_token>` plus a `DPoP` proof header and `X-Client-Key` will have HappyView proxy writes using the stored session.
+
+The client app and HappyView share the same DPoP keypair, so both can generate valid proofs that the PDS will accept. The PDS binds tokens to a key's thumbprint but it doesn't care who signs the proof, only that it was signed by the right key.
+
+### Flow overview
+
+```mermaid
+sequenceDiagram
+    participant Client as Client App
+    participant HV as HappyView
+    participant PDS as User's PDS
+
+    note over Client,PDS: Phase 1 — DPoP Key Provisioning
+    Client->>HV: POST /oauth/dpop-keys<br/>X-Client-Key + secret or PKCE
+    HV->>HV: Authenticate client<br/>Generate ES256 keypair<br/>Encrypt & store private key
+    HV-->>Client: provision_id + DPoP private JWK
+
+    note over Client,PDS: Phase 2 — OAuth with the User's PDS
+    Client->>PDS: Redirect user to authorize<br/>client_id embeds DPoP public key
+    PDS-->>Client: Auth code (redirect back)
+    Client->>PDS: Exchange code for tokens<br/>DPoP proof signed with provisioned key
+    PDS-->>Client: Access + refresh tokens<br/>(bound to DPoP key thumbprint)
+
+    note over Client,PDS: Phase 3 — Session Registration
+    Client->>HV: POST /oauth/sessions<br/>provision_id + tokens + PKCE verifier
+    HV->>HV: Verify PKCE, validate scopes<br/>Encrypt & store tokens
+    HV-->>Client: session_id + DID
+
+    note over Client,PDS: Phase 4 — Authenticated XRPC Request
+    Client->>HV: POST /xrpc/{method}<br/>Authorization: DPoP + proof + X-Client-Key
+    HV->>HV: Validate proof (sig, method,<br/>URL, token hash, thumbprint)
+    HV->>HV: Generate fresh DPoP proof<br/>with same shared keypair
+    HV->>PDS: POST /xrpc/com.atproto.repo.*<br/>Authorization: DPoP + proof
+    PDS-->>HV: Success
+    HV-->>Client: Response
+```
 
 :::tip
 The [JavaScript SDK](../sdk/overview.md) handles this entire flow for you. The raw HTTP flow below is useful for understanding the protocol or building a non-JavaScript client.
