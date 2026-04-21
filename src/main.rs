@@ -329,6 +329,38 @@ async fn main() {
                 .await
                 .expect("Failed to insert primary domain");
             info!("Seeded primary domain: {}", config.public_url);
+        } else {
+            // Sync the primary domain URL with PUBLIC_URL if it changed
+            let primary_sql = happyview::db::adapt_sql(
+                "SELECT id, url FROM domains WHERE is_primary = 1",
+                db_backend,
+            );
+            if let Some(row) = sqlx::query(&primary_sql)
+                .fetch_optional(&db_pool)
+                .await
+                .expect("Failed to check primary domain")
+            {
+                let primary_url: String = row.try_get("url").unwrap_or_default();
+                if primary_url != config.public_url {
+                    let primary_id: String = row.try_get("id").unwrap_or_default();
+                    let now = happyview::db::now_rfc3339();
+                    let update_sql = happyview::db::adapt_sql(
+                        "UPDATE domains SET url = ?, updated_at = ? WHERE id = ?",
+                        db_backend,
+                    );
+                    sqlx::query(&update_sql)
+                        .bind(&config.public_url)
+                        .bind(&now)
+                        .bind(&primary_id)
+                        .execute(&db_pool)
+                        .await
+                        .expect("Failed to update primary domain URL");
+                    info!(
+                        "Updated primary domain URL from {} to {}",
+                        primary_url, config.public_url
+                    );
+                }
+            }
         }
 
         let select_sql = happyview::db::adapt_sql(
