@@ -1,11 +1,3 @@
-export interface CryptoAdapter {
-  generatePkceVerifier(): Promise<string>;
-  computePkceChallenge(verifier: string): Promise<string>;
-  signEs256(privateKey: JsonWebKey, payload: Uint8Array): Promise<Uint8Array>;
-  sha256(data: Uint8Array): Promise<Uint8Array>;
-  getRandomValues(length: number): Uint8Array;
-}
-
 export interface StorageAdapter {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -16,7 +8,6 @@ export interface HappyViewOAuthClientOptions {
   instanceUrl: string;
   clientKey: string;
   clientSecret?: string;
-  crypto: CryptoAdapter;
   storage?: StorageAdapter;
 }
 

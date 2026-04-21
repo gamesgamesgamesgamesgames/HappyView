@@ -1,25 +1,21 @@
+import { AtprotoDohHandleResolver } from "@atproto-labs/handle-resolver";
+import { DidResolverCommon } from "@atproto-labs/did-resolver";
+import type { DidDocument } from "@atproto/did";
 import {
-  generateDpopProof,
   HappyViewOAuthClient,
   HappyViewSession,
+  importJwk,
   InvalidStateError,
+  ResolutionError,
   TokenExchangeError,
-  type CryptoAdapter,
   type StorageAdapter,
 } from "@happyview/oauth-client";
 import { LocalStorageAdapter } from "./local-storage-adapter";
-import {
-  resolveAuthServerMetadata,
-  resolveDidDocument,
-  resolveHandleToDid,
-  resolvePdsUrl,
-} from "./resolve";
-import { WebCryptoAdapter } from "./web-crypto-adapter";
 
 export interface HappyViewBrowserClientOptions {
   instanceUrl: string;
   clientKey: string;
-  crypto?: CryptoAdapter;
+  scopes?: string;
   storage?: StorageAdapter;
   fetch?: typeof globalThis.fetch;
 }
@@ -27,7 +23,7 @@ export interface HappyViewBrowserClientOptions {
 interface PendingAuthState {
   did: string;
   provisionId: string;
-  dpopKey: JsonWebKey;
+  rawJwk: JsonWebKey;
   provisionPkceVerifier: string;
   authPkceVerifier: string;
   pdsUrl: string;
@@ -42,38 +38,57 @@ export interface PrepareLoginResult {
   state: string;
 }
 
-export class HappyViewBrowserClient extends HappyViewOAuthClient {
-  private readonly _fetchFn: typeof globalThis.fetch;
+interface AuthServerMetadata {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  pushed_authorization_request_endpoint?: string;
+  dpop_signing_alg_values_supported?: string[];
+}
 
+export class HappyViewBrowserClient extends HappyViewOAuthClient {
+  private readonly handleResolver: AtprotoDohHandleResolver;
+  private readonly didResolver: DidResolverCommon;
+  private readonly scopes: string;
   constructor(options: HappyViewBrowserClientOptions) {
-    const fetchFn = options.fetch ?? globalThis.fetch;
-    const cryptoAdapter = options.crypto ?? new WebCryptoAdapter();
+    const fetchFn = options.fetch ?? (((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof globalThis.fetch);
     const storageAdapter = options.storage ?? new LocalStorageAdapter();
     super({
       instanceUrl: options.instanceUrl,
       clientKey: options.clientKey,
-      crypto: cryptoAdapter,
       storage: storageAdapter,
       fetch: fetchFn,
     });
-    this._fetchFn = fetchFn;
+
+    this.scopes = options.scopes ?? "atproto";
+    this.handleResolver = new AtprotoDohHandleResolver({
+      dohEndpoint: "https://dns.google/resolve",
+      fetch: fetchFn,
+    });
+    this.didResolver = new DidResolverCommon({ fetch: fetchFn });
   }
 
   async prepareLogin(handle: string): Promise<PrepareLoginResult> {
-    const did = await resolveHandleToDid(handle, this._fetchFn);
-    const doc = await resolveDidDocument(did, this._fetchFn);
-    const pdsUrl = resolvePdsUrl(doc);
-    const authMeta = await resolveAuthServerMetadata(pdsUrl, this._fetchFn);
+    // Resolve handle → DID → DID document → PDS URL → auth server metadata
+    const resolvedDid = await this.handleResolver.resolve(handle);
+    if (!resolvedDid) {
+      throw new ResolutionError(`Failed to resolve handle: ${handle}`);
+    }
+    const did = resolvedDid as string;
 
-    const { provisionId, dpopKey, pkceVerifier: provisionPkceVerifier } =
+    const didDoc = await this.didResolver.resolve(resolvedDid);
+    const pdsUrl = extractPdsUrl(didDoc);
+    const authMeta = await this.fetchAuthServerMetadata(pdsUrl);
+
+    // Provision DPoP key from HappyView
+    const { provisionId, rawJwk, pkceVerifier: provisionPkceVerifier } =
       await this.provisionDpopKey();
 
     // Separate PKCE for the PDS authorization server
-    const authPkceVerifier = await this.crypto.generatePkceVerifier();
-    const authPkceChallenge =
-      await this.crypto.computePkceChallenge(authPkceVerifier);
+    const authPkceVerifier = generatePkceVerifier();
+    const authPkceChallenge = await computePkceChallenge(authPkceVerifier);
 
-    const stateBytes = this.crypto.getRandomValues(16);
+    const stateBytes = crypto.getRandomValues(new Uint8Array(16));
     const state = Array.from(stateBytes, (b) =>
       b.toString(16).padStart(2, "0"),
     ).join("");
@@ -81,7 +96,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     const pendingState: PendingAuthState = {
       did,
       provisionId,
-      dpopKey,
+      rawJwk,
       provisionPkceVerifier: provisionPkceVerifier!,
       authPkceVerifier,
       pdsUrl,
@@ -94,18 +109,50 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       JSON.stringify(pendingState),
     );
 
-    const redirectUri = window.location.origin + "/oauth/callback";
-    const params = new URLSearchParams({
+    const { clientId, redirectUri } = this.resolveOAuthEndpoints();
+
+    const authParams = new URLSearchParams({
       response_type: "code",
-      client_id: `${this.instanceUrl}/oauth-client-metadata.json`,
+      client_id: clientId,
       redirect_uri: redirectUri,
       state,
-      scope: "atproto",
+      scope: this.scopes,
       code_challenge: authPkceChallenge,
       code_challenge_method: "S256",
+      login_hint: handle,
     });
 
-    const authorizationUrl = `${authMeta.authorization_endpoint}?${params}`;
+    // ATProto requires Pushed Authorization Requests (PAR)
+    const parEndpoint = authMeta.pushed_authorization_request_endpoint;
+    if (parEndpoint) {
+      const parResp = await this._fetch(parEndpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: authParams,
+      });
+
+      if (!parResp.ok) {
+        const err = await parResp.text();
+        throw new ResolutionError(
+          `PAR request failed: ${parResp.status} ${err}`,
+        );
+      }
+
+      const parData = (await parResp.json()) as { request_uri: string };
+      const authorizationUrl =
+        `${authMeta.authorization_endpoint}?` +
+        new URLSearchParams({
+          client_id: clientId,
+          request_uri: parData.request_uri,
+        });
+
+      return { authorizationUrl, did, state };
+    }
+
+    // Fallback: direct authorization URL (for servers that don't require PAR)
+    const authorizationUrl = `${authMeta.authorization_endpoint}?${authParams}`;
 
     return { authorizationUrl, did, state };
   }
@@ -121,43 +168,93 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     const state = params.get("state");
 
     if (!code || !state) {
-      throw new InvalidStateError("Missing code or state in callback URL");
+      const error = params.get("error");
+      const errorDesc = params.get("error_description");
+      const raw = search ?? window.location.search;
+      throw new InvalidStateError(
+        `Missing code or state in callback URL. ` +
+        `error=${error}, error_description=${errorDesc}, ` +
+        `search=${raw}`
+      );
     }
 
     const pendingJson = await this.storage.get(`pending-auth:${state}`);
     if (!pendingJson) {
-      throw new InvalidStateError("No pending auth state found for this callback");
+      throw new InvalidStateError(
+        "No pending auth state found for this callback",
+      );
     }
     const pending: PendingAuthState = JSON.parse(pendingJson);
 
-    // Generate DPoP proof for the token endpoint (no ath — no access token yet)
-    const dpopProof = await generateDpopProof(this.crypto, {
-      privateKey: pending.dpopKey,
-      method: "POST",
-      url: pending.tokenEndpoint,
-    });
+    // Import the stored JWK into a Key for DPoP proof generation
+    const dpopKey = await importJwk(pending.rawJwk);
+    // Build a plain public JWK object from the raw key (strip private "d" component)
+    const { d: _, ...publicJwk } = pending.rawJwk;
 
-    const redirectUri = window.location.origin + "/oauth/callback";
-    const tokenResp = await this._fetchFn(pending.tokenEndpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        dpop: dpopProof,
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-        client_id: `${this.instanceUrl}/oauth-client-metadata.json`,
-        code_verifier: pending.authPkceVerifier,
-      }),
-    });
+    const { clientId, redirectUri } = this.resolveOAuthEndpoints();
 
-    if (!tokenResp.ok) {
-      const err = await tokenResp.text();
+    // Token exchange with DPoP nonce handling — the PDS may require a nonce
+    // by responding with 400 + use_dpop_nonce error and a DPoP-Nonce header.
+    let dpopNonce: string | undefined;
+    let tokenResp!: Response;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const proof = await dpopKey.createJwt(
+        {
+          alg: "ES256",
+          typ: "dpop+jwt",
+          jwk: publicJwk as any,
+        },
+        {
+          htm: "POST",
+          htu: pending.tokenEndpoint,
+          iat: Math.floor(Date.now() / 1000),
+          jti: randomHex(16),
+          ...(dpopNonce ? { nonce: dpopNonce } : {}),
+        },
+      );
+
+      tokenResp = await this._fetch(pending.tokenEndpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          dpop: proof,
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          code_verifier: pending.authPkceVerifier,
+        }),
+      });
+
+      // If the server requires a DPoP nonce, retry with it
+      if (!tokenResp.ok && attempt === 0) {
+        const nonceHeader = tokenResp.headers.get("dpop-nonce");
+        if (nonceHeader) {
+          const errorBody = await tokenResp.text();
+          if (errorBody.includes("use_dpop_nonce")) {
+            dpopNonce = nonceHeader;
+            continue;
+          }
+          // Not a nonce error — throw
+          throw new TokenExchangeError(
+            `Token exchange failed: ${tokenResp.status} ${errorBody}`,
+            tokenResp.status,
+            errorBody,
+          );
+        }
+      }
+
+      break;
+    }
+
+    if (!tokenResp!.ok) {
+      const err = await tokenResp!.text();
       throw new TokenExchangeError(
-        `Token exchange failed: ${tokenResp.status} ${err}`,
-        tokenResp.status,
+        `Token exchange failed: ${tokenResp!.status} ${err}`,
+        tokenResp!.status,
         err,
       );
     }
@@ -176,10 +273,10 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       did: pending.did,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
-      scopes: tokens.scope ?? "atproto",
+      scopes: tokens.scope ?? this.scopes,
       pdsUrl: pending.pdsUrl,
       issuer: tokens.iss ?? pending.issuer,
-      dpopKey: pending.dpopKey,
+      dpopKey: pending.rawJwk,
     });
 
     await this.storage.delete(`pending-auth:${state}`);
@@ -190,4 +287,111 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
   async logout(did: string): Promise<void> {
     await this.deleteSession(did);
   }
+
+  private resolveOAuthEndpoints(): { clientId: string; redirectUri: string } {
+    const isLoopback =
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "[::1]" ||
+      window.location.hostname === "localhost";
+
+    if (isLoopback) {
+      const params = new URLSearchParams({ scope: this.scopes });
+      return {
+        clientId: `http://localhost?${params}`,
+        redirectUri: `http://127.0.0.1:${window.location.port}/`,
+      };
+    }
+
+    return {
+      clientId: `${this.instanceUrl}/oauth-client-metadata.json`,
+      redirectUri: `${window.location.origin}/oauth/callback`,
+    };
+  }
+
+  private async fetchAuthServerMetadata(
+    pdsUrl: string,
+  ): Promise<AuthServerMetadata> {
+    const base = pdsUrl.replace(/\/+$/, "");
+
+    const resourceResp = await this._fetch(
+      `${base}/.well-known/oauth-protected-resource`,
+    );
+    if (!resourceResp.ok) {
+      throw new ResolutionError(
+        `Failed to fetch protected resource metadata from ${pdsUrl}: ${resourceResp.status}`,
+      );
+    }
+    const resource = (await resourceResp.json()) as {
+      authorization_servers?: string[];
+    };
+    const authServer = resource.authorization_servers?.[0];
+    if (!authServer) {
+      throw new ResolutionError(
+        `No authorization server found in protected resource metadata from ${pdsUrl}`,
+      );
+    }
+
+    const metaResp = await this._fetch(
+      `${authServer.replace(/\/+$/, "")}/.well-known/oauth-authorization-server`,
+    );
+    if (!metaResp.ok) {
+      throw new ResolutionError(
+        `Failed to fetch auth server metadata from ${authServer}: ${metaResp.status}`,
+      );
+    }
+    return metaResp.json();
+  }
+}
+
+function extractPdsUrl(doc: DidDocument): string {
+  const services = doc.service ?? [];
+  for (const service of services) {
+    if (
+      service.id === "#atproto_pds" ||
+      (typeof service.id === "string" && service.id.endsWith("#atproto_pds"))
+    ) {
+      if (typeof service.serviceEndpoint === "string") {
+        return service.serviceEndpoint;
+      }
+      throw new ResolutionError(
+        `#atproto_pds service endpoint is not a string URL in DID document for ${doc.id}`,
+      );
+    }
+  }
+  throw new ResolutionError(
+    `No #atproto_pds service found in DID document for ${doc.id}`,
+  );
+}
+
+function randomHex(byteLength: number): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generatePkceVerifier(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+async function computePkceChallenge(verifier: string): Promise<string> {
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  const bytes = new Uint8Array(hash);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type {
-  CryptoAdapter,
   DpopProvision,
   HappyViewOAuthClientOptions,
   RegisterSessionParams,
@@ -13,13 +12,6 @@ describe("types", () => {
       instanceUrl: "https://example.com",
       clientKey: "hvc_test",
       clientSecret: "hvs_secret",
-      crypto: {
-        generatePkceVerifier: async () => "verifier",
-        computePkceChallenge: async () => "challenge",
-        signEs256: async () => new Uint8Array(64),
-        sha256: async () => new Uint8Array(32),
-        getRandomValues: (n) => new Uint8Array(n),
-      },
     };
     expect(opts.clientKey).toBe("hvc_test");
     expect(opts.clientSecret).toBe("hvs_secret");
@@ -29,13 +21,6 @@ describe("types", () => {
     const opts: HappyViewOAuthClientOptions = {
       instanceUrl: "https://example.com",
       clientKey: "hvc_test",
-      crypto: {
-        generatePkceVerifier: async () => "verifier",
-        computePkceChallenge: async () => "challenge",
-        signEs256: async () => new Uint8Array(64),
-        sha256: async () => new Uint8Array(32),
-        getRandomValues: (n) => new Uint8Array(n),
-      },
     };
     expect(opts.clientSecret).toBeUndefined();
   });
@@ -70,16 +55,4 @@ describe("types", () => {
     expect(storage.get).toBeFunction();
   });
 
-  test("CryptoAdapter interface shape", () => {
-    const adapter: CryptoAdapter = {
-      generatePkceVerifier: async () => "verifier",
-      computePkceChallenge: async () => "challenge",
-      signEs256: async () => new Uint8Array(64),
-      sha256: async () => new Uint8Array(32),
-      getRandomValues: (n) => new Uint8Array(n),
-    };
-    expect(adapter.signEs256).toBeFunction();
-    expect(adapter.sha256).toBeFunction();
-    expect(adapter.getRandomValues).toBeFunction();
-  });
 });

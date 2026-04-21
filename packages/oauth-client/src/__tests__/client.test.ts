@@ -2,22 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import { HappyViewOAuthClient } from "../client";
 import { ApiError } from "../errors";
 import { MemoryStorage } from "../storage";
-import type { CryptoAdapter } from "../types";
-
-const testCrypto: CryptoAdapter = {
-  generatePkceVerifier: async () => "test-verifier-1234567890",
-  computePkceChallenge: async (v: string) => `challenge-of-${v}`,
-  signEs256: async () => new Uint8Array(64),
-  sha256: async (data: Uint8Array) => {
-    const hash = await crypto.subtle.digest("SHA-256", data);
-    return new Uint8Array(hash);
-  },
-  getRandomValues: (length: number) => {
-    const bytes = new Uint8Array(length);
-    crypto.getRandomValues(bytes);
-    return bytes;
-  },
-};
 
 function createMockFetch(responses: Array<{ status: number; body: unknown }>) {
   let callIndex = 0;
@@ -26,12 +10,27 @@ function createMockFetch(responses: Array<{ status: number; body: unknown }>) {
   const fetchFn = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input instanceof URL ? input.toString() : String(input);
     calls.push({ url, init: init ?? {} });
-    const resp = responses[callIndex] ?? { status: 500, body: { error: "no more mocked responses" } };
+    const resp = responses[callIndex] ?? {
+      status: 500,
+      body: { error: "no more mocked responses" },
+    };
     callIndex++;
     return new Response(JSON.stringify(resp.body), { status: resp.status });
   });
 
   return { fetchFn, calls };
+}
+
+async function generateTestJwk(): Promise<JsonWebKey> {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"],
+  );
+  const jwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+  // Remove key_ops so importJwk can re-import with its own usage constraints
+  delete jwk.key_ops;
+  return jwk;
 }
 
 function createClient(overrides?: {
@@ -43,7 +42,6 @@ function createClient(overrides?: {
     instanceUrl: "https://happyview.example.com",
     clientKey: "hvc_testkey",
     clientSecret: overrides?.clientSecret,
-    crypto: testCrypto,
     storage: overrides?.storage ?? new MemoryStorage(),
     fetch: overrides?.fetchFn,
   });
@@ -52,12 +50,13 @@ function createClient(overrides?: {
 describe("HappyViewOAuthClient", () => {
   describe("provisionDpopKey", () => {
     test("calls POST /oauth/dpop-keys with client credentials in headers", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn, calls } = createMockFetch([
         {
           status: 201,
           body: {
             provision_id: "hvp_abc123",
-            dpop_key: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+            dpop_key: testJwk,
           },
         },
       ]);
@@ -65,21 +64,25 @@ describe("HappyViewOAuthClient", () => {
       const client = createClient({ fetchFn, clientSecret: "hvs_secret" });
       const result = await client.provisionDpopKey();
 
-      expect(calls[0].url).toBe("https://happyview.example.com/oauth/dpop-keys");
+      expect(calls[0].url).toBe(
+        "https://happyview.example.com/oauth/dpop-keys",
+      );
       const headers = new Headers(calls[0].init.headers);
       expect(headers.get("x-client-key")).toBe("hvc_testkey");
       expect(headers.get("x-client-secret")).toBe("hvs_secret");
       expect(result.provisionId).toBe("hvp_abc123");
-      expect(result.dpopKey.kty).toBe("EC");
+      expect(result.dpopKey).toBeDefined();
+      expect(result.rawJwk).toBeDefined();
     });
 
     test("includes PKCE challenge for public clients and returns verifier", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn, calls } = createMockFetch([
         {
           status: 201,
           body: {
             provision_id: "hvp_public",
-            dpop_key: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+            dpop_key: testJwk,
           },
         },
       ]);
@@ -88,17 +91,20 @@ describe("HappyViewOAuthClient", () => {
       const result = await client.provisionDpopKey();
 
       const body = JSON.parse(calls[0].init.body as string);
-      expect(body.pkce_challenge).toBe("challenge-of-test-verifier-1234567890");
-      expect(result.pkceVerifier).toBe("test-verifier-1234567890");
+      expect(body.pkce_challenge).toBeDefined();
+      expect(typeof body.pkce_challenge).toBe("string");
+      expect(result.pkceVerifier).toBeDefined();
+      expect(typeof result.pkceVerifier).toBe("string");
     });
 
     test("does not include PKCE for confidential clients", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn, calls } = createMockFetch([
         {
           status: 201,
           body: {
             provision_id: "hvp_conf",
-            dpop_key: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+            dpop_key: testJwk,
           },
         },
       ]);
@@ -119,7 +125,7 @@ describe("HappyViewOAuthClient", () => {
       const client = createClient({ fetchFn });
       try {
         await client.provisionDpopKey();
-        expect(true).toBe(false); // should not reach
+        expect(true).toBe(false);
       } catch (err) {
         expect(err).toBeInstanceOf(ApiError);
         expect((err as ApiError).status).toBe(400);
@@ -130,6 +136,7 @@ describe("HappyViewOAuthClient", () => {
 
   describe("registerSession", () => {
     test("calls POST /oauth/sessions and returns a HappyViewSession", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn, calls } = createMockFetch([
         {
           status: 201,
@@ -138,20 +145,27 @@ describe("HappyViewOAuthClient", () => {
       ]);
 
       const storage = new MemoryStorage();
-      const client = createClient({ fetchFn, clientSecret: "hvs_sec", storage });
+      const client = createClient({
+        fetchFn,
+        clientSecret: "hvs_sec",
+        storage,
+      });
       const session = await client.registerSession({
         provisionId: "hvp_abc",
         did: "did:plc:testuser",
         accessToken: "at_token",
         scopes: "atproto",
-        dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+        dpopKey: testJwk,
       });
 
-      expect(calls[0].url).toBe("https://happyview.example.com/oauth/sessions");
+      expect(calls[0].url).toBe(
+        "https://happyview.example.com/oauth/sessions",
+      );
       expect(session.did).toBe("did:plc:testuser");
     });
 
     test("persists session and last active DID to storage", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn } = createMockFetch([
         {
           status: 201,
@@ -160,13 +174,17 @@ describe("HappyViewOAuthClient", () => {
       ]);
 
       const storage = new MemoryStorage();
-      const client = createClient({ fetchFn, clientSecret: "hvs_sec", storage });
+      const client = createClient({
+        fetchFn,
+        clientSecret: "hvs_sec",
+        storage,
+      });
       await client.registerSession({
         provisionId: "hvp_abc",
         did: "did:plc:testuser",
         accessToken: "at_token",
         scopes: "atproto",
-        dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+        dpopKey: testJwk,
       });
 
       const stored = await storage.get("happyview:session:did:plc:testuser");
@@ -187,13 +205,22 @@ describe("HappyViewOAuthClient", () => {
       ]);
 
       const storage = new MemoryStorage();
-      await storage.set("happyview:session:did:plc:testuser", JSON.stringify({ did: "did:plc:testuser" }));
+      await storage.set(
+        "happyview:session:did:plc:testuser",
+        JSON.stringify({ did: "did:plc:testuser" }),
+      );
       await storage.set("happyview:last-active-did", "did:plc:testuser");
 
-      const client = createClient({ fetchFn, clientSecret: "hvs_sec", storage });
+      const client = createClient({
+        fetchFn,
+        clientSecret: "hvs_sec",
+        storage,
+      });
       await client.deleteSession("did:plc:testuser");
 
-      expect(calls[0].url).toBe("https://happyview.example.com/oauth/sessions/did:plc:testuser");
+      expect(calls[0].url).toBe(
+        "https://happyview.example.com/oauth/sessions/did:plc:testuser",
+      );
       expect(calls[0].init.method).toBe("DELETE");
     });
 
@@ -201,13 +228,22 @@ describe("HappyViewOAuthClient", () => {
       const { fetchFn } = createMockFetch([{ status: 204, body: null }]);
 
       const storage = new MemoryStorage();
-      await storage.set("happyview:session:did:plc:testuser", JSON.stringify({ did: "did:plc:testuser" }));
+      await storage.set(
+        "happyview:session:did:plc:testuser",
+        JSON.stringify({ did: "did:plc:testuser" }),
+      );
       await storage.set("happyview:last-active-did", "did:plc:testuser");
 
-      const client = createClient({ fetchFn, clientSecret: "hvs_sec", storage });
+      const client = createClient({
+        fetchFn,
+        clientSecret: "hvs_sec",
+        storage,
+      });
       await client.deleteSession("did:plc:testuser");
 
-      expect(await storage.get("happyview:session:did:plc:testuser")).toBeNull();
+      expect(
+        await storage.get("happyview:session:did:plc:testuser"),
+      ).toBeNull();
       expect(await storage.get("happyview:last-active-did")).toBeNull();
     });
 
@@ -215,14 +251,23 @@ describe("HappyViewOAuthClient", () => {
       const { fetchFn } = createMockFetch([{ status: 204, body: null }]);
 
       const storage = new MemoryStorage();
-      await storage.set("happyview:session:did:plc:other", JSON.stringify({ did: "did:plc:other" }));
+      await storage.set(
+        "happyview:session:did:plc:other",
+        JSON.stringify({ did: "did:plc:other" }),
+      );
       await storage.set("happyview:last-active-did", "did:plc:testuser");
 
-      const client = createClient({ fetchFn, clientSecret: "hvs_sec", storage });
+      const client = createClient({
+        fetchFn,
+        clientSecret: "hvs_sec",
+        storage,
+      });
       await client.deleteSession("did:plc:other");
 
       expect(await storage.get("happyview:session:did:plc:other")).toBeNull();
-      expect(await storage.get("happyview:last-active-did")).toBe("did:plc:testuser");
+      expect(await storage.get("happyview:last-active-did")).toBe(
+        "did:plc:testuser",
+      );
     });
   });
 
@@ -234,12 +279,13 @@ describe("HappyViewOAuthClient", () => {
     });
 
     test("restores session from storage", async () => {
+      const testJwk = await generateTestJwk();
       const storage = new MemoryStorage();
       await storage.set(
         "happyview:session:did:plc:testuser",
         JSON.stringify({
           did: "did:plc:testuser",
-          dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+          dpopKey: testJwk,
           accessToken: "at_stored",
           clientKey: "hvc_testkey",
           instanceUrl: "https://happyview.example.com",
@@ -261,13 +307,14 @@ describe("HappyViewOAuthClient", () => {
     });
 
     test("restores last active session", async () => {
+      const testJwk = await generateTestJwk();
       const storage = new MemoryStorage();
       await storage.set("happyview:last-active-did", "did:plc:testuser");
       await storage.set(
         "happyview:session:did:plc:testuser",
         JSON.stringify({
           did: "did:plc:testuser",
-          dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+          dpopKey: testJwk,
           accessToken: "at_stored",
           clientKey: "hvc_testkey",
           instanceUrl: "https://happyview.example.com",

@@ -7,9 +7,7 @@ export {
   MemoryStorage,
   ResolutionError,
   TokenExchangeError,
-  base64urlEncode,
-  generateDpopProof,
-  type CryptoAdapter,
+  importJwk,
   type DpopProvision,
   type HappyViewOAuthClientOptions,
   type RegisterSessionParams,
@@ -23,11 +21,3 @@ export type {
   PrepareLoginResult,
 } from "./browser-client";
 export { LocalStorageAdapter } from "./local-storage-adapter";
-export {
-  resolveAuthServerMetadata,
-  resolveDidDocument,
-  resolveHandleToDid,
-  resolvePdsUrl,
-} from "./resolve";
-export type { AuthServerMetadata, DidDocument } from "./resolve";
-export { WebCryptoAdapter } from "./web-crypto-adapter";

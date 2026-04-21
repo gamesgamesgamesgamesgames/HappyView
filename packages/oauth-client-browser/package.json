@@ -31,7 +31,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@happyview/oauth-client": "workspace:*"
+    "@happyview/oauth-client": "workspace:*",
+    "@atproto-labs/handle-resolver": "^0.3.6",
+    "@atproto-labs/did-resolver": "^0.2.6",
+    "@atproto/did": "^0.3.0"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^16.0.0",

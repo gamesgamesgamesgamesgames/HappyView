@@ -1,27 +1,23 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import {
   InvalidStateError,
   TokenExchangeError,
-  type CryptoAdapter,
   type StorageAdapter,
 } from "@happyview/oauth-client";
 import { HappyViewBrowserClient } from "../browser-client";
 import { LocalStorageAdapter } from "../local-storage-adapter";
 
-const mockCrypto: CryptoAdapter = {
-  generatePkceVerifier: async () => "mock-pkce-verifier",
-  computePkceChallenge: async (v: string) => `challenge-of-${v}`,
-  signEs256: async () => new Uint8Array(64),
-  sha256: async (data: Uint8Array) => {
-    const hash = await crypto.subtle.digest("SHA-256", data);
-    return new Uint8Array(hash);
-  },
-  getRandomValues: (length: number) => {
-    const bytes = new Uint8Array(length);
-    crypto.getRandomValues(bytes);
-    return bytes;
-  },
-};
+// Generate a real ES256 JWK once for all tests that need importJwk to succeed
+let testJwk: JsonWebKey;
+beforeAll(async () => {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"],
+  );
+  testJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+  delete testJwk.key_ops;
+});
 
 afterEach(() => {
   localStorage.clear();
@@ -31,7 +27,6 @@ function createClient(fetchFn?: typeof globalThis.fetch) {
   return new HappyViewBrowserClient({
     instanceUrl: "https://happyview.example.com",
     clientKey: "hvc_test",
-    crypto: mockCrypto,
     storage: new LocalStorageAdapter(),
     fetch: fetchFn,
   });
@@ -39,22 +34,32 @@ function createClient(fetchFn?: typeof globalThis.fetch) {
 
 function mockFetchForFullFlow() {
   return mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : String(input);
 
     if (url.includes("dns.google")) {
       return new Response(
         JSON.stringify({
-          Answer: [{ name: "_atproto.user.bsky.social.", type: 16, data: '"did=did:plc:testuser"' }],
+          Status: 0,
+          Answer: [{ name: "_atproto.user.bsky.social.", type: 16, TTL: 300, data: '"did=did:plc:abcdefghijklmnopqrstuvwx"' }],
         }),
-        { status: 200 },
+        { status: 200, headers: { "content-type": "application/dns-json" } },
       );
     }
 
-    if (url.includes("plc.directory/did:plc:testuser")) {
+    if (url.includes("plc.directory")) {
       return new Response(
         JSON.stringify({
-          id: "did:plc:testuser",
+          id: "did:plc:abcdefghijklmnopqrstuvwx",
           service: [{ id: "#atproto_pds", type: "AtprotoPersonalDataServer", serviceEndpoint: "https://pds.example.com" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    if (url.includes(".well-known/oauth-protected-resource")) {
+      return new Response(
+        JSON.stringify({
+          authorization_servers: ["https://pds.example.com"],
         }),
         { status: 200 },
       );
@@ -76,7 +81,7 @@ function mockFetchForFullFlow() {
       return new Response(
         JSON.stringify({
           provision_id: "hvp_test123",
-          dpop_key: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+          dpop_key: testJwk,
         }),
         { status: 201 },
       );
@@ -91,7 +96,7 @@ function mockFetchForFullFlow() {
 
     if (url.includes("/oauth/sessions") && init?.method === "POST") {
       return new Response(
-        JSON.stringify({ session_id: "sess_test", did: "did:plc:testuser" }),
+        JSON.stringify({ session_id: "sess_test", did: "did:plc:abcdefghijklmnopqrstuvwx" }),
         { status: 201 },
       );
     }
@@ -103,7 +108,7 @@ function mockFetchForFullFlow() {
           refresh_token: "rt_test_token",
           token_type: "DPoP",
           scope: "atproto",
-          sub: "did:plc:testuser",
+          sub: "did:plc:abcdefghijklmnopqrstuvwx",
           iss: "https://pds.example.com",
         }),
         { status: 200 },
@@ -115,7 +120,7 @@ function mockFetchForFullFlow() {
 }
 
 describe("HappyViewBrowserClient", () => {
-  test("constructor sets up WebCryptoAdapter and LocalStorageAdapter by default", () => {
+  test("constructor sets up LocalStorageAdapter by default", () => {
     const client = new HappyViewBrowserClient({
       instanceUrl: "https://happyview.example.com",
       clientKey: "hvc_test",
@@ -123,7 +128,7 @@ describe("HappyViewBrowserClient", () => {
     expect(client).toBeDefined();
   });
 
-  test("constructor accepts custom crypto and storage adapters", () => {
+  test("constructor accepts custom storage adapter", () => {
     const customStorage: StorageAdapter = {
       get: async () => null,
       set: async () => {},
@@ -132,7 +137,6 @@ describe("HappyViewBrowserClient", () => {
     const client = new HappyViewBrowserClient({
       instanceUrl: "https://happyview.example.com",
       clientKey: "hvc_test",
-      crypto: mockCrypto,
       storage: customStorage,
     });
     expect(client).toBeDefined();
@@ -145,7 +149,7 @@ describe("HappyViewBrowserClient", () => {
     const authInfo = await client.prepareLogin("user.bsky.social");
 
     expect(authInfo.authorizationUrl).toContain("pds.example.com");
-    expect(authInfo.did).toBe("did:plc:testuser");
+    expect(authInfo.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
 
     const stateKey = Array.from({ length: localStorage.length }, (_, i) =>
       localStorage.key(i),
@@ -158,9 +162,9 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     const pendingState = {
-      did: "did:plc:testuser",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
       provisionId: "hvp_test123",
-      dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+      rawJwk: testJwk,
       provisionPkceVerifier: "provision-verifier",
       authPkceVerifier: "auth-verifier",
       pdsUrl: "https://pds.example.com",
@@ -174,7 +178,7 @@ describe("HappyViewBrowserClient", () => {
     );
 
     const session = await client.callback("?code=auth-code-123&state=state123");
-    expect(session.did).toBe("did:plc:testuser");
+    expect(session.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
 
     // Verify token exchange included DPoP proof header
     const tokenCall = fetchFn.mock.calls.find(
@@ -192,9 +196,9 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     const pendingState = {
-      did: "did:plc:testuser",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
       provisionId: "hvp_test123",
-      dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+      rawJwk: testJwk,
       provisionPkceVerifier: "provision-verifier",
       authPkceVerifier: "auth-verifier",
       pdsUrl: "https://pds.example.com",
@@ -225,9 +229,9 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     const pendingState = {
-      did: "did:plc:testuser",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
       provisionId: "hvp_test123",
-      dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+      rawJwk: testJwk,
       provisionPkceVerifier: "provision-verifier",
       authPkceVerifier: "auth-verifier",
       pdsUrl: "https://pds.example.com",
@@ -255,9 +259,9 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     const pendingState = {
-      did: "did:plc:testuser",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
       provisionId: "hvp_test123",
-      dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+      rawJwk: testJwk,
       provisionPkceVerifier: "provision-verifier",
       authPkceVerifier: "auth-verifier",
       pdsUrl: "https://pds.example.com",
@@ -287,9 +291,9 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     const pendingState = {
-      did: "did:plc:testuser",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
       provisionId: "hvp_test123",
-      dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+      rawJwk: testJwk,
       provisionPkceVerifier: "provision-verifier",
       authPkceVerifier: "auth-verifier",
       pdsUrl: "https://pds.example.com",
@@ -348,9 +352,9 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     const pendingState = {
-      did: "did:plc:testuser",
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
       provisionId: "hvp_test123",
-      dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+      rawJwk: testJwk,
       provisionPkceVerifier: "provision-verifier",
       authPkceVerifier: "auth-verifier",
       pdsUrl: "https://pds.example.com",
@@ -386,13 +390,13 @@ describe("HappyViewBrowserClient", () => {
     // Simulate a stored session
     localStorage.setItem(
       "@happyview/oauth(happyview:last-active-did)",
-      "did:plc:testuser",
+      "did:plc:abcdefghijklmnopqrstuvwx",
     );
     localStorage.setItem(
-      "@happyview/oauth(happyview:session:did:plc:testuser)",
+      "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
       JSON.stringify({
-        did: "did:plc:testuser",
-        dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+        did: "did:plc:abcdefghijklmnopqrstuvwx",
+        dpopKey: testJwk,
         accessToken: "at_stored",
         clientKey: "hvc_test",
         instanceUrl: "https://happyview.example.com",
@@ -401,7 +405,7 @@ describe("HappyViewBrowserClient", () => {
 
     const session = await client.restore();
     expect(session).not.toBeNull();
-    expect(session!.did).toBe("did:plc:testuser");
+    expect(session!.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
   });
 
   test("logout deletes session from server and storage", async () => {
@@ -409,10 +413,10 @@ describe("HappyViewBrowserClient", () => {
     const client = createClient(fetchFn);
 
     localStorage.setItem(
-      "@happyview/oauth(happyview:session:did:plc:testuser)",
+      "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
       JSON.stringify({
-        did: "did:plc:testuser",
-        dpopKey: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+        did: "did:plc:abcdefghijklmnopqrstuvwx",
+        dpopKey: testJwk,
         accessToken: "at_stored",
         clientKey: "hvc_test",
         instanceUrl: "https://happyview.example.com",
@@ -420,7 +424,7 @@ describe("HappyViewBrowserClient", () => {
     );
     localStorage.setItem(
       "@happyview/oauth(happyview:last-active-did)",
-      "did:plc:testuser",
+      "did:plc:abcdefghijklmnopqrstuvwx",
     );
 
     // Mock the DELETE response
@@ -429,10 +433,10 @@ describe("HappyViewBrowserClient", () => {
     });
     const logoutClient = createClient(deleteFn);
 
-    await logoutClient.logout("did:plc:testuser");
+    await logoutClient.logout("did:plc:abcdefghijklmnopqrstuvwx");
 
     expect(
-      localStorage.getItem("@happyview/oauth(happyview:session:did:plc:testuser)"),
+      localStorage.getItem("@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)"),
     ).toBeNull();
     expect(
       localStorage.getItem("@happyview/oauth(happyview:last-active-did)"),

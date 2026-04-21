@@ -1,8 +1,9 @@
+import type { Key } from "@atproto/jwk";
 import { ApiError } from "./errors";
+import { importJwk } from "./import-jwk";
 import { HappyViewSession } from "./session";
 import { MemoryStorage } from "./storage";
 import type {
-  CryptoAdapter,
   HappyViewOAuthClientOptions,
   ProvisionKeyResponse,
   RegisterSessionParams,
@@ -17,10 +18,9 @@ const LAST_ACTIVE_KEY = "happyview:last-active-did";
 export class HappyViewOAuthClient {
   protected readonly instanceUrl: string;
   protected readonly clientKey: string;
-  protected readonly crypto: CryptoAdapter;
   protected readonly storage: StorageAdapter;
   private readonly clientSecret: string | undefined;
-  private readonly _fetch: typeof globalThis.fetch;
+  protected readonly _fetch: typeof globalThis.fetch;
 
   constructor(
     options: HappyViewOAuthClientOptions & {
@@ -30,9 +30,8 @@ export class HappyViewOAuthClient {
     this.instanceUrl = options.instanceUrl.replace(/\/+$/, "");
     this.clientKey = options.clientKey;
     this.clientSecret = options.clientSecret;
-    this.crypto = options.crypto;
     this.storage = options.storage ?? new MemoryStorage();
-    this._fetch = options.fetch ?? globalThis.fetch;
+    this._fetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof globalThis.fetch;
   }
 
   get isConfidential(): boolean {
@@ -41,7 +40,8 @@ export class HappyViewOAuthClient {
 
   async provisionDpopKey(): Promise<{
     provisionId: string;
-    dpopKey: JsonWebKey;
+    dpopKey: Key;
+    rawJwk: JsonWebKey;
     pkceVerifier?: string;
   }> {
     const headers: Record<string, string> = {
@@ -56,8 +56,8 @@ export class HappyViewOAuthClient {
     let pkceVerifier: string | undefined;
 
     if (!this.isConfidential) {
-      pkceVerifier = await this.crypto.generatePkceVerifier();
-      const challenge = await this.crypto.computePkceChallenge(pkceVerifier);
+      pkceVerifier = generatePkceVerifier();
+      const challenge = await computePkceChallenge(pkceVerifier);
       body.pkce_challenge = challenge;
     }
 
@@ -77,9 +77,11 @@ export class HappyViewOAuthClient {
     }
 
     const data: ProvisionKeyResponse = await resp.json();
+    const dpopKey = await importJwk(data.dpop_key);
     return {
       provisionId: data.provision_id,
-      dpopKey: data.dpop_key,
+      dpopKey,
+      rawJwk: data.dpop_key,
       pkceVerifier,
     };
   }
@@ -125,6 +127,7 @@ export class HappyViewOAuthClient {
     }
 
     const data: RegisterSessionResponse = await resp.json();
+    const dpopKey = await importJwk(params.dpopKey);
 
     const storedSession: StoredSession = {
       did: data.did,
@@ -141,11 +144,11 @@ export class HappyViewOAuthClient {
 
     return new HappyViewSession({
       did: data.did,
-      dpopKey: params.dpopKey,
+      dpopKey,
       accessToken: params.accessToken,
       clientKey: this.clientKey,
       instanceUrl: this.instanceUrl,
-      crypto: this.crypto,
+      fetch: this._fetch,
     });
   }
 
@@ -187,13 +190,14 @@ export class HappyViewOAuthClient {
     if (!stored) return null;
 
     const data: StoredSession = JSON.parse(stored);
+    const dpopKey = await importJwk(data.dpopKey);
     return new HappyViewSession({
       did: data.did,
-      dpopKey: data.dpopKey,
+      dpopKey,
       accessToken: data.accessToken,
       clientKey: data.clientKey,
       instanceUrl: data.instanceUrl,
-      crypto: this.crypto,
+      fetch: this._fetch,
     });
   }
 
@@ -202,4 +206,33 @@ export class HappyViewOAuthClient {
     if (!did) return null;
     return this.restoreSession(did);
   }
+}
+
+// PKCE helpers — inline since they're just a few lines of Web Crypto
+function generatePkceVerifier(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+async function computePkceChallenge(verifier: string): Promise<string> {
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  const bytes = new Uint8Array(hash);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
