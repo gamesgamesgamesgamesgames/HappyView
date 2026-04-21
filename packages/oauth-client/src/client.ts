@@ -153,28 +153,21 @@ export class HappyViewOAuthClient {
   }
 
   async deleteSession(did: string): Promise<void> {
-    const headers: Record<string, string> = {
-      "x-client-key": this.clientKey,
-    };
-    if (this.clientSecret) {
-      headers["x-client-secret"] = this.clientSecret;
-    }
-
-    const resp = await this._fetch(
-      `${this.instanceUrl}/oauth/sessions/${did}`,
-      {
-        method: "DELETE",
-        headers,
-      },
-    );
-
-    if (!resp.ok && resp.status !== 404) {
-      const body = await resp.json().catch(() => ({}));
-      throw new ApiError(
-        `Failed to delete session: ${resp.status} ${(body as any).message ?? resp.statusText}`,
-        resp.status,
-        body,
+    const session = await this.restoreSession(did);
+    if (session) {
+      const resp = await session.fetchHandler(
+        `${this.instanceUrl}/oauth/sessions/${did}`,
+        { method: "DELETE" },
       );
+
+      if (!resp.ok && resp.status !== 404) {
+        const body = await resp.json().catch(() => ({}));
+        throw new ApiError(
+          `Failed to delete session: ${resp.status} ${(body as any).message ?? resp.statusText}`,
+          resp.status,
+          body,
+        );
+      }
     }
 
     await this.storage.delete(`${STORAGE_PREFIX}${did}`);

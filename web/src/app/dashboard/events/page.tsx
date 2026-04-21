@@ -6,9 +6,6 @@ import {
   type ColumnFiltersState,
   type VisibilityState,
   getCoreRowModel,
-  getFilteredRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
   useReactTable,
 } from "@tanstack/react-table";
 
@@ -268,8 +265,8 @@ export default function EventsPage() {
           ?.value as string | undefined;
 
         const data = await getEvents({
-          category: categoryFilter?.[0] || undefined,
-          severity: severityFilter?.[0] || undefined,
+          category: categoryFilter?.length ? categoryFilter.join(",") : undefined,
+          severity: severityFilter?.length ? severityFilter.join(",") : undefined,
           subject: subjectFilter || undefined,
           cursor,
           limit: 50,
@@ -331,7 +328,6 @@ export default function EventsPage() {
             {row.original.subject ?? "--"}
           </span>
         ),
-        filterFn: "includesString",
         enableColumnFilter: true,
         enableSorting: false,
         meta: {
@@ -347,11 +343,6 @@ export default function EventsPage() {
           <DataTableColumnHeader column={column} label="Severity" />
         ),
         cell: ({ row }) => severityBadge(row.original.severity),
-        filterFn: (row, columnId, filterValue) => {
-          if (!Array.isArray(filterValue) || filterValue.length === 0)
-            return true;
-          return filterValue.includes(row.getValue(columnId));
-        },
         enableColumnFilter: true,
         enableSorting: false,
         enableHiding: false,
@@ -374,15 +365,6 @@ export default function EventsPage() {
         cell: ({ row }) => (
           <span className="font-mono text-sm">{row.original.event_type}</span>
         ),
-        filterFn: (row, columnId, filterValue) => {
-          if (!Array.isArray(filterValue) || filterValue.length === 0)
-            return true;
-          const eventType = row.getValue(columnId) as string;
-          return filterValue.some(
-            (cat: string) =>
-              eventType === cat || eventType.startsWith(cat + "."),
-          );
-        },
         enableColumnFilter: true,
         enableSorting: false,
         meta: {
@@ -444,9 +426,6 @@ export default function EventsPage() {
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
     getRowId: (row) => row.id,
   });
 

@@ -57,14 +57,21 @@ pub(super) async fn list_events(
     if query.event_type.is_some() {
         sql.push_str(" AND event_type = ?");
     }
-    if query.category.is_some() {
-        sql.push_str(" AND event_type LIKE ?");
+    if let Some(ref cat) = query.category {
+        let cats: Vec<&str> = cat.split(',').collect();
+        let clauses: Vec<String> = cats
+            .iter()
+            .map(|_| "event_type LIKE ?".to_string())
+            .collect();
+        sql.push_str(&format!(" AND ({})", clauses.join(" OR ")));
     }
-    if query.severity.is_some() {
-        sql.push_str(" AND severity = ?");
+    if let Some(ref sev) = query.severity {
+        let count = sev.split(',').count();
+        let placeholders: Vec<&str> = (0..count).map(|_| "?").collect();
+        sql.push_str(&format!(" AND severity IN ({})", placeholders.join(",")));
     }
     if query.subject.is_some() {
-        sql.push_str(" AND subject = ?");
+        sql.push_str(" AND subject LIKE ?");
     }
     if query.cursor.is_some() {
         sql.push_str(" AND created_at < ?");
@@ -92,13 +99,17 @@ pub(super) async fn list_events(
         q = q.bind(event_type);
     }
     if let Some(ref category) = query.category {
-        q = q.bind(format!("{category}.%"));
+        for c in category.split(',') {
+            q = q.bind(format!("{c}.%"));
+        }
     }
     if let Some(ref severity) = query.severity {
-        q = q.bind(severity);
+        for s in severity.split(',') {
+            q = q.bind(s.to_string());
+        }
     }
     if let Some(ref subject) = query.subject {
-        q = q.bind(subject);
+        q = q.bind(format!("%{subject}%"));
     }
     if let Some(ref cursor) = query.cursor {
         q = q.bind(cursor);
@@ -123,7 +134,11 @@ pub(super) async fn list_events(
         })
         .collect();
 
-    let cursor = events.last().map(|e| e.created_at.to_rfc3339());
+    let cursor = if events.len() as i64 >= limit {
+        events.last().map(|e| e.created_at.to_rfc3339())
+    } else {
+        None
+    };
 
     Ok(Json(EventsListResponse { events, cursor }))
 }
