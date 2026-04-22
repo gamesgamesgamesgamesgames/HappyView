@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-/// All 27 permissions in the system.
+/// All 29 permissions in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Permission {
     #[serde(rename = "lexicons:create")]
@@ -78,6 +78,11 @@ pub enum Permission {
     ApiClientsEdit,
     #[serde(rename = "api-clients:delete")]
     ApiClientsDelete,
+
+    #[serde(rename = "dead-letters:read")]
+    DeadLettersRead,
+    #[serde(rename = "dead-letters:manage")]
+    DeadLettersManage,
 }
 
 impl Permission {
@@ -115,6 +120,8 @@ impl Permission {
             Self::ApiClientsCreate => "api-clients:create",
             Self::ApiClientsEdit => "api-clients:edit",
             Self::ApiClientsDelete => "api-clients:delete",
+            Self::DeadLettersRead => "dead-letters:read",
+            Self::DeadLettersManage => "dead-letters:manage",
         }
     }
 
@@ -152,6 +159,8 @@ impl Permission {
             Self::ApiClientsCreate,
             Self::ApiClientsEdit,
             Self::ApiClientsDelete,
+            Self::DeadLettersRead,
+            Self::DeadLettersManage,
         ])
     }
 }
@@ -178,12 +187,14 @@ impl Template {
                 Permission::BackfillRead,
                 Permission::StatsRead,
                 Permission::EventsRead,
+                Permission::DeadLettersRead,
             ]),
             Self::Operator => {
                 let mut perms = Self::Viewer.permissions();
                 perms.insert(Permission::BackfillCreate);
                 perms.insert(Permission::ApiKeysCreate);
                 perms.insert(Permission::ApiKeysDelete);
+                perms.insert(Permission::DeadLettersManage);
                 perms
             }
             Self::Manager => {

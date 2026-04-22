@@ -79,7 +79,7 @@ Logged when a user attempts to access an endpoint they don't have permission for
 | `hook.executed` | info | Record AT URI | `lexicon_id` |
 | `hook.dead_lettered` | error | Record AT URI | `lexicon_id`, `error` |
 
-Logged when [index hooks](index-hooks.md) run. Dead-lettered events indicate a hook failed all retry attempts.
+Logged when [index hooks](index-hooks.md) run. Dead-lettered events indicate a hook failed all retry attempts. You can manage dead letters from the **Data > Dead Letters** page in the dashboard — see [Dead Letters](#dead-letters) below.
 
 ### Backfill events
 
@@ -127,6 +127,18 @@ Event logs are automatically cleaned up based on the `EVENT_LOG_RETENTION_DAYS` 
 Set `EVENT_LOG_RETENTION_DAYS=0` to disable automatic cleanup and keep logs indefinitely.
 
 See [Configuration](../getting-started/configuration.md) for all environment variables.
+
+## Dead Letters
+
+When an index hook fails after all retry attempts, the event is stored in the dead letters queue. You can manage dead letters from the **Data > Dead Letters** page in the dashboard.
+
+From the dead letters page you can:
+
+- **Retry Hook** — replay the stored record through the index hook (use after fixing a hook script)
+- **Re-index** — fetch the record fresh from the PDS and run it through the full indexing pipeline (use when the record may have changed)
+- **Dismiss** — mark the dead letter as resolved without retrying
+
+Bulk actions are available for selected rows or all entries matching the current filters.
 
 ## Next steps
 

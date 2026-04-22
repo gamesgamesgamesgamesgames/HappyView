@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   IconDashboard,
   IconFileDescription,
@@ -17,6 +18,7 @@ import {
   IconInfoCircle,
   IconApps,
   IconArrowUpCircle,
+  IconSkull,
 } from "@tabler/icons-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -52,6 +54,12 @@ const dataItems: NavItem[] = [
   { title: "Lexicons", url: "/dashboard/lexicons", icon: IconFileDescription },
   { title: "Records", url: "/dashboard/records", icon: IconTable },
   { title: "Backfill", url: "/dashboard/backfill", icon: IconDatabase },
+  {
+    title: "Dead Letters",
+    url: "/dashboard/dead-letters",
+    icon: IconSkull,
+    requiredPermissions: ["dead-letters:read"],
+  },
 ];
 
 const accessItems: NavItem[] = [
@@ -122,6 +130,27 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { app_name, logo_url } = useConfig();
   const { hasPermission } = useCurrentUser();
   const { hasUpdates } = usePluginUpdates();
+
+  const [deadLetterCount, setDeadLetterCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchCount() {
+      try {
+        const { getDeadLetterCount } = await import("@/lib/api");
+        const data = await getDeadLetterCount("false");
+        if (!cancelled) setDeadLetterCount(data.count);
+      } catch {
+        // sidebar badge is best-effort
+      }
+    }
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   function filterByPermission(items: NavItem[]) {
     return items.filter(
@@ -200,20 +229,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarGroupLabel>Data</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {visibleData.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        tooltip={item.title}
-                        isActive={isActive(item.url)}
-                      >
-                        <Link href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {visibleData.map((item) => {
+                    const showDeadLetterBadge =
+                      item.title === "Dead Letters" && deadLetterCount > 0;
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          tooltip={item.title}
+                          isActive={isActive(item.url)}
+                        >
+                          <Link href={item.url}>
+                            <item.icon />
+                            <span>{item.title}</span>
+                            {showDeadLetterBadge && (
+                              <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium text-destructive-foreground">
+                                {deadLetterCount}
+                              </span>
+                            )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

@@ -969,7 +969,7 @@ pub async fn execute_hook_script(event: &HookEvent<'_>) -> Option<Value> {
 /// Returns `Ok(None)` when `handle()` returns nil (meaning "skip indexing"),
 /// `Ok(Some(value))` when it returns a table (use that as the record), or
 /// `Ok(Some(original))` for other non-nil types.
-async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
+pub async fn run_hook_once(event: &HookEvent<'_>) -> Result<Option<Value>, String> {
     let lua = sandbox::create_sandbox().map_err(|e| format!("failed to create Lua VM: {e}"))?;
     let backend = event.state.db_backend;
 

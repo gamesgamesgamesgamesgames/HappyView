@@ -2,6 +2,7 @@ mod api_clients;
 mod api_keys;
 pub(crate) mod auth;
 mod backfill;
+mod dead_letters;
 mod domains;
 mod events;
 mod labelers;
@@ -102,4 +103,19 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route("/domains", post(domains::create).get(domains::list))
         .route("/domains/{id}", delete(domains::delete))
         .route("/domains/{id}/primary", post(domains::set_primary))
+        .route("/dead-letters", get(dead_letters::list))
+        .route("/dead-letters/count", get(dead_letters::count))
+        .route(
+            "/dead-letters/bulk/dismiss",
+            post(dead_letters::bulk_dismiss),
+        )
+        .route("/dead-letters/bulk/retry", post(dead_letters::bulk_retry))
+        .route(
+            "/dead-letters/bulk/reindex",
+            post(dead_letters::bulk_reindex),
+        )
+        .route("/dead-letters/{id}", get(dead_letters::detail))
+        .route("/dead-letters/{id}/dismiss", post(dead_letters::dismiss))
+        .route("/dead-letters/{id}/retry", post(dead_letters::retry))
+        .route("/dead-letters/{id}/reindex", post(dead_letters::reindex))
 }
