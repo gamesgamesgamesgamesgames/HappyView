@@ -200,6 +200,7 @@ describe("HappyViewOAuthClient", () => {
 
   describe("deleteSession", () => {
     test("calls DELETE /oauth/sessions/:did", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn, calls } = createMockFetch([
         { status: 204, body: null },
       ]);
@@ -207,7 +208,13 @@ describe("HappyViewOAuthClient", () => {
       const storage = new MemoryStorage();
       await storage.set(
         "happyview:session:did:plc:testuser",
-        JSON.stringify({ did: "did:plc:testuser" }),
+        JSON.stringify({
+          did: "did:plc:testuser",
+          dpopKey: testJwk,
+          accessToken: "at_token",
+          clientKey: "hvc_testkey",
+          instanceUrl: "https://happyview.example.com",
+        }),
       );
       await storage.set("happyview:last-active-did", "did:plc:testuser");
 
@@ -225,12 +232,19 @@ describe("HappyViewOAuthClient", () => {
     });
 
     test("clears session and last active DID from storage", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn } = createMockFetch([{ status: 204, body: null }]);
 
       const storage = new MemoryStorage();
       await storage.set(
         "happyview:session:did:plc:testuser",
-        JSON.stringify({ did: "did:plc:testuser" }),
+        JSON.stringify({
+          did: "did:plc:testuser",
+          dpopKey: testJwk,
+          accessToken: "at_token",
+          clientKey: "hvc_testkey",
+          instanceUrl: "https://happyview.example.com",
+        }),
       );
       await storage.set("happyview:last-active-did", "did:plc:testuser");
 
@@ -248,12 +262,19 @@ describe("HappyViewOAuthClient", () => {
     });
 
     test("preserves last active DID when deleting a different session", async () => {
+      const testJwk = await generateTestJwk();
       const { fetchFn } = createMockFetch([{ status: 204, body: null }]);
 
       const storage = new MemoryStorage();
       await storage.set(
         "happyview:session:did:plc:other",
-        JSON.stringify({ did: "did:plc:other" }),
+        JSON.stringify({
+          did: "did:plc:other",
+          dpopKey: testJwk,
+          accessToken: "at_token",
+          clientKey: "hvc_testkey",
+          instanceUrl: "https://happyview.example.com",
+        }),
       );
       await storage.set("happyview:last-active-did", "did:plc:testuser");
 
