@@ -488,12 +488,12 @@ async fn resolve_bulk_ids(state: &AppState, body: &BulkRequest) -> Result<Vec<St
 }
 
 /// Fetch the index_hook script directly from the lexicons table, bypassing the in-memory registry.
-async fn get_index_hook_from_db(state: &AppState, lexicon_id: &str) -> Result<Option<String>, AppError> {
+async fn get_index_hook_from_db(
+    state: &AppState,
+    lexicon_id: &str,
+) -> Result<Option<String>, AppError> {
     let backend = state.db_backend;
-    let sql = adapt_sql(
-        "SELECT index_hook FROM lexicons WHERE id = ?",
-        backend,
-    );
+    let sql = adapt_sql("SELECT index_hook FROM lexicons WHERE id = ?", backend);
     let row: Option<(Option<String>,)> = sqlx::query_as(&sql)
         .bind(lexicon_id)
         .fetch_optional(&state.db)
@@ -509,10 +509,7 @@ async fn retry_single(state: &AppState, id: &str) -> Result<(), AppError> {
     let script = get_index_hook_from_db(state, &dl.lexicon_id)
         .await?
         .ok_or_else(|| {
-            AppError::NotFound(format!(
-                "no index hook found for lexicon {}",
-                dl.lexicon_id
-            ))
+            AppError::NotFound(format!("no index hook found for lexicon {}", dl.lexicon_id))
         })?;
 
     let record: Option<Value> = dl
