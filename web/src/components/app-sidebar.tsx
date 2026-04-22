@@ -12,7 +12,6 @@ import {
   IconKey,
   IconVariable,
   IconTag,
-  IconLink,
   IconPuzzle,
   IconSettings,
   IconInfoCircle,
@@ -89,11 +88,6 @@ const integrationItems: NavItem[] = [
     url: "/dashboard/settings/plugins",
     icon: IconPuzzle,
     requiredPermissions: ["plugins:read"],
-  },
-  {
-    title: "Linked Accounts",
-    url: "/dashboard/settings/accounts",
-    icon: IconLink,
   },
   {
     title: "Labelers",
