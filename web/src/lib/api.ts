@@ -18,6 +18,12 @@ import type {
   UnlinkResponse,
   ConnectResponse,
 } from "@/types/external-accounts"
+import type {
+  DeadLettersListResponse,
+  DeadLetterDetail,
+  DeadLetterCountResponse,
+  BulkActionResponse,
+} from "@/types/dead-letters"
 
 export type { ApiKeySummary, CreateApiKeyResponse } from "@/types/api-keys"
 export type { CollectionStat, StatsResponse } from "@/types/stats"
@@ -43,6 +49,13 @@ export type {
   ConfigSchema,
   ConfigProperty,
 } from "@/types/external-accounts"
+export type {
+  DeadLetterSummary,
+  DeadLetterDetail,
+  DeadLettersListResponse,
+  DeadLetterCountResponse,
+  BulkActionResponse,
+} from "@/types/dead-letters"
 
 export class ApiError extends Error {
   status: number
@@ -562,5 +575,92 @@ export function previewPlugin(url: string, signal?: AbortSignal) {
     method: "POST",
     body: JSON.stringify({ url }),
     signal,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Dead Letters
+// ---------------------------------------------------------------------------
+
+export function getDeadLetters(params?: {
+  collection?: string
+  resolved?: string
+  cursor?: string
+  limit?: number
+}) {
+  const searchParams = new URLSearchParams()
+  if (params?.collection) searchParams.set("collection", params.collection)
+  if (params?.resolved) searchParams.set("resolved", params.resolved)
+  if (params?.cursor) searchParams.set("cursor", params.cursor)
+  if (params?.limit) searchParams.set("limit", String(params.limit))
+  const qs = searchParams.toString()
+  return apiFetch<DeadLettersListResponse>(
+    `/admin/dead-letters${qs ? `?${qs}` : ""}`,
+  )
+}
+
+export function getDeadLetterCount(resolved?: string) {
+  const searchParams = new URLSearchParams()
+  if (resolved) searchParams.set("resolved", resolved)
+  const qs = searchParams.toString()
+  return apiFetch<DeadLetterCountResponse>(
+    `/admin/dead-letters/count${qs ? `?${qs}` : ""}`,
+  )
+}
+
+export function getDeadLetter(id: string) {
+  return apiFetch<DeadLetterDetail>(
+    `/admin/dead-letters/${encodeURIComponent(id)}`,
+  )
+}
+
+export function retryDeadLetter(id: string) {
+  return apiFetch(`/admin/dead-letters/${encodeURIComponent(id)}/retry`, {
+    method: "POST",
+  })
+}
+
+export function reindexDeadLetter(id: string) {
+  return apiFetch(`/admin/dead-letters/${encodeURIComponent(id)}/reindex`, {
+    method: "POST",
+  })
+}
+
+export function dismissDeadLetter(id: string) {
+  return apiFetch(`/admin/dead-letters/${encodeURIComponent(id)}/dismiss`, {
+    method: "POST",
+  })
+}
+
+export function bulkDismissDeadLetters(body: {
+  ids?: string[]
+  all?: boolean
+  collection?: string
+}) {
+  return apiFetch<BulkActionResponse>("/admin/dead-letters/bulk/dismiss", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function bulkRetryDeadLetters(body: {
+  ids?: string[]
+  all?: boolean
+  collection?: string
+}) {
+  return apiFetch<BulkActionResponse>("/admin/dead-letters/bulk/retry", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function bulkReindexDeadLetters(body: {
+  ids?: string[]
+  all?: boolean
+  collection?: string
+}) {
+  return apiFetch<BulkActionResponse>("/admin/dead-letters/bulk/reindex", {
+    method: "POST",
+    body: JSON.stringify(body),
   })
 }

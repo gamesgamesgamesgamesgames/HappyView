@@ -9,6 +9,6 @@ mod tid;
 mod xrpc_api;
 
 pub(crate) use execute::{
-    HookEvent, execute_hook_script, execute_procedure_script, execute_query_script,
+    HookEvent, execute_hook_script, execute_procedure_script, execute_query_script, run_hook_once,
 };
 pub(crate) use sandbox::validate_script;
