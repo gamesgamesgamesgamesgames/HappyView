@@ -8,6 +8,8 @@
     "url": "https://github.com/gamesgamesgamesgamesgames/happyview.git",
     "directory": "packages/lex-agent"
   },
+  "bugs": "https://github.com/gamesgamesgamesgamesgames/happyview/issues",
+  "homepage": "https://happyview.dev",
   "publishConfig": {
     "access": "public"
   },
@@ -31,7 +33,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@happyview/oauth-client": "^1.0.0-dev.2"
+    "@happyview/oauth-client": "workspace:*"
   },
   "peerDependencies": {
     "@atproto/lex": ">=0.0.20"

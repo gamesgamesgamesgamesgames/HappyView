@@ -8,6 +8,8 @@
     "url": "https://github.com/gamesgamesgamesgamesgames/happyview.git",
     "directory": "packages/oauth-client"
   },
+  "bugs": "https://github.com/gamesgamesgamesgamesgames/happyview/issues",
+  "homepage": "https://happyview.dev",
   "publishConfig": {
     "access": "public"
   },
