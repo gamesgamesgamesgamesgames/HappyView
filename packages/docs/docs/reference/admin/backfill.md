@@ -1,6 +1,6 @@
 # Admin API: Backfill
 
-Create and monitor historical backfill jobs. See the [Backfill guide](../../guides/backfill.md) for background.
+Create and monitor historical backfill jobs. See the [Backfill guide](../../guides/indexing/backfill.md) for background.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

@@ -1,6 +1,6 @@
 # Utility Globals
 
-Global functions available in queries, procedures, and [index hooks](../../guides/index-hooks.md). These don't belong to a specific API table — they're available at the top level of any Lua script.
+Global functions available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md). These don't belong to a specific API table — they're available at the top level of any Lua script.
 
 ## now
 

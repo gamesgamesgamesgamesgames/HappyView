@@ -49,7 +49,7 @@ end
 
 1. Load the primary record by URI. Return early if it doesn't exist.
 2. Query for related records, in this example comments by the same user that reference the primary record's URI.
-3. Load each related record with [`Record.load`](../lua/record-api.md#static-methods) to get a deletable `Record` instance.
+3. Load each related record with [`Record.load`](../../reference/lua/record-api.md#static-methods) to get a deletable `Record` instance.
 4. Delete everything. Each `r:delete()` removes the record from the user's PDS and the local index.
 
 ## Usage

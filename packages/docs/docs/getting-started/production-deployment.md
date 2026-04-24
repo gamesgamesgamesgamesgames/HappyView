@@ -14,7 +14,7 @@ Never commit the secret to source control. Store it in your platform's secret ma
 
 ## Token encryption key
 
-If you use [plugins](../guides/plugins.md) that require secrets (API keys, OAuth credentials), set `TOKEN_ENCRYPTION_KEY` to a base64-encoded 32-byte key. This encrypts plugin secrets at rest using AES-256-GCM:
+If you use [plugins](../guides/features/plugins.md) that require secrets (API keys, OAuth credentials), set `TOKEN_ENCRYPTION_KEY` to a base64-encoded 32-byte key. This encrypts plugin secrets at rest using AES-256-GCM:
 
 ```sh
 openssl rand -base64 32
@@ -40,13 +40,13 @@ SQLite is fine for small to medium instances and is the default. Switch to Postg
 - Larger-than-memory working sets
 - External tools that need direct read access to the records table
 
-See the [database setup guide](../guides/database-setup.md) for configuration details and [Postgres → SQLite migration](../guides/postgres-to-sqlite-migration.md) if you're moving the other direction. Migrations run automatically on startup regardless of backend.
+See the [database setup guide](../guides/database/database-setup.md) for configuration details and [Postgres → SQLite migration](../guides/database/postgres-to-sqlite-migration.md) if you're moving the other direction. Migrations run automatically on startup regardless of backend.
 
 ## Rate limits
 
-HappyView has a per-client token-bucket rate limiter for XRPC endpoints. The defaults (set via `DEFAULT_RATE_LIMIT_CAPACITY` and `DEFAULT_RATE_LIMIT_REFILL_RATE`) apply to any [API client](../guides/api-keys.md) that doesn't have per-client overrides. Raise the defaults cautiously — they exist so one misbehaving integrator can't saturate the server.
+HappyView has a per-client token-bucket rate limiter for XRPC endpoints. The defaults (set via `DEFAULT_RATE_LIMIT_CAPACITY` and `DEFAULT_RATE_LIMIT_REFILL_RATE`) apply to any [API client](../guides/admin/api-keys.md) that doesn't have per-client overrides. Raise the defaults cautiously — they exist so one misbehaving integrator can't saturate the server.
 
-Per-client overrides are set at client creation or via `PUT /admin/api-clients/{id}` (see [Admin API — API Clients](admin/api-clients.md)).
+Per-client overrides are set at client creation or via `PUT /admin/api-clients/{id}` (see [Admin API — API Clients](../reference/admin/api-clients.md)).
 
 ## Logging
 
@@ -60,7 +60,7 @@ Structured logs go to stdout, so any platform that captures container stdout (Ra
 
 ## Event log retention
 
-The admin [event log](../guides/event-logs.md) is stored in the same database as records. `EVENT_LOG_RETENTION_DAYS` (default `30`) controls automatic cleanup. Set to `0` to keep events indefinitely — useful for compliance-sensitive deployments, but plan for database growth.
+The admin [event log](../guides/admin/event-logs.md) is stored in the same database as records. `EVENT_LOG_RETENTION_DAYS` (default `30`) controls automatic cleanup. Set to `0` to keep events indefinitely — useful for compliance-sensitive deployments, but plan for database growth.
 
 ## Health checks
 
@@ -73,10 +73,10 @@ For a deeper check, hit `GET /xrpc/com.atproto.server.describeServer` — this e
 - **SQLite**: back up the database file (e.g. `data/happyview.db`) plus its `-wal` and `-shm` sidecar files. Use `sqlite3 happyview.db ".backup '/path/backup.db'"` for a consistent snapshot while HappyView is running.
 - **Postgres**: standard `pg_dump` / managed-Postgres snapshots.
 
-Most of what HappyView stores is derivable from the network — lost records can be re-indexed via [backfill](../guides/backfill.md). You can't recover from the network: user accounts and permissions, API keys, API clients, plugin secrets, and the Jetstream cursor. Prioritize those in your backup plan.
+Most of what HappyView stores is derivable from the network — lost records can be re-indexed via [backfill](../guides/indexing/backfill.md). You can't recover from the network: user accounts and permissions, API keys, API clients, plugin secrets, and the Jetstream cursor. Prioritize those in your backup plan.
 
 ## Next steps
 
 - [Configuration](../getting-started/configuration.md) — full environment variable reference
-- [Permissions](../guides/permissions.md) — lock down admin access before exposing the dashboard publicly
-- [Troubleshooting](troubleshooting.md) — diagnose issues with a running instance
+- [Permissions](../guides/admin/permissions.md) — lock down admin access before exposing the dashboard publicly
+- [Troubleshooting](../reference/troubleshooting.md) — diagnose issues with a running instance

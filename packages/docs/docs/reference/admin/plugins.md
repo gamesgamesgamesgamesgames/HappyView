@@ -1,6 +1,6 @@
 # Admin API: Plugins
 
-Plugins extend HappyView with WebAssembly modules sourced from the [official plugin registry](../../guides/plugins.md) or any URL serving a `manifest.json`. Most endpoints take a plugin manifest URL and load (or reload) the plugin in place — no restart needed. Encrypted plugin secrets require `TOKEN_ENCRYPTION_KEY` to be configured.
+Plugins extend HappyView with WebAssembly modules sourced from the [official plugin registry](../../guides/features/plugins.md) or any URL serving a `manifest.json`. Most endpoints take a plugin manifest URL and load (or reload) the plugin in place — no restart needed. Encrypted plugin secrets require `TOKEN_ENCRYPTION_KEY` to be configured.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

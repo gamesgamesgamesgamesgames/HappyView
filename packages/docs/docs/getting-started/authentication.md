@@ -3,7 +3,7 @@
 HappyView has two distinct authentication surfaces:
 
 - **XRPC** (`/xrpc/*`) — client-level identification via an **API client key** on every request, plus optional user-level atproto OAuth for endpoints that need a specific user's identity (e.g. procedures that write to a PDS).
-- **Admin API** (`/admin/*`) — user-level authentication via admin API keys or service auth JWTs, gated by [permissions](../guides/permissions.md).
+- **Admin API** (`/admin/*`) — user-level authentication via admin API keys or service auth JWTs, gated by [permissions](../guides/admin/permissions.md).
 
 ## Which endpoints require what?
 
@@ -11,7 +11,7 @@ HappyView has two distinct authentication surfaces:
 | ---------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
 | Queries (`GET /xrpc/{method}`)     | `X-Client-Key` required | Optional — DPoP auth if the query needs to know who the user is                                     |
 | Procedures (`POST /xrpc/{method}`) | `X-Client-Key` required | Required — DPoP auth so HappyView can proxy writes to the user's PDS                                |
-| Admin API (`/admin/*`)             | —                       | Required — admin API key or service auth JWT with the right [permissions](../guides/permissions.md) |
+| Admin API (`/admin/*`)             | —                       | Required — admin API key or service auth JWT with the right [permissions](../guides/admin/permissions.md) |
 | Health check (`GET /health`)       | —                       | —                                                                                                   |
 
 ## XRPC: API client identification
@@ -91,7 +91,7 @@ Admin endpoints don't use API clients. They require a real HappyView user, ident
 
 ### Admin API key
 
-For automation — CI/CD, monitoring, cron jobs — create an [admin API key](../guides/api-keys.md) at **Settings > API Keys** or via `POST /admin/api-keys` and pass it as a bearer token:
+For automation — CI/CD, monitoring, cron jobs — create an [admin API key](../guides/admin/api-keys.md) at **Settings > API Keys** or via `POST /admin/api-keys` and pass it as a bearer token:
 
 ```sh
 export TOKEN="hv_your-api-key-here"
@@ -315,6 +315,6 @@ This deletes the stored session and the associated DPoP key.
 ## Next steps
 
 - [JavaScript SDK](../sdk/overview.md) — authenticate and make XRPC calls from JavaScript
-- [Permissions](../guides/permissions.md) — full list of permissions and what each one grants
-- [API Keys](../guides/api-keys.md) — create scoped admin API keys for automation
+- [Permissions](../guides/admin/permissions.md) — full list of permissions and what each one grants
+- [API Keys](../guides/admin/api-keys.md) — create scoped admin API keys for automation
 - [Admin API — API Clients](../reference/admin/api-clients.md) — register API clients and configure rate limits

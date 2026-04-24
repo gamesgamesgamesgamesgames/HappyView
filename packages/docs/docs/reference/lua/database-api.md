@@ -1,6 +1,6 @@
 # Database API
 
-The `db` table provides access to the database. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
+The `db` table provides access to the database. Available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md).
 
 ## db.query
 
@@ -95,7 +95,7 @@ Parameters are passed as an array and bound to `$1`, `$2`, etc. Supported parame
 
 ### SQL dialect
 
-Write SQL in **SQLite syntax** — HappyView translates it to Postgres at runtime if you're using Postgres. See [Database Setup](../../guides/database-setup.md) for details on what gets translated. If you need database-specific SQL that can't be translated, check `db.is_postgres()` at runtime.
+Write SQL in **SQLite syntax** — HappyView translates it to Postgres at runtime if you're using Postgres. See [Database Setup](../../guides/database/database-setup.md) for details on what gets translated. If you need database-specific SQL that can't be translated, check `db.is_postgres()` at runtime.
 
 ### Column type mapping
 

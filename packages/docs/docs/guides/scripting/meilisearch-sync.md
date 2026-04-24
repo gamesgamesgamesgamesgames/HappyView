@@ -38,11 +38,11 @@ end
 1. On **create** or **update**: sends a `POST` request to Meilisearch's document API with the record data wrapped in an array. Meilisearch upserts by `id` — if a document with the same AT URI already exists, it's replaced.
 2. On **delete**: sends a `DELETE` request to remove the document from the index by its AT URI.
 
-The `toarray()` function ensures the table is encoded as a JSON array (Meilisearch expects an array of documents). See [JSON API](../../guides/index-hooks.md#json-api).
+The `toarray()` function ensures the table is encoded as a JSON array (Meilisearch expects an array of documents). See [JSON API](../../reference/lua/json-api.md).
 
 ## Configuration
 
-This script uses [script variables](../../guides/scripting.md) instead of hardcoded values. Set these via the [admin API](../../reference/admin-api.md) or dashboard:
+This script uses [script variables](../../guides/scripting.md) instead of hardcoded values. Set these via the [admin API](../../reference/admin/admin-api.md) or dashboard:
 
 | Variable              | Value                                                                          |
 | --------------------- | ------------------------------------------------------------------------------ |

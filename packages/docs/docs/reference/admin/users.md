@@ -1,6 +1,6 @@
 # Admin API: Users
 
-Manage admin users and their permissions. See the [Permissions guide](../../guides/permissions.md) for available permissions and templates.
+Manage admin users and their permissions. See the [Permissions guide](../../guides/admin/permissions.md) for available permissions and templates.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

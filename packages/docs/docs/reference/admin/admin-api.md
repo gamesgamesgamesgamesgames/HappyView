@@ -1,12 +1,12 @@
 # Admin API
 
-The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require authentication from a DID that exists in the `users` table, with the appropriate [permissions](../guides/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../getting-started/dashboard.md).
+The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require authentication from a DID that exists in the `users` table, with the appropriate [permissions](../../guides/admin/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../../getting-started/dashboard.md).
 
 ## Auth
 
 The admin API supports two authentication methods:
 
-1. **API keys** — read/write tokens starting with `hv_`, passed as `Authorization: Bearer hv_...`. See the [API Keys guide](../guides/api-keys.md) for details.
+1. **API keys** — read/write tokens starting with `hv_`, passed as `Authorization: Bearer hv_...`. See the [API Keys guide](../../guides/admin/api-keys.md) for details.
 2. **Service auth JWT** — atproto inter-service authentication via signed JWTs.
 
 In all cases the resolved DID is checked against the `users` table, and the user's permissions are loaded to authorize the request.
@@ -41,22 +41,22 @@ AUTH="Authorization: Bearer $TOKEN"
 
 | Group | Description |
 | ----- | ----------- |
-| [Lexicons](admin/lexicons.md) | Upload, list, get, and delete lexicons and network lexicons |
-| [Stats](admin/stats.md) | Record counts by collection |
-| [Backfill](admin/backfill.md) | Create and monitor historical backfill jobs |
-| [Event Logs](admin/events.md) | Query the audit trail of system events |
-| [API Keys](admin/api-keys.md) | Create, list, and revoke API keys |
-| [Users](admin/users.md) | Create, list, update, and delete admin users |
-| [Labelers](admin/labelers.md) | Manage external labeler subscriptions |
-| [Instance Settings](admin/settings.md) | Configure app name, logo, and policy URLs |
-| [Domains](admin/domains.md) | Manage domains and their OAuth client identities |
-| [Script Variables](admin/script-variables.md) | Encrypted key/value pairs for Lua scripts |
-| [API Clients](admin/api-clients.md) | Register and manage third-party XRPC clients |
-| [Plugins](admin/plugins.md) | Install, configure, and manage WASM plugins |
+| [Lexicons](lexicons.md) | Upload, list, get, and delete lexicons and network lexicons |
+| [Stats](stats.md) | Record counts by collection |
+| [Backfill](backfill.md) | Create and monitor historical backfill jobs |
+| [Event Logs](events.md) | Query the audit trail of system events |
+| [API Keys](api-keys.md) | Create, list, and revoke API keys |
+| [Users](users.md) | Create, list, update, and delete admin users |
+| [Labelers](labelers.md) | Manage external labeler subscriptions |
+| [Instance Settings](settings.md) | Configure app name, logo, and policy URLs |
+| [Domains](domains.md) | Manage domains and their OAuth client identities |
+| [Script Variables](script-variables.md) | Encrypted key/value pairs for Lua scripts |
+| [API Clients](api-clients.md) | Register and manage third-party XRPC clients |
+| [Plugins](plugins.md) | Install, configure, and manage WASM plugins |
 
 ## Permissions
 
-Each admin API endpoint requires a specific permission. See the [Permissions guide](../guides/permissions.md) for the full list of permissions and templates.
+Each admin API endpoint requires a specific permission. See the [Permissions guide](../../guides/admin/permissions.md) for the full list of permissions and templates.
 
 | Endpoint                                 | Required Permission        |
 | ---------------------------------------- | -------------------------- |

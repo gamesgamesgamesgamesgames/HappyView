@@ -1,6 +1,6 @@
 # Configuration
 
-HappyView is configured via environment variables. A `.env` file in the project root is loaded automatically on startup. See [Deployment](deployment/docker.md) for local setup or [Production Deployment](../reference/production-deployment.md) for production setup.
+HappyView is configured via environment variables. A `.env` file in the project root is loaded automatically on startup. See [Deployment](deployment/docker.md) for local setup or [Production Deployment](production-deployment.md) for production setup.
 
 ## Environment variables
 
@@ -13,7 +13,7 @@ HappyView is configured via environment variables. A `.env` file in the project 
 | `HOST` | no | `0.0.0.0` | Bind host |
 | `PORT` | no | `3000` | Bind port |
 | `JETSTREAM_URL` | no | `wss://jetstream1.us-east.bsky.network` | Jetstream WebSocket URL for real-time record streaming |
-| `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/backfill.md) repo discovery |
+| `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/indexing/backfill.md) repo discovery |
 | `PLC_URL` | no | `https://plc.directory` | [PLC directory](https://github.com/did-method-plc/did-method-plc) URL for DID resolution |
 | `STATIC_DIR` | no | `./web/out` | Directory containing the built dashboard static assets |
 | `EVENT_LOG_RETENTION_DAYS` | no | `30` | Number of days to keep event logs before automatic cleanup. Set to `0` to disable cleanup |
@@ -59,4 +59,4 @@ SESSION_SECRET=change-me-in-production
 
 - [Authentication](authentication.md) — set up OAuth and admin users
 - [Dashboard](dashboard.md) — explore the admin dashboard
-- [Production deployment](../reference/production-deployment.md) — deploy HappyView to production
+- [Production deployment](production-deployment.md) — deploy HappyView to production

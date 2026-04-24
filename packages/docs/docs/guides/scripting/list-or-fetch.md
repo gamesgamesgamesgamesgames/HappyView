@@ -25,8 +25,8 @@ end
 
 ## How it works
 
-1. If a `uri` query parameter is provided, fetch that single record with [`db.get`](../lua/database-api.md#dbget) and return it. If it doesn't exist, return a structured error (using `error()` would trigger a 500 response).
-2. Otherwise, list records from the target collection using [`db.query`](../lua/database-api.md#dbquery), with optional filtering by `did` and cursor-based pagination. The `cursor` is an opaque string from a previous response — pass it through directly. Since `limit` arrives as a string, `tonumber()` converts it to a number.
+1. If a `uri` query parameter is provided, fetch that single record with [`db.get`](../../reference/lua/database-api.md#dbget) and return it. If it doesn't exist, return a structured error (using `error()` would trigger a 500 response).
+2. Otherwise, list records from the target collection using [`db.query`](../../reference/lua/database-api.md#dbquery), with optional filtering by `did` and cursor-based pagination. The `cursor` is an opaque string from a previous response — pass it through directly. Since `limit` arrives as a string, `tonumber()` converts it to a number.
 
 ## Usage
 

@@ -5,9 +5,9 @@ When you add a new record-type lexicon, HappyView starts indexing new records fr
 ## When backfill runs
 
 - **Automatically** when a record-type lexicon is uploaded with `backfill: true` (the default). See [Lexicons - Backfill flag](lexicons.md#backfill-flag).
-- **Manually** via `POST /admin/backfill` or the [dashboard](../getting-started/dashboard.md). You can scope a manual backfill to a specific collection, a specific DID, or both.
+- **Manually** via `POST /admin/backfill` or the [dashboard](../../getting-started/dashboard.md). You can scope a manual backfill to a specific collection, a specific DID, or both.
 
-See the [admin API](../reference/admin/backfill.md) for endpoint details.
+See the [admin API](../../reference/admin/backfill.md) for endpoint details.
 
 ## How it works
 
@@ -34,4 +34,4 @@ Deleting records from HappyView (via the dashboard or API) only removes them fro
 ## Next steps
 
 - [Lexicons](lexicons.md#backfill-flag): Control whether lexicons trigger backfill on upload
-- [Admin API — Backfill](../reference/admin/backfill.md): Full reference for backfill endpoints
+- [Admin API — Backfill](../../reference/admin/backfill.md): Full reference for backfill endpoints

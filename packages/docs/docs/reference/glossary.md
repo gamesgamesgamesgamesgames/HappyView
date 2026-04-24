@@ -12,7 +12,7 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **Handle** — A human-readable name for an account (e.g. `user.bsky.social`). Handles resolve to a DID via a DNS TXT record or an HTTP `.well-known/atproto-did` lookup.
 
-**Lexicon** — A schema definition for atproto data types and API methods. Lexicons define what records look like, what endpoints exist, and what parameters they accept. See [Lexicons](../guides/lexicons.md).
+**Lexicon** — A schema definition for atproto data types and API methods. Lexicons define what records look like, what endpoints exist, and what parameters they accept. See [Lexicons](../guides/indexing/lexicons.md).
 
 **NSID** (Namespaced Identifier) — A reverse-DNS identifier for a lexicon (e.g. `xyz.statusphere.status`). The authority is everything except the last segment.
 
@@ -22,7 +22,7 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 **Record** — A single piece of data in an atproto repository, identified by an AT URI (e.g. `at://did:plc:abc/xyz.statusphere.status/abc123`).
 
-**Relay** — A network service that aggregates repository data from many PDSes. HappyView queries the relay during [backfill](../guides/backfill.md) to discover which repos contain records for a given collection, then fetches each repo's records directly from its PDS.
+**Relay** — A network service that aggregates repository data from many PDSes. HappyView queries the relay during [backfill](../guides/indexing/backfill.md) to discover which repos contain records for a given collection, then fetches each repo's records directly from its PDS.
 
 **rkey** (Record Key) — The unique key for a record within a collection and repo. These are most commonly TIDs (timestamp-based) or NSIDs.
 
@@ -34,11 +34,11 @@ Key terms used throughout the HappyView documentation. For a broader introductio
 
 ## HappyView-specific terms
 
-**Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and fetches each repo's records directly from its PDS. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/backfill.md).
+**Backfill** — The process of bulk-indexing existing records from the network. HappyView discovers repos via the relay and fetches each repo's records directly from its PDS. Runs when a new record-type lexicon is uploaded or triggered manually. See [Backfill](../guides/indexing/backfill.md).
 
-**Network lexicon** — A lexicon fetched directly from the atproto network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons).
+**Network lexicon** — A lexicon fetched directly from the atproto network via DNS authority resolution, rather than uploaded manually. See [Lexicons - Network lexicons](../guides/indexing/lexicons.md#network-lexicons).
 
-**Permission** — A granular access control right that authorizes a specific action in the admin API. HappyView defines 20 permissions organized by category (e.g. `lexicons:create`, `users:read`). See [Permissions](../guides/permissions.md).
+**Permission** — A granular access control right that authorizes a specific action in the admin API. HappyView defines 20 permissions organized by category (e.g. `lexicons:create`, `users:read`). See [Permissions](../guides/admin/permissions.md).
 
 **Permission template** — A predefined set of permissions that can be applied when creating a user. Templates are: **Viewer** (read-only access), **Operator** (viewer + backfill and API key management), **Manager** (operator + lexicon and record management), and **Full Access** (all 20 permissions).
 

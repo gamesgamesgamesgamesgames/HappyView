@@ -1,6 +1,6 @@
 # Admin API: API Keys
 
-Manage API keys for programmatic access. See the [API Keys guide](../../guides/api-keys.md) for usage details.
+Manage API keys for programmatic access. See the [API Keys guide](../../guides/admin/api-keys.md) for usage details.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

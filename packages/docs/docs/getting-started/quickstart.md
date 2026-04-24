@@ -29,7 +29,7 @@ Lexicons tell HappyView what data to index and what endpoints to serve. The quic
 
 HappyView starts indexing records for that collection. A backfill job fetches historical records, and new records stream in via Jetstream.
 
-You can also upload lexicons manually via the dashboard or the [admin API](../reference/admin-api.md). See [Lexicons](../guides/lexicons.md) for the full details.
+You can also upload lexicons manually via the dashboard or the [admin API](../reference/admin/admin-api.md). See [Lexicons](../guides/indexing/lexicons.md) for the full details.
 
 ## 4. Verify records are being indexed
 
@@ -50,7 +50,7 @@ For custom query logic, attach a [Lua script](../guides/scripting.md).
 ## Next steps
 
 - [**Statusphere tutorial**](../tutorials/statusphere.md): full walkthrough building a complete AppView with record, query, and procedure lexicons
-- [**Lexicons guide**](../guides/lexicons.md): target collections, backfill flag, network lexicons
+- [**Lexicons guide**](../guides/indexing/lexicons.md): target collections, backfill flag, network lexicons
 - [**Lua Scripting**](../guides/scripting.md): custom query and procedure logic
 - [**Configuration**](configuration.md): environment variables and tuning
 - [**Authentication**](authentication.md): how OAuth works and how to get API tokens

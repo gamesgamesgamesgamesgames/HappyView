@@ -31,7 +31,7 @@ curl http://localhost:3000/admin/lexicons \
   -H "Authorization: Bearer hv_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
 ```
 
-This works for all [admin API](../reference/admin-api.md) endpoints that the key has permissions for. Unlike OAuth tokens which carry the user's full permissions, API keys are limited to the specific permissions assigned at creation time.
+This works for all [admin API](../../reference/admin/admin-api.md) endpoints that the key has permissions for. Unlike OAuth tokens which carry the user's full permissions, API keys are limited to the specific permissions assigned at creation time.
 
 ## Revoking a key
 
@@ -55,6 +55,6 @@ The **Last Used** column in the API Keys table shows when each key was last used
 
 ## Next steps
 
-- [Admin API reference](../reference/admin-api.md) — full endpoint documentation
-- [Scripting](scripting.md) — automate record processing with Lua scripts
-- [Index hooks](index-hooks.md) — push records to external services on write
+- [Admin API reference](../../reference/admin/admin-api.md) — full endpoint documentation
+- [Scripting](../scripting.md) — automate record processing with Lua scripts
+- [Index hooks](../indexing/index-hooks.md) — push records to external services on write

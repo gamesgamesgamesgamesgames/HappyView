@@ -10,7 +10,7 @@ Without Lua scripts, HappyView's query endpoints return raw records and procedur
 
 Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [database API](#database-api), an [HTTP client API](#http-api), a [JSON API](#json-api), and a set of [context globals](#context-globals).
 
-For scripts that react to record changes from the network (rather than XRPC requests), see [Index Hooks](index-hooks.md).
+For scripts that react to record changes from the network (rather than XRPC requests), see [Index Hooks](indexing/index-hooks.md).
 
 ## Script structure
 
@@ -177,26 +177,26 @@ The **full error message** is logged server-side at error level. Check the serve
 See the example script references for complete, ready-to-use scripts:
 
 **Queries:**
-- [Get a record](../reference/scripts/get-record.md) — fetch a single record by AT URI
-- [Paginated list](../reference/scripts/paginated-list.md) — list records with cursor-based pagination and DID filtering
-- [List or fetch](../reference/scripts/list-or-fetch.md) — combined single-record lookup and paginated listing
-- [Expanded query](../reference/scripts/expanded-query.md) — list statuses with user profiles in a single response
+- [Get a record](scripting/get-record.md) — fetch a single record by AT URI
+- [Paginated list](scripting/paginated-list.md) — list records with cursor-based pagination and DID filtering
+- [List or fetch](scripting/list-or-fetch.md) — combined single-record lookup and paginated listing
+- [Expanded query](scripting/expanded-query.md) — list statuses with user profiles in a single response
 
 **Procedures:**
-- [Create a record](../reference/scripts/create-record.md) — simple write that saves input as a record
-- [Upsert a record](../reference/scripts/upsert-record.md) — create or update using a deterministic rkey
-- [Update or delete](../reference/scripts/update-or-delete.md) — single endpoint handling create, update, and delete
-- [Batch save](../reference/scripts/batch-save.md) — create multiple records in parallel with `Record.save_all()`
-- [Sidecar records](../reference/scripts/sidecar-records.md) — create linked records across collections with a shared rkey
-- [Cascading delete](../reference/scripts/cascading-delete.md) — delete a record and all related records
-- [Complex mutations](../reference/scripts/complex-mutations.md) — load, transform, and save a record with multiple field changes
+- [Create a record](scripting/create-record.md) — simple write that saves input as a record
+- [Upsert a record](scripting/upsert-record.md) — create or update using a deterministic rkey
+- [Update or delete](scripting/update-or-delete.md) — single endpoint handling create, update, and delete
+- [Batch save](scripting/batch-save.md) — create multiple records in parallel with `Record.save_all()`
+- [Sidecar records](scripting/sidecar-records.md) — create linked records across collections with a shared rkey
+- [Cascading delete](scripting/cascading-delete.md) — delete a record and all related records
+- [Complex mutations](scripting/complex-mutations.md) — load, transform, and save a record with multiple field changes
 
 **Index Hooks:**
-- [Algolia sync](../reference/scripts/algolia-sync.md) — push records to an Algolia search index on create/update/delete
+- [Algolia sync](scripting/algolia-sync.md) — push records to an Algolia search index on create/update/delete
 
 ## Next steps
 
-- [Index Hooks](index-hooks.md): React to record changes from the network in real time
-- [Lexicons](lexicons.md): Understand how record, query, and procedure lexicons work together
+- [Index Hooks](indexing/index-hooks.md): React to record changes from the network in real time
+- [Lexicons](indexing/lexicons.md): Understand how record, query, and procedure lexicons work together
 - [XRPC API](../reference/xrpc-api.md): See how endpoints behave with and without Lua scripts
 - [Dashboard](../getting-started/dashboard.md#lua-editor): Use the web editor with context-aware completions

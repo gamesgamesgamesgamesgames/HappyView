@@ -1,6 +1,6 @@
 # Admin API: Lexicons
 
-Manage lexicons and network lexicons. See the [Lexicons guide](../../guides/lexicons.md) for background on how lexicons drive indexing and XRPC routing.
+Manage lexicons and network lexicons. See the [Lexicons guide](../../guides/indexing/lexicons.md) for background on how lexicons drive indexing and XRPC routing.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)
@@ -30,7 +30,7 @@ curl -X POST http://localhost:3000/admin/lexicons \
 | `backfill`          | boolean | no       | Whether uploading triggers historical backfill (default `true`)       |
 | `target_collection` | string  | no       | For query/procedure lexicons, the record collection they operate on   |
 | `script`            | string  | no       | Lua script for query/procedure endpoints                              |
-| `index_hook`        | string  | no       | [Index hook](../../guides/index-hooks.md) Lua script for record lexicons |
+| `index_hook`        | string  | no       | [Index hook](../../guides/indexing/index-hooks.md) Lua script for record lexicons |
 
 **Response**: `201 Created` (new) or `200 OK` (upsert)
 
@@ -92,7 +92,7 @@ curl -X DELETE http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$
 
 ## Network Lexicons
 
-Network lexicons are fetched from the atproto network via DNS TXT resolution and kept updated via the Jetstream subscription. See [Lexicons - Network lexicons](../../guides/lexicons.md#network-lexicons) for background.
+Network lexicons are fetched from the atproto network via DNS TXT resolution and kept updated via the Jetstream subscription. See [Lexicons - Network lexicons](../../guides/indexing/lexicons.md#network-lexicons) for background.
 
 ### Add a network lexicon
 

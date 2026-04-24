@@ -30,7 +30,7 @@ Or if you prefer Postgres:
 DATABASE_URL=postgres://happyview:happyview@localhost/happyview
 ```
 
-See [Configuration](../configuration.md) for all available variables and the [database setup guide](../../guides/database-setup.md) for details on both backends.
+See [Configuration](../configuration.md) for all available variables and the [database setup guide](../../guides/database/database-setup.md) for details on both backends.
 
 ## 2. Create the database (Postgres only)
 

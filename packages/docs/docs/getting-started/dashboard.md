@@ -1,6 +1,6 @@
 # Dashboard
 
-HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin-api.md) offers. It runs as a separate Next.js application alongside the Rust backend and authenticates via atproto OAuth.
+HappyView ships with a web dashboard that provides a visual interface for everything the [admin API](../reference/admin/admin-api.md) offers. It runs as a separate Next.js application alongside the Rust backend and authenticates via atproto OAuth.
 
 On a fresh deployment with no users in the database, the first person to log in to the dashboard is automatically bootstrapped as the super user with all permissions — so log in with the handle you want to own the instance first.
 
@@ -23,7 +23,7 @@ HappyView generates a default Lua script when you first set the type to query or
 
 Toggle **Enable backfill** to index historical records when uploading a record-type lexicon.
 
-**Network** lexicons are fetched from the atproto network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via the Jetstream subscription. See [Lexicons - Network lexicons](../guides/lexicons.md#network-lexicons) for how resolution works.
+**Network** lexicons are fetched from the atproto network. Enter an NSID (e.g. `xyz.statusphere.status`) and HappyView resolves the schema automatically. If found, the lexicon JSON is displayed in a read-only editor. Click **Add** to track it. Network lexicons are kept up to date via the Jetstream subscription. See [Lexicons - Network lexicons](../guides/indexing/lexicons.md#network-lexicons) for how resolution works.
 
 ### JSON editor
 
@@ -45,11 +45,11 @@ Navigate to **Records** to browse all indexed atproto records. Records are group
 
 ## Backfill
 
-Navigate to **Backfill** to view and manage backfill jobs. You can start a new backfill for any record-type lexicon to import historical records from the network. The page shows job status, progress (repos processed / total), and record counts. See [Backfill](../guides/backfill.md) for how the process works.
+Navigate to **Backfill** to view and manage backfill jobs. You can start a new backfill for any record-type lexicon to import historical records from the network. The page shows job status, progress (repos processed / total), and record counts. See [Backfill](../guides/indexing/backfill.md) for how the process works.
 
 ## Users
 
-Navigate to **Users** to manage who can access the admin API and dashboard. You can add users by DID, assign permissions individually or via a template (`viewer`, `operator`, `manager`, `full_access`), and remove users. The super user is highlighted and has all permissions by default. See [Permissions](../guides/permissions.md) for what each permission grants.
+Navigate to **Users** to manage who can access the admin API and dashboard. You can add users by DID, assign permissions individually or via a template (`viewer`, `operator`, `manager`, `full_access`), and remove users. The super user is highlighted and has all permissions by default. See [Permissions](../guides/admin/permissions.md) for what each permission grants.
 
 ## Events
 
@@ -69,7 +69,7 @@ Register and manage third-party API clients. Each client gets an `hvc_…` clien
 
 ### API Keys
 
-Create and revoke admin API keys for automation. Each key is scoped to specific permissions and tied to the creating user. See [API Keys](../guides/api-keys.md) for details.
+Create and revoke admin API keys for automation. Each key is scoped to specific permissions and tied to the creating user. See [API Keys](../guides/admin/api-keys.md) for details.
 
 ### Users
 
@@ -77,11 +77,11 @@ An alternative path to the top-level Users page for managing user accounts and p
 
 ### Plugins
 
-Manage installed plugins and configure plugin secrets. Plugins extend HappyView with additional functionality. Plugin secrets are encrypted at rest when `TOKEN_ENCRYPTION_KEY` is configured. See [Plugins](../guides/plugins.md) for details.
+Manage installed plugins and configure plugin secrets. Plugins extend HappyView with additional functionality. Plugin secrets are encrypted at rest when `TOKEN_ENCRYPTION_KEY` is configured. See [Plugins](../guides/features/plugins.md) for details.
 
 ### Labelers
 
-Configure labeler subscriptions for content labeling. See [Labelers](../guides/labelers.md) for details.
+Configure labeler subscriptions for content labeling. See [Labelers](../guides/features/labelers.md) for details.
 
 ### Environment Variables
 
@@ -93,7 +93,7 @@ Manage connected atproto accounts used by the instance.
 
 ## Next steps
 
-- [Lexicons](../guides/lexicons.md) — how lexicons drive HappyView's indexing and routing
+- [Lexicons](../guides/indexing/lexicons.md) — how lexicons drive HappyView's indexing and routing
 - [Lua Scripting](../guides/scripting.md) — write custom query and procedure logic
-- [Permissions](../guides/permissions.md) — manage user access to admin features
+- [Permissions](../guides/admin/permissions.md) — manage user access to admin features
 - [Configuration](configuration.md) — full list of environment variables

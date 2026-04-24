@@ -76,6 +76,32 @@ const sidebars: SidebarsConfig = {
       items: [
         {
           type: "category",
+          label: "Features",
+          items: [
+            {
+              type: "doc",
+              id: "guides/features/api-clients",
+              label: "API Clients",
+            },
+            {
+              type: "doc",
+              id: "guides/features/labelers",
+              label: "Labelers",
+            },
+            {
+              type: "doc",
+              id: "guides/features/plugins",
+              label: "Plugins",
+            },
+            {
+              type: "doc",
+              id: "guides/features/developing-plugins",
+              label: "Developing Plugins",
+            },
+          ],
+        },
+        {
+          type: "category",
           label: "Indexing",
           items: [
             {
@@ -174,32 +200,6 @@ const sidebars: SidebarsConfig = {
                   label: "Meilisearch Sync",
                 },
               ],
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Features",
-          items: [
-            {
-              type: "doc",
-              id: "guides/features/api-clients",
-              label: "API Clients",
-            },
-            {
-              type: "doc",
-              id: "guides/features/labelers",
-              label: "Labelers",
-            },
-            {
-              type: "doc",
-              id: "guides/features/plugins",
-              label: "Plugins",
-            },
-            {
-              type: "doc",
-              id: "guides/features/developing-plugins",
-              label: "Developing Plugins",
             },
           ],
         },

@@ -1,6 +1,6 @@
 # Event Logs
 
-HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Jetstream connectivity. Events are stored in the database and queryable via the [admin API](../reference/admin/events.md).
+HappyView maintains an internal event log that records system activity — lexicon changes, record operations, Lua script executions and errors, user actions, API key events, backfill jobs, and Jetstream connectivity. Events are stored in the database and queryable via the [admin API](../../reference/admin/events.md).
 
 ## Event types
 
@@ -14,7 +14,7 @@ Events follow a `category.action` naming convention. Each event has a severity l
 | `lexicon.updated` | info | Lexicon NSID | `revision`, `has_script`, `source` |
 | `lexicon.deleted` | info | Lexicon NSID | — |
 
-Logged when lexicons are uploaded, updated, or deleted via the [admin API](../reference/admin/lexicons.md). The `actor_did` is the user who performed the action.
+Logged when lexicons are uploaded, updated, or deleted via the [admin API](../../reference/admin/lexicons.md). The `actor_did` is the user who performed the action.
 
 ### Record events
 
@@ -48,7 +48,7 @@ For query scripts (unauthenticated), `caller_did` and `input` are omitted from t
 | `user.permissions_updated` | info | User ID | `granted`, `revoked` |
 | `user.super_transferred` | warn | New super user ID | `from_user_id` |
 
-The `user.bootstrapped` event is logged when the first user is auto-promoted to super user (see [Auth - Auto-bootstrap](../reference/admin-api.md#auth)).
+The `user.bootstrapped` event is logged when the first user is auto-promoted to super user (see [Auth - Auto-bootstrap](../../reference/admin/admin-api.md#auth)).
 
 ### Auth events
 
@@ -79,7 +79,7 @@ Logged when a user attempts to access an endpoint they don't have permission for
 | `hook.executed` | info | Record AT URI | `lexicon_id` |
 | `hook.dead_lettered` | error | Record AT URI | `lexicon_id`, `error` |
 
-Logged when [index hooks](index-hooks.md) run. Dead-lettered events indicate a hook failed all retry attempts. You can manage dead letters from the **Data > Dead Letters** page in the dashboard — see [Dead Letters](#dead-letters) below.
+Logged when [index hooks](../indexing/index-hooks.md) run. Dead-lettered events indicate a hook failed all retry attempts. You can manage dead letters from the **Data > Dead Letters** page in the dashboard — see [Dead Letters](#dead-letters) below.
 
 ### Backfill events
 
@@ -89,7 +89,7 @@ Logged when [index hooks](index-hooks.md) run. Dead-lettered events indicate a h
 | `backfill.completed` | info | Collection NSID | `job_id`, `total_repos` |
 | `backfill.failed` | error | Collection NSID | `job_id`, `error` |
 
-See [Backfill](backfill.md) for background on backfill jobs.
+See [Backfill](../indexing/backfill.md) for background on backfill jobs.
 
 ### Jetstream events
 
@@ -118,7 +118,7 @@ curl "http://localhost:3000/admin/events?category=lexicon" -H "$AUTH"
 curl "http://localhost:3000/admin/events?limit=20&cursor=2026-03-01T11:59:00Z" -H "$AUTH"
 ```
 
-See the [Admin API reference](../reference/admin/events.md#list-event-logs) for full parameter documentation.
+See the [Admin API reference](../../reference/admin/events.md#list-event-logs) for full parameter documentation.
 
 ## Retention
 
@@ -126,7 +126,7 @@ Event logs are automatically cleaned up based on the `EVENT_LOG_RETENTION_DAYS` 
 
 Set `EVENT_LOG_RETENTION_DAYS=0` to disable automatic cleanup and keep logs indefinitely.
 
-See [Configuration](../getting-started/configuration.md) for all environment variables.
+See [Configuration](../../getting-started/configuration.md) for all environment variables.
 
 ## Dead Letters
 
@@ -142,6 +142,6 @@ Bulk actions are available for selected rows or all entries matching the current
 
 ## Next steps
 
-- [Admin API — Event Logs](../reference/admin/events.md) — full query parameters and response format
+- [Admin API — Event Logs](../../reference/admin/events.md) — full query parameters and response format
 - [Permissions](permissions.md) — control which users can read event logs
-- [Troubleshooting](../reference/troubleshooting.md) — using event logs to diagnose issues
+- [Troubleshooting](../../reference/troubleshooting.md) — using event logs to diagnose issues

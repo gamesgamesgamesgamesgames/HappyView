@@ -75,5 +75,5 @@ These are only necessary if you can't configure variables via the dashboard. Das
 
 - [Developing Plugins](developing-plugins.md) — create your own plugins with the WASM plugin API
 - [Official plugins repository](https://github.com/gamesgamesgamesgamesgames/happyview-plugins) — ready-to-use plugins for Steam, Xbox, itch.io, and more
-- [API Keys](api-keys.md) — authenticate programmatic access to admin endpoints
-- [Permissions](permissions.md) — configure user access to plugin management
+- [API Keys](../admin/api-keys.md) — authenticate programmatic access to admin endpoints
+- [Permissions](../admin/permissions.md) — configure user access to plugin management

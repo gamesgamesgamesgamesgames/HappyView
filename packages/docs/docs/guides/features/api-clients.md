@@ -2,7 +2,7 @@
 
 API clients identify your application to a HappyView instance. Every XRPC request — even unauthenticated queries — must include a client key. This guide walks through creating a client, choosing between public and confidential types, and authenticating users.
 
-For the admin CRUD endpoints, see the [API reference](../reference/admin/api-clients.md). For the JavaScript SDK, see the [SDK docs](../sdk/overview.md).
+For the admin CRUD endpoints, see the [API reference](../../reference/admin/api-clients.md). For the JavaScript SDK, see the [SDK docs](../../sdk/overview.md).
 
 ## Concepts
 
@@ -63,7 +63,7 @@ curl -X POST http://localhost:3000/admin/api-clients \
   }'
 ```
 
-See the [API reference](../reference/admin/api-clients.md#create-an-api-client) for all fields.
+See the [API reference](../../reference/admin/api-clients.md#create-an-api-client) for all fields.
 
 ## Using your client key
 
@@ -91,7 +91,7 @@ curl 'https://happyview.example.com/xrpc/com.example.feed.getHot' \
 
 ### Authenticated requests (user identity)
 
-Procedures — and queries whose scripts need to know who the caller is — require a user's OAuth session. This uses [DPoP authentication](../getting-started/authentication.md#dpop-key-provisioning-for-third-party-apps), where each request includes a cryptographic proof that the caller holds the right key.
+Procedures — and queries whose scripts need to know who the caller is — require a user's OAuth session. This uses [DPoP authentication](../../getting-started/authentication.md#dpop-key-provisioning-for-third-party-apps), where each request includes a cryptographic proof that the caller holds the right key.
 
 ```sh
 curl -X POST 'https://happyview.example.com/xrpc/com.example.createPost' \
@@ -141,7 +141,7 @@ if (session) {
 }
 ```
 
-For server-side Node.js apps, use the core [`@happyview/oauth-client`](../sdk/oauth-client.md) package with a confidential client. For type-safe XRPC calls, pair either client with [`@happyview/lex-agent`](../sdk/lex-agent.md).
+For server-side Node.js apps, use the core [`@happyview/oauth-client`](../../sdk/oauth-client.md) package with a confidential client. For type-safe XRPC calls, pair either client with [`@happyview/lex-agent`](../../sdk/lex-agent.md).
 
 ### Manual DPoP flow
 
@@ -348,7 +348,7 @@ Rate limit state is returned in response headers:
 | `RateLimit-Reset`     | Unix timestamp when the bucket will be full |
 | `Retry-After`         | Seconds to wait (only on `429` responses)   |
 
-Adjust per-client rate limits via the dashboard or the [admin API](../reference/admin/api-clients.md#update-an-api-client).
+Adjust per-client rate limits via the dashboard or the [admin API](../../reference/admin/api-clients.md#update-an-api-client).
 
 ## Security notes
 
@@ -359,7 +359,7 @@ Adjust per-client rate limits via the dashboard or the [admin API](../reference/
 
 ## Next steps
 
-- [Authentication](../getting-started/authentication.md) — full protocol details and security model
-- [JavaScript SDK](../sdk/overview.md) — get started with the SDK
-- [Admin API — API Clients](../reference/admin/api-clients.md) — CRUD endpoints
-- [Permissions](permissions.md) — control who can manage API clients
+- [Authentication](../../getting-started/authentication.md) — full protocol details and security model
+- [JavaScript SDK](../../sdk/overview.md) — get started with the SDK
+- [Admin API — API Clients](../../reference/admin/api-clients.md) — CRUD endpoints
+- [Permissions](../admin/permissions.md) — control who can manage API clients

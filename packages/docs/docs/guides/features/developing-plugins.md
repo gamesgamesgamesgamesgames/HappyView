@@ -101,5 +101,5 @@ Plugins can import these host functions:
 
 - [Official plugins repository](https://github.com/gamesgamesgamesgamesgames/happyview-plugins) — ready-to-use plugins and the plugin SDK
 - [Plugins guide](plugins.md) — install and configure plugins
-- [API Keys](api-keys.md) — authenticate programmatic access to admin endpoints
-- [Permissions](permissions.md) — configure user access to plugin management
+- [API Keys](../admin/api-keys.md) — authenticate programmatic access to admin endpoints
+- [Permissions](../admin/permissions.md) — configure user access to plugin management

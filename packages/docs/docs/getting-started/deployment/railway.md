@@ -24,4 +24,4 @@ After deploying the template, you'll need to configure a few things before the s
 
 - [Configuration](../configuration.md) — full list of environment variables
 - [Dashboard](../dashboard.md) — manage lexicons, users, and plugins via the web UI
-- [Production deployment](../../reference/production-deployment.md) — hardening checklist for production instances
+- [Production deployment](../production-deployment.md) — hardening checklist for production instances

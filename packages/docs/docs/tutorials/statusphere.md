@@ -21,7 +21,7 @@ For more background on how the app works, see the [ATProto Statusphere guide](ht
 
 ## Step 1: Add the record lexicon
 
-First, tell HappyView to start indexing Statusphere records. Since `xyz.statusphere.status` is [published on the atproto network](../guides/lexicons.md#network-lexicons), you can add it directly from the dashboard:
+First, tell HappyView to start indexing Statusphere records. Since `xyz.statusphere.status` is [published on the atproto network](../guides/indexing/lexicons.md#network-lexicons), you can add it directly from the dashboard:
 
 1. Go to **Lexicons > Add Lexicon > Network**
 2. Enter `xyz.statusphere.status`
@@ -207,13 +207,13 @@ With three lexicons and a few lines of Lua, you have a complete Statusphere AppV
 - **A query endpoint** (`xyz.statusphere.listStatuses`) with filtering, pagination, and single-record lookups
 - **A write endpoint** (`xyz.statusphere.setStatus`) that creates records on the user's PDS and indexes them locally
 
-Everything was done through the dashboard — no server restarts, no config files, no deploys. For automation and CI/CD, the same operations are available via the [admin API](../reference/admin-api.md).
+Everything was done through the dashboard — no server restarts, no config files, no deploys. For automation and CI/CD, the same operations are available via the [admin API](../reference/admin/admin-api.md).
 
 ## Next steps
 
 - [Lua Scripting](../guides/scripting.md): Explore the full Record and database APIs to build more complex queries
-- [Lexicons](../guides/lexicons.md): Learn about network lexicons, the backfill flag, and target collections
+- [Lexicons](../guides/indexing/lexicons.md): Learn about network lexicons, the backfill flag, and target collections
 - [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
-- [Admin API](../reference/admin-api.md): Automate lexicon management via the API
+- [Admin API](../reference/admin/admin-api.md): Automate lexicon management via the API
 - [Statusphere example app](https://github.com/bluesky-social/statusphere-example-app): See the full Statusphere frontend
 - [ATProto Statusphere guide](https://atproto.com/guides/applications): How the app works at the protocol level

@@ -23,8 +23,8 @@ end
 
 ## How it works
 
-1. Iterate over `input.items` and create a [`Record`](../lua/record-api.md) instance for each item.
-2. Call [`Record.save_all()`](../lua/record-api.md#static-methods) to save all records in parallel, rather than one at a time.
+1. Iterate over `input.items` and create a [`Record`](../../reference/lua/record-api.md) instance for each item.
+2. Call [`Record.save_all()`](../../reference/lua/record-api.md#static-methods) to save all records in parallel, rather than one at a time.
 3. Collect the resulting AT URIs and return them.
 
 ## Usage

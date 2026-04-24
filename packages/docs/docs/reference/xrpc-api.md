@@ -1,6 +1,6 @@
 # XRPC API
 
-[XRPC](https://atproto.com/specs/xrpc) is the HTTP-based RPC protocol used by the atproto. HappyView dynamically registers XRPC endpoints based on your uploaded [lexicons](../guides/lexicons.md): query lexicons become `GET /xrpc/{nsid}` routes, procedure lexicons become `POST /xrpc/{nsid}` routes.
+[XRPC](https://atproto.com/specs/xrpc) is the HTTP-based RPC protocol used by the atproto. HappyView dynamically registers XRPC endpoints based on your uploaded [lexicons](../guides/indexing/lexicons.md): query lexicons become `GET /xrpc/{nsid}` routes, procedure lexicons become `POST /xrpc/{nsid}` routes.
 
 If a query or procedure lexicon has a [Lua script](../guides/scripting.md) attached, the script handles the request. Otherwise, HappyView uses built-in default behavior (described below).
 
@@ -210,5 +210,5 @@ When a procedure proxies a write to the user's PDS and the PDS returns an error,
 ## Next steps
 
 - [Lua Scripting](../guides/scripting.md): Override the default query and procedure behavior with custom logic
-- [Lexicons](../guides/lexicons.md): Understand how lexicons generate these endpoints
-- [Admin API](admin-api.md): Manage lexicons and monitor your instance
+- [Lexicons](../guides/indexing/lexicons.md): Understand how lexicons generate these endpoints
+- [Admin API](admin/admin-api.md): Manage lexicons and monitor your instance

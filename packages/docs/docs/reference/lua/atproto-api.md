@@ -1,6 +1,6 @@
 # atproto API
 
-The `atproto` table provides atproto utility functions. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
+The `atproto` table provides atproto utility functions. Available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md).
 
 ## atproto.resolve_service_endpoint
 

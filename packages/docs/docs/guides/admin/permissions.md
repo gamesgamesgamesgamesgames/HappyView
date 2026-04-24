@@ -132,10 +132,10 @@ Go to **Settings > Users** to view and manage user permissions. Click on a user 
 - `PATCH /admin/users/{id}/permissions` — grant or revoke individual permissions
 - `POST /admin/users/transfer-super` — transfer super user status (super user only)
 
-See the [Admin API — Users](../reference/admin/users.md) for full details.
+See the [Admin API — Users](../../reference/admin/users.md) for full details.
 
 ## Next steps
 
-- [Admin API reference](../reference/admin-api.md) — endpoint documentation with required permissions
+- [Admin API reference](../../reference/admin/admin-api.md) — endpoint documentation with required permissions
 - [API Keys](api-keys.md) — creating scoped API keys
 - [Event Logs](event-logs.md) — permission-denied events are logged for auditing

@@ -23,7 +23,7 @@ end
 ## How it works
 
 1. Parse `limit` from the query string, defaulting to 20 and capping at 100.
-2. Call [`db.query`](../lua/database-api.md#dbquery) with the target collection, optional DID filter, and cursor for pagination.
+2. Call [`db.query`](../../reference/lua/database-api.md#dbquery) with the target collection, optional DID filter, and cursor for pagination.
 3. Return the result directly. `db.query` returns `{ records = [...], cursor = "..." }` where `cursor` is an opaque string present when more records exist.
 
 ## Usage
