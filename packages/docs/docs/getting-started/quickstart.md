@@ -49,9 +49,7 @@ For custom query logic, attach a [Lua script](../guides/scripting.md).
 
 ## Next steps
 
-Here's where to go from here:
-
-- [**Statusphere tutorial**](../tutorials/statusphere.md): end-to-end walkthrough building a complete AppView with record, query, and procedure lexicons
+- [**Statusphere tutorial**](../tutorials/statusphere.md): full walkthrough building a complete AppView with record, query, and procedure lexicons
 - [**Lexicons guide**](../guides/lexicons.md): target collections, backfill flag, network lexicons
 - [**Lua Scripting**](../guides/scripting.md): custom query and procedure logic
 - [**Configuration**](configuration.md): environment variables and tuning

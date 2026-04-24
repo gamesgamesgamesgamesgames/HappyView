@@ -37,4 +37,4 @@ GET /xrpc/xyz.statusphere.listStatuses?cursor=<opaque>&limit=20
 
 ## Use case
 
-A straightforward list endpoint for feeds, timelines, or browsing records by collection. The `cursor` value returned by `db.query` is an opaque string. Clients pass it back as the `cursor` parameter to fetch the next page — don't parse or modify it.
+A list endpoint for feeds, timelines, or browsing records by collection. The `cursor` value returned by `db.query` is an opaque string. Clients pass it back as the `cursor` parameter to fetch the next page — don't parse or modify it.

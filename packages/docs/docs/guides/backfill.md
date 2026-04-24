@@ -19,7 +19,7 @@ See the [admin API](../reference/admin/backfill.md) for endpoint details.
 
 ## Job lifecycle
 
-A backfill job moves through `pending → running → completed` (or `failed`). Unlike earlier versions of HappyView that relied on Tap, the job is only marked `completed` once every discovered repo has been processed end-to-end — there is no separate downstream queue. Progress is visible in real time on the dashboard's Backfill page.
+A backfill job moves through `pending → running → completed` (or `failed`). Unlike earlier versions of HappyView that relied on Tap, the job is only marked `completed` once every discovered repo has been fully processed — there is no separate downstream queue. Progress is visible in real time on the dashboard's Backfill page.
 
 If a job fails midway, the `error` field contains the failure reason. Re-running the backfill resumes from scratch but is idempotent (records are upserted by URI).
 

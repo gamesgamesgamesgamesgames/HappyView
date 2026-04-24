@@ -108,7 +108,7 @@ curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=5" \
 
 See [XRPC API](../reference/xrpc-api.md) for the full default query behavior.
 
-## Step 4: Enhance the query with a Lua script
+## Step 4: Customize the query with a Lua script
 
 The default query behavior works, but let's customize it with a [Lua script](../guides/scripting.md). The script will handle single-record lookups by URI and paginated listing with an optional DID filter.
 
@@ -216,4 +216,4 @@ Everything was done through the dashboard — no server restarts, no config file
 - [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
 - [Admin API](../reference/admin-api.md): Automate lexicon management via the API
 - [Statusphere example app](https://github.com/bluesky-social/statusphere-example-app): See the full Statusphere frontend
-- [ATProto Statusphere guide](https://atproto.com/guides/applications): Deep dive into how the app works at the protocol level
+- [ATProto Statusphere guide](https://atproto.com/guides/applications): How the app works at the protocol level
