@@ -4,9 +4,9 @@ HappyView provides JavaScript packages for building third-party apps that authen
 
 | Package                                                                                            | Purpose                                                                                                                         |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| [`@happyview/lex-agent`](https://www.npmjs.com/package/@happyview/lex-agent)                       | Recommended — type-safe XRPC via [`@atproto/lex`](https://www.npmjs.com/package/@atproto/lex) `Client` with HappyView DPoP auth |
-| [`@happyview/oauth-client`](https://www.npmjs.com/package/@happyview/oauth-client)                 | Platform-agnostic core — DPoP key provisioning, session management, authenticated fetch                                         |
-| [`@happyview/oauth-client-browser`](https://www.npmjs.com/package/@happyview/oauth-client-browser) | Browser OAuth wrapper for apps already using `@atproto/oauth-client-browser`                                                    |
+| [`@happyview/lex-agent`](https://npmx.dev/package/@happyview/lex-agent)                       | Recommended — type-safe XRPC via [`@atproto/lex`](https://npmx.dev/package/@atproto/lex) `Client` with HappyView DPoP auth |
+| [`@happyview/oauth-client`](https://npmx.dev/package/@happyview/oauth-client)                 | Platform-agnostic core — DPoP key provisioning, session management, authenticated fetch                                         |
+| [`@happyview/oauth-client-browser`](https://npmx.dev/package/@happyview/oauth-client-browser) | Browser OAuth wrapper for apps already using `@atproto/oauth-client-browser`                                                    |
 
 ## Which package do I need?
 
