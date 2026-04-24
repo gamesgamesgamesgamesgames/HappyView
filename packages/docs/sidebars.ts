@@ -183,6 +183,11 @@ const sidebars: SidebarsConfig = {
           items: [
             {
               type: "doc",
+              id: "guides/api-clients",
+              label: "API Clients",
+            },
+            {
+              type: "doc",
               id: "guides/labelers",
               label: "Labelers",
             },
