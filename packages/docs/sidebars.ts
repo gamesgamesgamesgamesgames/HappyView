@@ -17,6 +17,21 @@ const sidebars: SidebarsConfig = {
           label: "Quickstart",
         },
         {
+          type: "doc",
+          id: "getting-started/configuration",
+          label: "Configuration",
+        },
+        {
+          type: "doc",
+          id: "getting-started/dashboard",
+          label: "Dashboard",
+        },
+        {
+          type: "doc",
+          id: "getting-started/authentication",
+          label: "Authentication",
+        },
+        {
           type: "category",
           label: "Deployment",
           items: [
@@ -37,25 +52,10 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: "doc",
-              id: "reference/production-deployment",
+              id: "getting-started/production-deployment",
               label: "Production",
             },
           ],
-        },
-        {
-          type: "doc",
-          id: "getting-started/configuration",
-          label: "Configuration",
-        },
-        {
-          type: "doc",
-          id: "getting-started/authentication",
-          label: "Authentication",
-        },
-        {
-          type: "doc",
-          id: "getting-started/dashboard",
-          label: "Dashboard",
         },
       ],
     },
@@ -80,17 +80,17 @@ const sidebars: SidebarsConfig = {
           items: [
             {
               type: "doc",
-              id: "guides/lexicons",
+              id: "guides/indexing/lexicons",
               label: "Lexicons",
             },
             {
               type: "doc",
-              id: "guides/backfill",
+              id: "guides/indexing/backfill",
               label: "Backfill",
             },
             {
               type: "doc",
-              id: "guides/index-hooks",
+              id: "guides/indexing/index-hooks",
               label: "Index Hooks",
             },
           ],
@@ -110,67 +110,67 @@ const sidebars: SidebarsConfig = {
               items: [
                 {
                   type: "doc",
-                  id: "reference/scripts/get-record",
+                  id: "guides/scripting/get-record",
                   label: "Get a Record",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/create-record",
+                  id: "guides/scripting/create-record",
                   label: "Create Record",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/upsert-record",
+                  id: "guides/scripting/upsert-record",
                   label: "Upsert Record",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/paginated-list",
+                  id: "guides/scripting/paginated-list",
                   label: "Paginated List",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/list-or-fetch",
+                  id: "guides/scripting/list-or-fetch",
                   label: "List or Fetch",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/expanded-query",
+                  id: "guides/scripting/expanded-query",
                   label: "Expanded Query",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/update-or-delete",
+                  id: "guides/scripting/update-or-delete",
                   label: "Update or Delete",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/batch-save",
+                  id: "guides/scripting/batch-save",
                   label: "Batch Save",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/sidecar-records",
+                  id: "guides/scripting/sidecar-records",
                   label: "Sidecar Records",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/cascading-delete",
+                  id: "guides/scripting/cascading-delete",
                   label: "Cascading Delete",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/complex-mutations",
+                  id: "guides/scripting/complex-mutations",
                   label: "Complex Mutations",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/algolia-sync",
+                  id: "guides/scripting/algolia-sync",
                   label: "Algolia Sync",
                 },
                 {
                   type: "doc",
-                  id: "reference/scripts/meilisearch-sync",
+                  id: "guides/scripting/meilisearch-sync",
                   label: "Meilisearch Sync",
                 },
               ],
@@ -183,22 +183,22 @@ const sidebars: SidebarsConfig = {
           items: [
             {
               type: "doc",
-              id: "guides/api-clients",
+              id: "guides/features/api-clients",
               label: "API Clients",
             },
             {
               type: "doc",
-              id: "guides/labelers",
+              id: "guides/features/labelers",
               label: "Labelers",
             },
             {
               type: "doc",
-              id: "guides/plugins",
+              id: "guides/features/plugins",
               label: "Plugins",
             },
             {
               type: "doc",
-              id: "guides/developing-plugins",
+              id: "guides/features/developing-plugins",
               label: "Developing Plugins",
             },
           ],
@@ -209,17 +209,17 @@ const sidebars: SidebarsConfig = {
           items: [
             {
               type: "doc",
-              id: "guides/api-keys",
+              id: "guides/admin/api-keys",
               label: "API Keys",
             },
             {
               type: "doc",
-              id: "guides/permissions",
+              id: "guides/admin/permissions",
               label: "Permissions",
             },
             {
               type: "doc",
-              id: "guides/event-logs",
+              id: "guides/admin/event-logs",
               label: "Event Logs",
             },
           ],
@@ -230,17 +230,17 @@ const sidebars: SidebarsConfig = {
           items: [
             {
               type: "doc",
-              id: "guides/database-setup",
+              id: "guides/database/database-setup",
               label: "Database Setup",
             },
             {
               type: "doc",
-              id: "guides/postgres-to-sqlite-migration",
+              id: "guides/database/postgres-to-sqlite-migration",
               label: "Postgres → SQLite Migration",
             },
             {
               type: "doc",
-              id: "guides/sqlite-to-postgres-migration",
+              id: "guides/database/sqlite-to-postgres-migration",
               label: "SQLite → Postgres Migration",
             },
           ],
@@ -288,7 +288,7 @@ const sidebars: SidebarsConfig = {
           items: [
             {
               type: "doc",
-              id: "reference/admin-api",
+              id: "reference/admin/admin-api",
               label: "Overview",
             },
             {
