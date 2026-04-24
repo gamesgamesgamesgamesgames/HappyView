@@ -1,2 +1,6 @@
 .vercel
 .env*.local
+
+# Generated changelogs (built from GitHub releases)
+docs/reference/changelog.md
+docs/sdk/changelog-*.md
