@@ -75,6 +75,11 @@ const sidebars: SidebarsConfig = {
       label: "Guides",
       items: [
         {
+          type: "doc",
+          id: "guides/upgrading-to-v2",
+          label: "Migrating from v1",
+        },
+        {
           type: "category",
           label: "Features",
           items: [
