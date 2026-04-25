@@ -21,6 +21,7 @@ import { createAgent } from "@happyview/lex-agent";
 
 const client = new HappyViewBrowserClient({
   instanceUrl: "https://happyview.example.com",
+  clientId: "https://example.com/oauth-client-metadata.json",
   clientKey: "hvc_your_client_key",
 });
 

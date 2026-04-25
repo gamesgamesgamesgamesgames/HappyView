@@ -17,17 +17,28 @@ import { HappyViewBrowserClient } from "@happyview/oauth-client-browser";
 
 const client = new HappyViewBrowserClient({
   instanceUrl: "https://happyview.example.com",
+  clientId: "https://example.com/oauth-client-metadata.json",
   clientKey: "hvc_your_client_key",
 });
 ```
 
-The client uses Web Crypto and localStorage by default. You can override either:
+| Option        | Required | Description                                                                   |
+| ------------- | -------- | ----------------------------------------------------------------------------- |
+| `instanceUrl` | Yes      | The HappyView instance URL                                                    |
+| `clientId`    | Yes      | URL where your app serves its [OAuth client metadata](#oauth-client-metadata) |
+| `clientKey`   | Yes      | API client key from the HappyView admin dashboard                             |
+| `redirectUri` | No       | OAuth callback URL. Defaults to `${window.location.origin}/oauth/callback`    |
+| `scopes`      | No       | OAuth scopes to request. Defaults to `"atproto"`                              |
+| `storage`     | No       | Custom storage adapter. Defaults to localStorage                              |
+| `fetch`       | No       | Custom fetch implementation                                                   |
+
+The client uses localStorage by default. You can override it:
 
 ```typescript
 const client = new HappyViewBrowserClient({
   instanceUrl: "https://happyview.example.com",
+  clientId: "https://example.com/oauth-client-metadata.json",
   clientKey: "hvc_your_client_key",
-  crypto: myCustomCryptoAdapter,
   storage: myCustomStorageAdapter,
 });
 ```
@@ -128,6 +139,37 @@ const doc = await resolveDidDocument(did);
 const pdsUrl = resolvePdsUrl(doc);
 const authMeta = await resolveAuthServerMetadata(pdsUrl);
 ```
+
+## OAuth client metadata
+
+Your app must serve an OAuth client metadata JSON document at the URL you pass as `clientId`. The PDS fetches this during authorization to validate the redirect URI and display your app's information.
+
+Example for a Next.js app:
+
+```typescript
+// src/app/oauth-client-metadata.json/route.ts
+import { type NextRequest } from "next/server";
+
+export function GET(request: NextRequest) {
+  const origin = request.nextUrl.origin;
+
+  return Response.json({
+    client_id: `${origin}/oauth-client-metadata.json`,
+    client_name: "My App",
+    client_uri: origin,
+    redirect_uris: [`${origin}/oauth/callback`],
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    scope: "atproto",
+    application_type: "web",
+    dpop_bound_access_tokens: true,
+  });
+}
+```
+
+For a static site, serve a plain JSON file at `/oauth-client-metadata.json`.
+
+The `redirect_uris` array must include the `redirectUri` your client is configured with (defaults to `${origin}/oauth/callback`).
 
 ## Re-exports
 

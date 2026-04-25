@@ -2,11 +2,11 @@
 
 HappyView provides JavaScript packages for building third-party apps that authenticate with a HappyView instance and make XRPC requests on behalf of users.
 
-| Package                                                                                            | Purpose                                                                                                                         |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Package                                                                                       | Purpose                                                                                                                    |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | [`@happyview/lex-agent`](https://npmx.dev/package/@happyview/lex-agent)                       | Recommended — type-safe XRPC via [`@atproto/lex`](https://npmx.dev/package/@atproto/lex) `Client` with HappyView DPoP auth |
-| [`@happyview/oauth-client`](https://npmx.dev/package/@happyview/oauth-client)                 | Platform-agnostic core — DPoP key provisioning, session management, authenticated fetch                                         |
-| [`@happyview/oauth-client-browser`](https://npmx.dev/package/@happyview/oauth-client-browser) | Browser OAuth wrapper for apps already using `@atproto/oauth-client-browser`                                                    |
+| [`@happyview/oauth-client`](https://npmx.dev/package/@happyview/oauth-client)                 | Platform-agnostic core — DPoP key provisioning, session management, authenticated fetch                                    |
+| [`@happyview/oauth-client-browser`](https://npmx.dev/package/@happyview/oauth-client-browser) | Browser OAuth wrapper for apps already using `@atproto/oauth-client-browser`                                               |
 
 ## Which package do I need?
 
@@ -39,6 +39,7 @@ import { createAgent } from "@happyview/lex-agent";
 // Set up the OAuth client
 const oauthClient = new HappyViewBrowserClient({
   instanceUrl: "https://happyview.example.com",
+  clientId: "https://example.com/oauth-client-metadata.json",
   clientKey: "hvc_your_client_key",
 });
 

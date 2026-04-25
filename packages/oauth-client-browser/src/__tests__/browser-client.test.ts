@@ -26,6 +26,7 @@ afterEach(() => {
 function createClient(fetchFn?: typeof globalThis.fetch) {
   return new HappyViewBrowserClient({
     instanceUrl: "https://happyview.example.com",
+    clientId: "https://example.com/oauth-client-metadata.json",
     clientKey: "hvc_test",
     storage: new LocalStorageAdapter(),
     fetch: fetchFn,
@@ -40,7 +41,14 @@ function mockFetchForFullFlow() {
       return new Response(
         JSON.stringify({
           Status: 0,
-          Answer: [{ name: "_atproto.user.bsky.social.", type: 16, TTL: 300, data: '"did=did:plc:abcdefghijklmnopqrstuvwx"' }],
+          Answer: [
+            {
+              name: "_atproto.user.bsky.social.",
+              type: 16,
+              TTL: 300,
+              data: '"did=did:plc:abcdefghijklmnopqrstuvwx"',
+            },
+          ],
         }),
         { status: 200, headers: { "content-type": "application/dns-json" } },
       );
@@ -50,7 +58,13 @@ function mockFetchForFullFlow() {
       return new Response(
         JSON.stringify({
           id: "did:plc:abcdefghijklmnopqrstuvwx",
-          service: [{ id: "#atproto_pds", type: "AtprotoPersonalDataServer", serviceEndpoint: "https://pds.example.com" }],
+          service: [
+            {
+              id: "#atproto_pds",
+              type: "AtprotoPersonalDataServer",
+              serviceEndpoint: "https://pds.example.com",
+            },
+          ],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
@@ -71,7 +85,8 @@ function mockFetchForFullFlow() {
           issuer: "https://pds.example.com",
           authorization_endpoint: "https://pds.example.com/oauth/authorize",
           token_endpoint: "https://pds.example.com/oauth/token",
-          pushed_authorization_request_endpoint: "https://pds.example.com/oauth/par",
+          pushed_authorization_request_endpoint:
+            "https://pds.example.com/oauth/par",
         }),
         { status: 200 },
       );
@@ -89,14 +104,20 @@ function mockFetchForFullFlow() {
 
     if (url.includes("/oauth/par")) {
       return new Response(
-        JSON.stringify({ request_uri: "urn:ietf:params:oauth:request_uri:test", expires_in: 60 }),
+        JSON.stringify({
+          request_uri: "urn:ietf:params:oauth:request_uri:test",
+          expires_in: 60,
+        }),
         { status: 201 },
       );
     }
 
     if (url.includes("/oauth/sessions") && init?.method === "POST") {
       return new Response(
-        JSON.stringify({ session_id: "sess_test", did: "did:plc:abcdefghijklmnopqrstuvwx" }),
+        JSON.stringify({
+          session_id: "sess_test",
+          did: "did:plc:abcdefghijklmnopqrstuvwx",
+        }),
         { status: 201 },
       );
     }
@@ -123,6 +144,7 @@ describe("HappyViewBrowserClient", () => {
   test("constructor sets up LocalStorageAdapter by default", () => {
     const client = new HappyViewBrowserClient({
       instanceUrl: "https://happyview.example.com",
+      clientId: "https://example.com/oauth-client-metadata.json",
       clientKey: "hvc_test",
     });
     expect(client).toBeDefined();
@@ -136,6 +158,7 @@ describe("HappyViewBrowserClient", () => {
     };
     const client = new HappyViewBrowserClient({
       instanceUrl: "https://happyview.example.com",
+      clientId: "https://example.com/oauth-client-metadata.json",
       clientKey: "hvc_test",
       storage: customStorage,
     });
@@ -181,8 +204,8 @@ describe("HappyViewBrowserClient", () => {
     expect(session.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
 
     // Verify token exchange included DPoP proof header
-    const tokenCall = fetchFn.mock.calls.find(
-      (call: any[]) => String(call[0]).includes("/oauth/token"),
+    const tokenCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/token"),
     );
     expect(tokenCall).toBeDefined();
     const tokenInit = tokenCall![1] as RequestInit;
@@ -246,11 +269,13 @@ describe("HappyViewBrowserClient", () => {
 
     await client.callback("?code=auth-code&state=state789");
 
-    const tokenCall = fetchFn.mock.calls.find(
-      (call: any[]) => String(call[0]).includes("/oauth/token"),
+    const tokenCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/token"),
     );
     expect(tokenCall).toBeDefined();
-    const body = new URLSearchParams((tokenCall![1] as RequestInit).body as string);
+    const body = new URLSearchParams(
+      (tokenCall![1] as RequestInit).body as string,
+    );
     expect(body.get("code_verifier")).toBe("auth-verifier");
   });
 
@@ -308,13 +333,17 @@ describe("HappyViewBrowserClient", () => {
 
     await client.callback("?code=auth-code&state=stateathtest");
 
-    const tokenCall = fetchFn.mock.calls.find(
-      (call: any[]) => String(call[0]).includes("/oauth/token"),
+    const tokenCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/token"),
     );
-    const dpopJwt = new Headers((tokenCall![1] as RequestInit).headers).get("dpop")!;
+    const dpopJwt = new Headers((tokenCall![1] as RequestInit).headers).get(
+      "dpop",
+    )!;
     const payloadB64 = dpopJwt.split(".")[1];
     const padded = payloadB64 + "=".repeat((4 - (payloadB64.length % 4)) % 4);
-    const payload = JSON.parse(atob(padded.replace(/-/g, "+").replace(/_/g, "/")));
+    const payload = JSON.parse(
+      atob(padded.replace(/-/g, "+").replace(/_/g, "/")),
+    );
     expect(payload.ath).toBeUndefined();
     expect(payload.htm).toBe("POST");
     expect(payload.htu).toBe("https://pds.example.com/oauth/token");
@@ -341,13 +370,15 @@ describe("HappyViewBrowserClient", () => {
   });
 
   test("callback throws TokenExchangeError on token endpoint failure", async () => {
-    const fetchFn = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes("/oauth/token")) {
-        return new Response("invalid_grant", { status: 400 });
-      }
-      return new Response("not found", { status: 404 });
-    });
+    const fetchFn = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/oauth/token")) {
+          return new Response("invalid_grant", { status: 400 });
+        }
+        return new Response("not found", { status: 404 });
+      },
+    );
 
     const client = createClient(fetchFn);
 
@@ -428,15 +459,19 @@ describe("HappyViewBrowserClient", () => {
     );
 
     // Mock the DELETE response
-    const deleteFn = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      return new Response(null, { status: 204 });
-    });
+    const deleteFn = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        return new Response(null, { status: 204 });
+      },
+    );
     const logoutClient = createClient(deleteFn);
 
     await logoutClient.logout("did:plc:abcdefghijklmnopqrstuvwx");
 
     expect(
-      localStorage.getItem("@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)"),
+      localStorage.getItem(
+        "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
+      ),
     ).toBeNull();
     expect(
       localStorage.getItem("@happyview/oauth(happyview:last-active-did)"),

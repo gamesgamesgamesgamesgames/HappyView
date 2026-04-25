@@ -14,7 +14,9 @@ import { LocalStorageAdapter } from "./local-storage-adapter";
 
 export interface HappyViewBrowserClientOptions {
   instanceUrl: string;
+  clientId: string;
   clientKey: string;
+  redirectUri?: string;
   scopes?: string;
   storage?: StorageAdapter;
   fetch?: typeof globalThis.fetch;
@@ -49,6 +51,8 @@ interface AuthServerMetadata {
 export class HappyViewBrowserClient extends HappyViewOAuthClient {
   private readonly handleResolver: AtprotoDohHandleResolver;
   private readonly didResolver: DidResolverCommon;
+  private readonly clientId: string;
+  private readonly redirectUri: string | undefined;
   private readonly scopes: string;
   constructor(options: HappyViewBrowserClientOptions) {
     const fetchFn = options.fetch ?? (((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof globalThis.fetch);
@@ -60,6 +64,8 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       fetch: fetchFn,
     });
 
+    this.clientId = options.clientId;
+    this.redirectUri = options.redirectUri;
     this.scopes = options.scopes ?? "atproto";
     this.handleResolver = new AtprotoDohHandleResolver({
       dohEndpoint: "https://dns.google/resolve",
@@ -289,22 +295,9 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
   }
 
   private resolveOAuthEndpoints(): { clientId: string; redirectUri: string } {
-    const isLoopback =
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "[::1]" ||
-      window.location.hostname === "localhost";
-
-    if (isLoopback) {
-      const params = new URLSearchParams({ scope: this.scopes });
-      return {
-        clientId: `http://localhost?${params}`,
-        redirectUri: `http://127.0.0.1:${window.location.port}/`,
-      };
-    }
-
     return {
-      clientId: `${this.instanceUrl}/oauth-client-metadata.json`,
-      redirectUri: `${window.location.origin}/oauth/callback`,
+      clientId: this.clientId,
+      redirectUri: this.redirectUri ?? `${window.location.origin}/oauth/callback`,
     };
   }
 
