@@ -9,3 +9,4 @@ build/
 .docusaurus/
 .vercel
 .env*.local
+.worktrees/
