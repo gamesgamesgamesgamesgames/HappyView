@@ -2,13 +2,17 @@
 
 The fastest way to get HappyView running is with Railway. This template deploys HappyView and Postgres with a single click:
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview?referralCode=0QOgj_)
+- [HappyView w/ SQLite template](https://railway.com/deploy/happyview-2-sqlite-1?referralCode=0QOgj_)
+- [HappyView w/ PostgreSQL template](https://railway.com/deploy/happyview-2-postgresql?referralCode=0QOgj_)
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview-2-sqlite-1?referralCode=0QOgj_)
 
 ## Required configuration
 
 After deploying the template, you'll need to configure a few things before the stack works properly:
 
 1. **Set your session secret.** In the HappyView service variables, set `SESSION_SECRET` to a random string of at least 64 characters. This is used to sign session cookies.
+
    ```sh
    openssl rand -base64 48
    ```
