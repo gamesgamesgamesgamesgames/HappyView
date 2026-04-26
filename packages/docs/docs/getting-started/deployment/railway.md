@@ -2,10 +2,9 @@
 
 The fastest way to get HappyView running is with Railway. This template deploys HappyView and Postgres with a single click:
 
-- [HappyView w/ SQLite template](https://railway.com/deploy/happyview-2-sqlite-1?referralCode=0QOgj_)
-- [HappyView w/ PostgreSQL template](https://railway.com/deploy/happyview-2-postgresql?referralCode=0QOgj_)
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview-2-sqlite-1?referralCode=0QOgj_)
+| SQLite                                                                                                                      | PostgreSQL                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview-2-sqlite-1?referralCode=0QOgj_) | [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/happyview-2-postgresql?referralCode=0QOgj_) |
 
 ## Required configuration
 
