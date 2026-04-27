@@ -158,6 +158,9 @@ pub async fn resolve_client_by_key(
 /// - Every non-`atproto` scope in the token must appear in the client's registered scopes
 /// - `include:X` client scopes are expanded by looking up the permission set
 ///   lexicon `X` and extracting its `rpc:` and `repo:` permissions
+/// - `repo?collection=X&collection=Y` scopes (PDS-granted) are allowed if the
+///   client has `transition:generic` or has collection-level permissions from
+///   expanded `include:` scopes
 pub async fn validate_scopes(
     token_scopes: &str,
     client_scopes: &str,
@@ -179,16 +182,40 @@ pub async fn validate_scopes(
         ));
     }
 
+    let has_generic = client_set.contains("transition:generic");
+
     for scope in &token_set {
         if *scope == "atproto" {
             continue;
         }
-        if !client_set.contains(*scope) {
-            return Err(AppError::BadRequest(format!(
-                "scope '{}' is not allowed for this client",
-                scope
-            )));
+        if client_set.contains(*scope) {
+            continue;
         }
+
+        // The PDS grants `repo?collection=X&collection=Y` to restrict which
+        // collections the token can access.  Allow if the client has broad
+        // access (`transition:generic`) or has matching collection-level
+        // permissions from expanded `include:` scopes.
+        if let Some(query) = scope.strip_prefix("repo?") {
+            if has_generic {
+                continue;
+            }
+            let all_allowed = query.split('&').all(|param| {
+                let Some(col) = param.strip_prefix("collection=") else {
+                    return true;
+                };
+                let prefix = format!("repo:{}?", col);
+                client_set.iter().any(|cs| cs.starts_with(&prefix))
+            });
+            if all_allowed {
+                continue;
+            }
+        }
+
+        return Err(AppError::BadRequest(format!(
+            "scope '{}' is not allowed for this client",
+            scope
+        )));
     }
 
     Ok(())
@@ -364,6 +391,110 @@ mod tests {
 
         let result = validate_scopes(
             "atproto rpc:com.example.notAllowed",
+            "atproto include:com.example.authBasic",
+            &reg,
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_scopes_repo_collection_allowed_with_transition_generic() {
+        let reg = empty_registry();
+        let result = validate_scopes(
+            "atproto transition:generic repo?collection=com.example.profile&collection=com.example.post",
+            "atproto transition:generic",
+            &reg,
+        )
+        .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_scopes_repo_collection_allowed_with_expanded_permissions() {
+        let reg = empty_registry();
+        let raw = serde_json::json!({
+            "lexicon": 1,
+            "id": "com.example.authBasic",
+            "defs": {
+                "main": {
+                    "type": "permission-set",
+                    "permissions": [
+                        {
+                            "type": "permission",
+                            "resource": "repo",
+                            "collection": ["com.example.profile", "com.example.post"]
+                        }
+                    ]
+                }
+            }
+        });
+        let parsed = crate::lexicon::ParsedLexicon::parse(
+            raw,
+            1,
+            None,
+            crate::lexicon::ProcedureAction::Upsert,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        reg.upsert(parsed).await;
+
+        let result = validate_scopes(
+            "atproto repo?collection=com.example.profile&collection=com.example.post",
+            "atproto include:com.example.authBasic",
+            &reg,
+        )
+        .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_scopes_repo_collection_rejected_without_permission() {
+        let reg = empty_registry();
+        let result = validate_scopes(
+            "atproto repo?collection=com.example.profile",
+            "atproto",
+            &reg,
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_scopes_repo_collection_rejected_partial_match() {
+        let reg = empty_registry();
+        let raw = serde_json::json!({
+            "lexicon": 1,
+            "id": "com.example.authBasic",
+            "defs": {
+                "main": {
+                    "type": "permission-set",
+                    "permissions": [
+                        {
+                            "type": "permission",
+                            "resource": "repo",
+                            "collection": ["com.example.profile"]
+                        }
+                    ]
+                }
+            }
+        });
+        let parsed = crate::lexicon::ParsedLexicon::parse(
+            raw,
+            1,
+            None,
+            crate::lexicon::ProcedureAction::Upsert,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        reg.upsert(parsed).await;
+
+        let result = validate_scopes(
+            "atproto repo?collection=com.example.profile&collection=com.example.secret",
             "atproto include:com.example.authBasic",
             &reg,
         )
