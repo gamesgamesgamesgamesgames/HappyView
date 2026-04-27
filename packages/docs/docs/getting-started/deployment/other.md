@@ -10,7 +10,7 @@ This guide runs HappyView directly with `cargo run`. If you'd rather use Docker 
 ## 1. Clone and configure
 
 ```sh
-git clone https://github.com/graze-social/happyview.git
+git clone https://github.com/gamesgamesgamesgamesgames/happyview.git
 cd happyview
 cp .env.example .env
 ```

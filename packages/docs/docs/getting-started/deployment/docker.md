@@ -9,7 +9,7 @@ This guide runs HappyView and the dashboard locally using Docker Compose.
 ## 1. Clone and configure
 
 ```sh
-git clone https://github.com/graze-social/happyview.git
+git clone https://github.com/gamesgamesgamesgamesgames/happyview.git
 cd happyview
 cp .env.example .env
 ```
@@ -24,10 +24,10 @@ docker compose up
 
 This starts:
 
-| Service       | Port | Description           |
-| ------------- | ---- | --------------------- |
-| **happyview** | 3000 | HappyView API server  |
-| **web**       | 3001 | Next.js dashboard     |
+| Service       | Port | Description          |
+| ------------- | ---- | -------------------- |
+| **happyview** | 3000 | HappyView API server |
+| **web**       | 3001 | Next.js dashboard    |
 
 HappyView runs migrations automatically on startup. The first build will take a few minutes while Rust compiles.
 
