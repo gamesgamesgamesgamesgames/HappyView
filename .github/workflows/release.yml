@@ -4,19 +4,15 @@ on:
   push:
     branches: [main, dev]
     paths-ignore:
+      - ".github/workflows/mirror.yml"
       - ".github/workflows/release-sdk.yml"
-      - "packages/docs/**"
-      - "packages/oauth-client/**"
-      - "packages/oauth-client-browser/**"
-      - "packages/lex-agent/**"
+      - "packages/**"
   pull_request:
     branches: [main, dev]
     paths-ignore:
+      - ".github/workflows/mirror.yml"
       - ".github/workflows/release-sdk.yml"
-      - "packages/docs/**"
-      - "packages/oauth-client/**"
-      - "packages/oauth-client-browser/**"
-      - "packages/lex-agent/**"
+      - "packages/**"
 
 env:
   SQLX_OFFLINE: true
