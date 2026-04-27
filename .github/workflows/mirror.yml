@@ -12,6 +12,6 @@ jobs:
 
       - uses: yesolutions/mirror-action@master
         with:
-          REMOTE: "git@tangled.org:gamesgamesgamesgames.games/happyview.git"
+          REMOTE: "git@tangled.org:gamesgamesgamesgames.games/happyview"
           GIT_SSH_PRIVATE_KEY: ${{ secrets.TANGLED_SSH_PRIVATE_KEY }}
           GIT_SSH_NO_VERIFY_HOST: "true"
