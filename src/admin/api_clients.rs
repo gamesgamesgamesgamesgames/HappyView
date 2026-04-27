@@ -1,9 +1,11 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hex;
 use rand::Rng;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -16,6 +18,11 @@ use super::permissions::Permission;
 use super::types::{
     ApiClientSummary, CreateApiClientBody, CreateApiClientResponse, UpdateApiClientBody,
 };
+
+#[derive(Deserialize)]
+pub(super) struct ListApiClientsQuery {
+    pub(super) parent_id: Option<String>,
+}
 
 /// POST /admin/api-clients — create a new API client.
 pub(super) async fn create_api_client(
@@ -152,80 +159,71 @@ pub(super) async fn create_api_client(
 pub(super) async fn list_api_clients(
     State(state): State<AppState>,
     auth: UserAuth,
+    Query(query): Query<ListApiClientsQuery>,
 ) -> Result<Json<Vec<ApiClientSummary>>, AppError> {
     auth.require(Permission::ApiClientsView).await?;
 
-    let select_sql = adapt_sql(
-        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at FROM api_clients ORDER BY created_at DESC",
-        state.db_backend,
-    );
+    let (select_sql, parent_filter) = if let Some(ref parent_id) = query.parent_id {
+        (
+            adapt_sql(
+                "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at, parent_client_id, owner_did FROM api_clients WHERE parent_client_id = ? ORDER BY created_at DESC",
+                state.db_backend,
+            ),
+            Some(parent_id.clone()),
+        )
+    } else {
+        (
+            adapt_sql(
+                "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at, parent_client_id, owner_did FROM api_clients ORDER BY created_at DESC",
+                state.db_backend,
+            ),
+            None,
+        )
+    };
 
-    #[allow(clippy::type_complexity)]
-    let rows: Vec<(
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        Option<String>,
-        Option<i32>,
-        Option<f64>,
-        i32,
-        String,
-        String,
-        String,
-    )> = sqlx::query_as(&select_sql)
+    let q = sqlx::query(&select_sql);
+    let q = if let Some(ref pid) = parent_filter {
+        q.bind(pid)
+    } else {
+        q
+    };
+
+    let rows = q
         .fetch_all(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to list api clients: {e}")))?;
 
     let clients: Vec<ApiClientSummary> = rows
         .into_iter()
-        .map(
-            |(
-                id,
-                client_key,
-                name,
-                client_id_url,
-                client_uri,
-                redirect_uris_json,
-                scopes,
-                client_type,
-                allowed_origins_json,
-                rate_limit_capacity,
-                rate_limit_refill_rate,
-                is_active,
-                created_by,
-                created_at,
-                updated_at,
-            )| {
-                let redirect_uris: Vec<String> =
-                    serde_json::from_str(&redirect_uris_json).unwrap_or_default();
-                let allowed_origins: Option<Vec<String>> = allowed_origins_json
-                    .as_deref()
-                    .and_then(|j| serde_json::from_str(j).ok());
-                ApiClientSummary {
-                    id,
-                    client_key,
-                    name,
-                    client_id_url,
-                    client_uri,
-                    redirect_uris,
-                    scopes,
-                    client_type,
-                    allowed_origins,
-                    rate_limit_capacity,
-                    rate_limit_refill_rate,
-                    is_active: is_active != 0,
-                    created_by,
-                    created_at,
-                    updated_at,
-                }
-            },
-        )
+        .map(|row| {
+            let redirect_uris_json: String = row.get("redirect_uris");
+            let allowed_origins_json: Option<String> = row.get("allowed_origins");
+            let is_active: i32 = row.get("is_active");
+            let redirect_uris: Vec<String> =
+                serde_json::from_str(&redirect_uris_json).unwrap_or_default();
+            let allowed_origins: Option<Vec<String>> = allowed_origins_json
+                .as_deref()
+                .and_then(|j| serde_json::from_str(j).ok());
+            ApiClientSummary {
+                id: row.get("id"),
+                client_key: row.get("client_key"),
+                name: row.get("name"),
+                client_id_url: row.get("client_id_url"),
+                client_uri: row.get("client_uri"),
+                redirect_uris,
+                scopes: row.get("scopes"),
+                client_type: row.get("client_type"),
+                allowed_origins,
+                rate_limit_capacity: row.get("rate_limit_capacity"),
+                rate_limit_refill_rate: row.get("rate_limit_refill_rate"),
+                is_active: is_active != 0,
+                created_by: row.get("created_by"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                parent_client_id: row.get("parent_client_id"),
+                owner_did: row.get("owner_did"),
+            }
+        })
         .collect();
 
     Ok(Json(clients))
@@ -240,75 +238,46 @@ pub(super) async fn get_api_client(
     auth.require(Permission::ApiClientsView).await?;
 
     let select_sql = adapt_sql(
-        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at FROM api_clients WHERE id = ?",
+        "SELECT id, client_key, name, client_id_url, client_uri, redirect_uris, scopes, client_type, allowed_origins, rate_limit_capacity, rate_limit_refill_rate, is_active, created_by, created_at, updated_at, parent_client_id, owner_did FROM api_clients WHERE id = ?",
         state.db_backend,
     );
 
-    type GetRow = (
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        Option<String>,
-        Option<i32>,
-        Option<f64>,
-        i32,
-        String,
-        String,
-        String,
-    );
-    let row: Option<GetRow> = sqlx::query_as(&select_sql)
+    let row = sqlx::query(&select_sql)
         .bind(&id)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| AppError::Internal(format!("failed to get api client: {e}")))?;
 
-    let Some((
-        id,
-        client_key,
-        name,
-        client_id_url,
-        client_uri,
-        redirect_uris_json,
-        scopes,
-        client_type,
-        allowed_origins_json,
-        rate_limit_capacity,
-        rate_limit_refill_rate,
-        is_active,
-        created_by,
-        created_at,
-        updated_at,
-    )) = row
-    else {
+    let Some(row) = row else {
         return Err(AppError::NotFound(format!("api client '{id}' not found")));
     };
 
+    let redirect_uris_json: String = row.get("redirect_uris");
+    let allowed_origins_json: Option<String> = row.get("allowed_origins");
+    let is_active: i32 = row.get("is_active");
     let redirect_uris: Vec<String> = serde_json::from_str(&redirect_uris_json).unwrap_or_default();
     let allowed_origins: Option<Vec<String>> = allowed_origins_json
         .as_deref()
         .and_then(|j| serde_json::from_str(j).ok());
 
     Ok(Json(ApiClientSummary {
-        id,
-        client_key,
-        name,
-        client_id_url,
-        client_uri,
+        id: row.get("id"),
+        client_key: row.get("client_key"),
+        name: row.get("name"),
+        client_id_url: row.get("client_id_url"),
+        client_uri: row.get("client_uri"),
         redirect_uris,
-        scopes,
-        client_type,
+        scopes: row.get("scopes"),
+        client_type: row.get("client_type"),
         allowed_origins,
-        rate_limit_capacity,
-        rate_limit_refill_rate,
+        rate_limit_capacity: row.get("rate_limit_capacity"),
+        rate_limit_refill_rate: row.get("rate_limit_refill_rate"),
         is_active: is_active != 0,
-        created_by,
-        created_at,
-        updated_at,
+        created_by: row.get("created_by"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        parent_client_id: row.get("parent_client_id"),
+        owner_did: row.get("owner_did"),
     }))
 }
 
@@ -456,6 +425,33 @@ pub(super) async fn update_api_client(
     } else {
         state.rate_limiter.remove_client_identity(&client_key);
         state.rate_limiter.remove_client_config(&client_key);
+
+        // Cascade deactivation to child clients.
+        let deactivate_children_sql = adapt_sql(
+            "UPDATE api_clients SET is_active = 0, updated_at = ? WHERE parent_client_id = ? AND is_active = 1",
+            state.db_backend,
+        );
+        let _ = sqlx::query(&deactivate_children_sql)
+            .bind(&now)
+            .bind(&id)
+            .execute(&state.db)
+            .await;
+
+        let children_sql = adapt_sql(
+            "SELECT client_id_url, client_key FROM api_clients WHERE parent_client_id = ?",
+            state.db_backend,
+        );
+        if let Ok(children) = sqlx::query_as::<_, (String, String)>(&children_sql)
+            .bind(&id)
+            .fetch_all(&state.db)
+            .await
+        {
+            for (child_url, child_key) in children {
+                state.oauth.remove(&child_url);
+                state.rate_limiter.remove_client_config(&child_key);
+                state.rate_limiter.remove_client_identity(&child_key);
+            }
+        }
     }
 
     log_event(
@@ -493,6 +489,17 @@ pub(super) async fn delete_api_client(
         .await
         .map_err(|e| AppError::Internal(format!("failed to look up api client: {e}")))?;
 
+    // Look up child clients before deleting (ON DELETE CASCADE will remove DB rows).
+    let children_sql = adapt_sql(
+        "SELECT client_id_url, client_key FROM api_clients WHERE parent_client_id = ?",
+        state.db_backend,
+    );
+    let children: Vec<(String, String)> = sqlx::query_as(&children_sql)
+        .bind(&id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
     let delete_sql = adapt_sql("DELETE FROM api_clients WHERE id = ?", state.db_backend);
 
     let result = sqlx::query(&delete_sql)
@@ -505,11 +512,18 @@ pub(super) async fn delete_api_client(
         return Err(AppError::NotFound(format!("api client '{id}' not found")));
     }
 
-    // Remove from OAuth registry, rate limiter, and client identities.
+    // Remove parent from OAuth registry, rate limiter, and client identities.
     if let Some((url, key)) = client_info {
         state.oauth.remove(&url);
         state.rate_limiter.remove_client_config(&key);
         state.rate_limiter.remove_client_identity(&key);
+    }
+
+    // Remove child clients from in-memory registries (DB rows already cascaded).
+    for (child_url, child_key) in &children {
+        state.oauth.remove(child_url);
+        state.rate_limiter.remove_client_config(child_key);
+        state.rate_limiter.remove_client_identity(child_key);
     }
 
     log_event(

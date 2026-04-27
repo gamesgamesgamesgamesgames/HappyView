@@ -51,6 +51,7 @@ pub enum AppError {
     AuthDpopNonce(String),
     BadGateway(String),
     BadRequest(String),
+    Conflict(String),
     Forbidden(String),
     InsufficientPermissions(String),
     Internal(String),
@@ -76,6 +77,7 @@ impl std::fmt::Display for AppError {
             AppError::AuthDpopNonce(nonce) => write!(f, "auth error: use_dpop_nonce ({nonce})"),
             AppError::BadGateway(msg) => write!(f, "bad gateway: {msg}"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
+            AppError::Conflict(msg) => write!(f, "conflict: {msg}"),
             AppError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
             AppError::InsufficientPermissions(perm) => write!(f, "Missing permission: {perm}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
@@ -170,7 +172,7 @@ impl IntoResponse for AppError {
                     AppError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
                     AppError::BadGateway(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
                     AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-
+                    AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
                     AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
                     AppError::Internal(msg) => {
                         tracing::error!("{msg}");

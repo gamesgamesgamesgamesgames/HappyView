@@ -170,6 +170,18 @@ impl RateLimiter {
         self.client_configs.insert(client_key, config);
     }
 
+    pub fn get_client_config(&self, client_key: &str) -> Option<RateLimitConfig> {
+        self.client_configs
+            .get(client_key)
+            .map(|cfg| RateLimitConfig {
+                capacity: cfg.capacity,
+                refill_rate: cfg.refill_rate,
+                default_query_cost: cfg.default_query_cost,
+                default_procedure_cost: cfg.default_procedure_cost,
+                default_proxy_cost: cfg.default_proxy_cost,
+            })
+    }
+
     pub fn remove_client_config(&self, client_key: &str) {
         self.client_configs.remove(client_key);
     }

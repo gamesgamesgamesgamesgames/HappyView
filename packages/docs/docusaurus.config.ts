@@ -52,8 +52,8 @@ const config: Config = {
           label: "Docs",
         },
         {
-          href: "https://github.com/gamesgamesgamesgamesgames/happyview",
-          label: "GitHub",
+          href: "https://tangled.org/gamesgamesgamesgames.games/happyview",
+          label: "Tangled",
           position: "right",
         },
       ],

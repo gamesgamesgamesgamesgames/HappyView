@@ -14,6 +14,8 @@ export interface ApiClientSummary {
   created_by: string
   created_at: string
   updated_at: string
+  parent_client_id: string | null
+  owner_did: string | null
 }
 
 export interface CreateApiClientResponse {

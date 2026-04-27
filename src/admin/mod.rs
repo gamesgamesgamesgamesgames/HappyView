@@ -14,7 +14,7 @@ mod records;
 mod script_variables;
 pub mod settings;
 mod stats;
-mod types;
+pub(crate) mod types;
 mod users;
 
 use axum::Router;

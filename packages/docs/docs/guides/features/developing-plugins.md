@@ -2,7 +2,7 @@
 
 This guide covers how to build your own HappyView WASM plugins. For installing and configuring plugins, see the [Plugins guide](plugins.md).
 
-See the [happyview-plugins](https://github.com/gamesgamesgamesgamesgames/happyview-plugins) repository for examples and the plugin SDK.
+See the [happyview-plugins](https://tangled.org/gamesgamesgamesgames.games/happyview-plugins) repository for examples and the plugin SDK.
 
 ## Plugin Manifest
 
@@ -99,7 +99,7 @@ Plugins can import these host functions:
 
 ## Next steps
 
-- [Official plugins repository](https://github.com/gamesgamesgamesgamesgames/happyview-plugins) — ready-to-use plugins and the plugin SDK
+- [Official plugins repository](https://tangled.org/gamesgamesgamesgames.games/happyview-plugins) — ready-to-use plugins and the plugin SDK
 - [Plugins guide](plugins.md) — install and configure plugins
 - [API Keys](../admin/api-keys.md) — authenticate programmatic access to admin endpoints
 - [Permissions](../admin/permissions.md) — configure user access to plugin management

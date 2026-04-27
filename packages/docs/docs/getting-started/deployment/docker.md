@@ -9,7 +9,7 @@ This guide runs HappyView and the dashboard locally using Docker Compose.
 ## 1. Clone and configure
 
 ```sh
-git clone https://github.com/gamesgamesgamesgamesgames/happyview.git
+git clone git@tangled.org:gamesgamesgamesgames.games/happyview
 cd happyview
 cp .env.example .env
 ```

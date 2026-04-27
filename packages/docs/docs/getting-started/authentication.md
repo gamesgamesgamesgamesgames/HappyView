@@ -318,3 +318,4 @@ This deletes the stored session and the associated DPoP key.
 - [Permissions](../guides/admin/permissions.md) — full list of permissions and what each one grants
 - [API Keys](../guides/admin/api-keys.md) — create scoped admin API keys for automation
 - [Admin API — API Clients](../reference/admin/api-clients.md) — register API clients and configure rate limits
+- [Self-Service API Clients](../reference/oauth/api-clients.md) — let third-party apps create child API clients programmatically

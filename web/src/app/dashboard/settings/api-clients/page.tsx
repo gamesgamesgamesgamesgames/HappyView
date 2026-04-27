@@ -158,6 +158,8 @@ export default function ApiClientsPage() {
                 <TableHead>Scopes</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead>Parent Client</TableHead>
+                <TableHead>Owner</TableHead>
                 <TableHead className="w-10 sticky right-0 bg-inherit z-[1]" />
               </TableRow>
             </TableHeader>
@@ -165,7 +167,7 @@ export default function ApiClientsPage() {
               {clients.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={10}
                     className="text-muted-foreground text-center"
                   >
                     No API clients yet.
@@ -203,6 +205,14 @@ export default function ApiClientsPage() {
                   </TableCell>
                   <TableCell>
                     {new Date(client.created_at).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {client.parent_client_id
+                      ? clients.find((c) => c.id === client.parent_client_id)?.name ?? client.parent_client_id
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-sm max-w-48 truncate">
+                    {client.owner_did ?? "—"}
                   </TableCell>
                   <TableCell className="w-10 sticky right-0 bg-inherit z-[1]">
                     <div className="flex gap-1">

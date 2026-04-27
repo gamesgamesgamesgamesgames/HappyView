@@ -381,6 +381,17 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: "category",
+          label: "OAuth API",
+          items: [
+            {
+              type: "doc",
+              id: "reference/oauth/api-clients",
+              label: "Self-Service API Clients",
+            },
+          ],
+        },
+        {
+          type: "category",
           label: "Lua API",
           items: [
             {

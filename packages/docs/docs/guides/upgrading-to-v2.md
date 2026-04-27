@@ -1,6 +1,6 @@
 # Migrating from v1
 
-v2 consolidates HappyView, [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), and [AIP](https://github.com/graze-social/aip) into a single binary. Real-time indexing, backfill, and OAuth are now built in — there are no companion services to deploy.
+v2 consolidates HappyView, [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap), and [AIP](https://tangled.org/gamesgamesgamesgames.games/aip) into a single binary. Real-time indexing, backfill, and OAuth are now built in — there are no companion services to deploy.
 
 This guide covers every breaking change and the steps to migrate.
 

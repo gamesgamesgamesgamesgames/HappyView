@@ -398,15 +398,17 @@ pub(super) struct ApiClientSummary {
     pub(super) created_by: String,
     pub(super) created_at: String,
     pub(super) updated_at: String,
+    pub(super) parent_client_id: Option<String>,
+    pub(super) owner_did: Option<String>,
 }
 
 #[derive(Serialize)]
-pub(super) struct CreateApiClientResponse {
-    pub(super) id: String,
-    pub(super) client_key: String,
+pub(crate) struct CreateApiClientResponse {
+    pub(crate) id: String,
+    pub(crate) client_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) client_secret: Option<String>,
-    pub(super) name: String,
-    pub(super) client_id_url: String,
-    pub(super) client_type: String,
+    pub(crate) client_secret: Option<String>,
+    pub(crate) name: String,
+    pub(crate) client_id_url: String,
+    pub(crate) client_type: String,
 }

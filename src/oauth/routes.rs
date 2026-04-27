@@ -18,6 +18,10 @@ pub fn routes() -> Router<AppState> {
         .route("/dpop-keys", post(provision_dpop_key))
         .route("/sessions", post(register_session))
         .route("/sessions/{did}", delete(delete_session))
+        .route(
+            "/api-clients",
+            post(super::self_service::create_child_api_client),
+        )
 }
 
 // --- Request / response types ---

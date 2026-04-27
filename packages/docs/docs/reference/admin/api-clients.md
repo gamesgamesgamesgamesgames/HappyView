@@ -6,6 +6,10 @@ A single API client represents your application, not individual users. Create on
 
 Each client has an `hvc_`-prefixed client key and an `hvs_`-prefixed client secret. The secret is only returned at creation and is sha256-hashed in the database. Server-to-server callers pass the secret as `X-Client-Secret`. Browser callers use the `Origin` header, which is matched against the client's `client_uri`. Mismatches currently log warnings rather than rejecting the request, but rate limiting applies either way. See [Authentication — XRPC](../../getting-started/authentication.md#xrpc-api-client-identification) for the client-side view, and the [API Keys guide](../../guides/admin/api-keys.md) for how admin API keys differ from API clients.
 
+:::tip Self-service API clients
+Third-party apps can also create **child API clients** programmatically via the [self-service endpoint](../oauth/api-clients.md), without needing admin access.
+:::
+
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)
 AUTH="Authorization: Bearer $TOKEN"
@@ -40,7 +44,9 @@ curl http://localhost:3000/admin/api-clients -H "$AUTH"
     "is_active": true,
     "created_by": "did:plc:...",
     "created_at": "2026-04-13T12:00:00Z",
-    "updated_at": "2026-04-13T12:00:00Z"
+    "updated_at": "2026-04-13T12:00:00Z",
+    "parent_client_id": null,
+    "owner_did": null
   }
 ]
 ```

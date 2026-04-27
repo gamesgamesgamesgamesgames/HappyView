@@ -272,28 +272,46 @@ async fn main() {
 
     // Load per-client rate limit configs and identities from api_clients table.
     {
-        type ClientRow = (String, String, String, Option<i32>, Option<f64>);
+        type ClientRow = (
+            String,
+            String,
+            String,
+            Option<i32>,
+            Option<f64>,
+            Option<String>,
+        );
         let client_rows: Vec<ClientRow> = sqlx::query_as(
-            "SELECT client_key, client_secret_hash, client_uri, rate_limit_capacity, rate_limit_refill_rate FROM api_clients WHERE is_active = 1",
+            "SELECT client_key, client_secret_hash, client_uri, rate_limit_capacity, rate_limit_refill_rate, parent_client_id FROM api_clients WHERE is_active = 1",
         )
         .fetch_all(&db_pool)
         .await
         .unwrap_or_default();
 
-        for (client_key, secret_hash, client_uri, capacity, refill_rate) in client_rows {
+        for (client_key, secret_hash, client_uri, capacity, refill_rate, _) in &client_rows {
             rate_limiter.register_client_identity(
                 client_key.clone(),
                 happyview::rate_limit::ClientIdentity {
-                    secret_hash,
-                    client_uri,
+                    secret_hash: secret_hash.clone(),
+                    client_uri: client_uri.clone(),
                 },
             );
             if let (Some(cap), Some(refill)) = (capacity, refill_rate) {
                 rate_limiter.register_client_config(
-                    client_key,
+                    client_key.clone(),
                     happyview::rate_limit::RateLimitConfig {
-                        capacity: cap as u32,
-                        refill_rate: refill,
+                        capacity: *cap as u32,
+                        refill_rate: *refill,
+                        default_query_cost: defaults.query_cost,
+                        default_procedure_cost: defaults.procedure_cost,
+                        default_proxy_cost: defaults.proxy_cost,
+                    },
+                );
+            } else {
+                rate_limiter.register_client_config(
+                    client_key.clone(),
+                    happyview::rate_limit::RateLimitConfig {
+                        capacity: config.default_rate_limit_capacity,
+                        refill_rate: config.default_rate_limit_refill_rate,
                         default_query_cost: defaults.query_cost,
                         default_procedure_cost: defaults.procedure_cost,
                         default_proxy_cost: defaults.proxy_cost,
