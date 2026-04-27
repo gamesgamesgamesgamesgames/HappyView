@@ -9,7 +9,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: pixta-dev/repository-mirroring-action@v1
+
+      - uses: yesolutions/mirror-action@master
         with:
-          target_repo_url: git@tangled.org:gamesgamesgamesgames.games/happyview.git
-          ssh_private_key: ${{ secrets.TANGLED_SSH_PRIVATE_KEY }}
+          REMOTE: "git@tangled.org:gamesgamesgamesgames.games/happyview.git"
+          GIT_SSH_PRIVATE_KEY: ${{ secrets.TANGLED_SSH_PRIVATE_KEY }}
+          GIT_SSH_NO_VERIFY_HOST: "true"
