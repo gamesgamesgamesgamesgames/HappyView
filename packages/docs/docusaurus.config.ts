@@ -53,7 +53,7 @@ const config: Config = {
         },
         {
           href: "https://tangled.org/gamesgamesgamesgames.games/happyview",
-          label: "Tangled",
+          label: "Source",
           position: "right",
         },
       ],
