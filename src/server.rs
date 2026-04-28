@@ -72,6 +72,22 @@ pub fn router(state: AppState) -> Router {
             "/xrpc/com.atproto.repo.uploadBlob",
             post(repo::upload_blob).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
         )
+        .route(
+            "/xrpc/dev.happyview.listApiClients",
+            get(crate::dev_happyview::list_api_clients),
+        )
+        .route(
+            "/xrpc/dev.happyview.getApiClient",
+            get(crate::dev_happyview::get_api_client),
+        )
+        .route(
+            "/xrpc/dev.happyview.createApiClient",
+            post(crate::dev_happyview::create_api_client),
+        )
+        .route(
+            "/xrpc/dev.happyview.deleteApiClient",
+            post(crate::dev_happyview::delete_api_client),
+        )
         // Catch-all for dynamically registered lexicons
         .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
         .route("/config", get(config_endpoint))

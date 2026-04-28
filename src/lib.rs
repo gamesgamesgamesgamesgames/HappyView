@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod dev_happyview;
 pub mod dns;
 pub mod domain;
 pub mod domain_middleware;
