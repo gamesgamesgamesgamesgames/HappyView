@@ -386,7 +386,7 @@ const sidebars: SidebarsConfig = {
             {
               type: "doc",
               id: "reference/oauth/api-clients",
-              label: "Self-Service API Clients",
+              label: "Third-Party API Clients",
             },
           ],
         },
