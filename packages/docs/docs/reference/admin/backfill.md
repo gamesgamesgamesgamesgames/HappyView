@@ -14,7 +14,7 @@ POST /admin/backfill
 ```
 
 ```sh
-curl -X POST http://localhost:3000/admin/backfill \
+curl -X POST http://127.0.0.1:3000/admin/backfill \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "collection": "xyz.statusphere.status" }'
@@ -41,7 +41,7 @@ GET /admin/backfill/status
 ```
 
 ```sh
-curl http://localhost:3000/admin/backfill/status -H "$AUTH"
+curl http://127.0.0.1:3000/admin/backfill/status -H "$AUTH"
 ```
 
 **Response**: `200 OK`

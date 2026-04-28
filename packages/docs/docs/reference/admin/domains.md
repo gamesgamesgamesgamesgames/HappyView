@@ -14,7 +14,7 @@ GET /admin/domains
 ```
 
 ```sh
-curl http://localhost:3000/admin/domains -H "$AUTH"
+curl http://127.0.0.1:3000/admin/domains -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -38,7 +38,7 @@ POST /admin/domains
 ```
 
 ```sh
-curl -X POST http://localhost:3000/admin/domains \
+curl -X POST http://127.0.0.1:3000/admin/domains \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "url": "https://api.cartridge.dev" }'
@@ -71,7 +71,7 @@ DELETE /admin/domains/{id}
 ```
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/domains/550e8400-e29b-41d4-a716-446655440001 \
+curl -X DELETE http://127.0.0.1:3000/admin/domains/550e8400-e29b-41d4-a716-446655440001 \
   -H "$AUTH"
 ```
 
@@ -88,7 +88,7 @@ POST /admin/domains/{id}/primary
 ```
 
 ```sh
-curl -X POST http://localhost:3000/admin/domains/550e8400-e29b-41d4-a716-446655440001/primary \
+curl -X POST http://127.0.0.1:3000/admin/domains/550e8400-e29b-41d4-a716-446655440001/primary \
   -H "$AUTH"
 ```
 

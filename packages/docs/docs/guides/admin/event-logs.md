@@ -106,16 +106,16 @@ Use the admin API to query event logs with filters:
 
 ```sh
 # Get all errors
-curl "http://localhost:3000/admin/events?severity=error" -H "$AUTH"
+curl "http://127.0.0.1:3000/admin/events?severity=error" -H "$AUTH"
 
 # Get script errors for a specific lexicon
-curl "http://localhost:3000/admin/events?event_type=script.error&subject=com.example.feed.like" -H "$AUTH"
+curl "http://127.0.0.1:3000/admin/events?event_type=script.error&subject=com.example.feed.like" -H "$AUTH"
 
 # Get all lexicon-related events
-curl "http://localhost:3000/admin/events?category=lexicon" -H "$AUTH"
+curl "http://127.0.0.1:3000/admin/events?category=lexicon" -H "$AUTH"
 
 # Paginate through results
-curl "http://localhost:3000/admin/events?limit=20&cursor=2026-03-01T11:59:00Z" -H "$AUTH"
+curl "http://127.0.0.1:3000/admin/events?limit=20&cursor=2026-03-01T11:59:00Z" -H "$AUTH"
 ```
 
 See the [Admin API reference](../../reference/admin/events.md#list-event-logs) for full parameter documentation.

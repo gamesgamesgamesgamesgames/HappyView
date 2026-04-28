@@ -14,7 +14,7 @@ GET /admin/settings
 ```
 
 ```sh
-curl http://localhost:3000/admin/settings -H "$AUTH"
+curl http://127.0.0.1:3000/admin/settings -H "$AUTH"
 ```
 
 Returns all key/value pairs stored in the `instance_settings` table.
@@ -26,7 +26,7 @@ PUT /admin/settings/{key}
 ```
 
 ```sh
-curl -X PUT http://localhost:3000/admin/settings/app_name \
+curl -X PUT http://127.0.0.1:3000/admin/settings/app_name \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "value": "My HappyView" }'

@@ -16,7 +16,7 @@ POST /admin/api-keys
 Requires `api-keys:create` permission.
 
 ```sh
-curl -X POST http://localhost:3000/admin/api-keys \
+curl -X POST http://127.0.0.1:3000/admin/api-keys \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
@@ -53,7 +53,7 @@ GET /admin/api-keys
 Requires `api-keys:read` permission.
 
 ```sh
-curl http://localhost:3000/admin/api-keys -H "$AUTH"
+curl http://127.0.0.1:3000/admin/api-keys -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -83,7 +83,7 @@ DELETE /admin/api-keys/{id}
 Requires `api-keys:delete` permission.
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/api-keys/550e8400-e29b-41d4-a716-446655440000 \
+curl -X DELETE http://127.0.0.1:3000/admin/api-keys/550e8400-e29b-41d4-a716-446655440000 \
   -H "$AUTH"
 ```
 

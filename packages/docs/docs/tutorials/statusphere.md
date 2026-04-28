@@ -35,7 +35,7 @@ HappyView now subscribes to `xyz.statusphere.status` via Jetstream and kicks off
 You can also add lexicons via the [admin API](../reference/admin/lexicons.md). This is useful for automation or CI/CD workflows:
 
 ```sh
-curl -X POST http://localhost:3000/admin/lexicons \
+curl -X POST http://127.0.0.1:3000/admin/lexicons \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -84,7 +84,7 @@ Now add a query endpoint to read the indexed data:
 This creates a `GET /xrpc/xyz.statusphere.listStatuses` endpoint. Without a Lua script, it uses HappyView's built-in default behavior: listing records with `limit`, `cursor`, and `did` parameters, or fetching a single record by `uri`. Try it:
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=5" \
+curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?limit=5" \
   -H "X-Client-Key: $CLIENT_KEY"
 ```
 
@@ -140,14 +140,14 @@ end
 The endpoint now uses your custom logic. Filter by a specific user:
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?did=did:plc:abc&limit=1" \
+curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?did=did:plc:abc&limit=1" \
   -H "X-Client-Key: $CLIENT_KEY"
 ```
 
 Fetch a single record by URI:
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?uri=at://did:plc:abc/xyz.statusphere.status/3abc123" \
+curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?uri=at://did:plc:abc/xyz.statusphere.status/3abc123" \
   -H "X-Client-Key: $CLIENT_KEY"
 ```
 
@@ -181,7 +181,7 @@ This creates a `POST /xrpc/xyz.statusphere.setStatus` endpoint that creates reco
 Set a status. This requires DPoP authentication — the [JavaScript SDK](../sdk/overview.md) handles this for you, but you can test with curl if you have a token:
 
 ```sh
-curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+curl -X POST http://127.0.0.1:3000/xrpc/xyz.statusphere.setStatus \
   -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: DPoP $TOKEN" \
   -H "DPoP: $DPOP_PROOF" \

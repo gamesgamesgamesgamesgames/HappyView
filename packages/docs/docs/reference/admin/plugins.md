@@ -16,7 +16,7 @@ GET /admin/plugins
 Requires `plugins:read`. Returns every loaded plugin with its source, required secrets, configuration status, and any pending updates from the official registry cache.
 
 ```sh
-curl http://localhost:3000/admin/plugins -H "$AUTH"
+curl http://127.0.0.1:3000/admin/plugins -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -62,7 +62,7 @@ POST /admin/plugins/preview
 Requires `plugins:create`. Fetches and parses a manifest without installing the plugin, so the dashboard can show what it would register.
 
 ```sh
-curl -X POST http://localhost:3000/admin/plugins/preview \
+curl -X POST http://127.0.0.1:3000/admin/plugins/preview \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "url": "https://example.com/plugins/steam/manifest.json" }'
@@ -97,7 +97,7 @@ POST /admin/plugins
 Requires `plugins:create`. Fetches the manifest, downloads the WASM, registers the plugin, and persists it.
 
 ```sh
-curl -X POST http://localhost:3000/admin/plugins \
+curl -X POST http://127.0.0.1:3000/admin/plugins \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
@@ -205,7 +205,7 @@ PUT /admin/plugins/{id}/secrets
 Requires `plugins:create`. Encrypts the provided secret values with `TOKEN_ENCRYPTION_KEY` (AES-256-GCM) and upserts them into `plugin_configs`.
 
 ```sh
-curl -X PUT http://localhost:3000/admin/plugins/steam/secrets \
+curl -X PUT http://127.0.0.1:3000/admin/plugins/steam/secrets \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{

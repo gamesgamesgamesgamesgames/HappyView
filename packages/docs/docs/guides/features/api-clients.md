@@ -50,7 +50,7 @@ Go to **Settings > API Clients > New client** and fill in:
 ### From the API
 
 ```sh
-curl -X POST http://localhost:3000/admin/api-clients \
+curl -X POST http://127.0.0.1:3000/admin/api-clients \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

@@ -22,7 +22,7 @@ HappyView begins consuming labels from the labeler immediately. The subscription
 You can also add a labeler via the API:
 
 ```sh
-curl -X POST http://localhost:3000/admin/labelers \
+curl -X POST http://127.0.0.1:3000/admin/labelers \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "did": "did:plc:ar7c4by46qjdydhdevvrndac" }'
@@ -33,7 +33,7 @@ curl -X POST http://localhost:3000/admin/labelers \
 You can pause a labeler subscription to temporarily stop consuming labels without losing your cursor position. Click the pause icon next to the labeler in the table, or use the API:
 
 ```sh
-curl -X PATCH http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
+curl -X PATCH http://127.0.0.1:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "status": "paused" }'
@@ -51,7 +51,7 @@ Deleting a labeler removes the subscription **and all labels it has emitted**. T
 Or via the API:
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
+curl -X DELETE http://127.0.0.1:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
   -H "$AUTH"
 ```
 

@@ -20,9 +20,13 @@ Edit `.env` to point at your running services:
 ```sh
 # SQLite (default — no setup needed, file created automatically)
 DATABASE_URL=sqlite://data/happyview.db?mode=rwc
-PUBLIC_URL=http://localhost:3000
+PUBLIC_URL=http://127.0.0.1:3000
 SESSION_SECRET=change-me-in-production
 ```
+
+:::warning[Use 127.0.0.1, not localhost]
+ATProto OAuth loopback clients are registered with `127.0.0.1`. If you set `PUBLIC_URL` to `http://localhost:3000`, OAuth sign-in will fail because the redirect URI won't match the loopback client ID. Always use `http://127.0.0.1:3000` for local development.
+:::
 
 Or if you prefer Postgres:
 

@@ -24,7 +24,7 @@ POST /admin/script-variables
 Requires `script-variables:create`.
 
 ```sh
-curl -X POST http://localhost:3000/admin/script-variables \
+curl -X POST http://127.0.0.1:3000/admin/script-variables \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "key": "ALGOLIA_API_KEY", "value": "..." }'

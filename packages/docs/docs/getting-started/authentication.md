@@ -95,7 +95,7 @@ For automation — CI/CD, monitoring, cron jobs — create an [admin API key](..
 
 ```sh
 export TOKEN="hv_your-api-key-here"
-curl http://localhost:3000/admin/lexicons \
+curl http://127.0.0.1:3000/admin/lexicons \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -196,7 +196,7 @@ For public clients, omit `X-Client-Secret` and include the PKCE challenge in the
 ```
 POST /oauth/dpop-keys
 X-Client-Key: hvc_...
-Origin: http://localhost:3000
+Origin: http://127.0.0.1:3000
 Content-Type: application/json
 
 { "pkce_challenge": "base64url..." }

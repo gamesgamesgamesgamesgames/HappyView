@@ -14,7 +14,7 @@ POST /admin/lexicons
 ```
 
 ```sh
-curl -X POST http://localhost:3000/admin/lexicons \
+curl -X POST http://127.0.0.1:3000/admin/lexicons \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
@@ -48,7 +48,7 @@ GET /admin/lexicons
 ```
 
 ```sh
-curl http://localhost:3000/admin/lexicons -H "$AUTH"
+curl http://127.0.0.1:3000/admin/lexicons -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -73,7 +73,7 @@ GET /admin/lexicons/{id}
 ```
 
 ```sh
-curl http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$AUTH"
+curl http://127.0.0.1:3000/admin/lexicons/xyz.statusphere.status -H "$AUTH"
 ```
 
 **Response**: `200 OK` with full lexicon details including raw JSON.
@@ -85,7 +85,7 @@ DELETE /admin/lexicons/{id}
 ```
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/lexicons/xyz.statusphere.status -H "$AUTH"
+curl -X DELETE http://127.0.0.1:3000/admin/lexicons/xyz.statusphere.status -H "$AUTH"
 ```
 
 **Response**: `204 No Content`
@@ -101,7 +101,7 @@ POST /admin/network-lexicons
 ```
 
 ```sh
-curl -X POST http://localhost:3000/admin/network-lexicons \
+curl -X POST http://127.0.0.1:3000/admin/network-lexicons \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
@@ -134,7 +134,7 @@ GET /admin/network-lexicons
 ```
 
 ```sh
-curl http://localhost:3000/admin/network-lexicons -H "$AUTH"
+curl http://127.0.0.1:3000/admin/network-lexicons -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -158,7 +158,7 @@ DELETE /admin/network-lexicons/{nsid}
 ```
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/network-lexicons/xyz.statusphere.status \
+curl -X DELETE http://127.0.0.1:3000/admin/network-lexicons/xyz.statusphere.status \
   -H "$AUTH"
 ```
 

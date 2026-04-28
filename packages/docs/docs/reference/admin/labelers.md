@@ -16,7 +16,7 @@ POST /admin/labelers
 Requires `labelers:create` permission.
 
 ```sh
-curl -X POST http://localhost:3000/admin/labelers \
+curl -X POST http://127.0.0.1:3000/admin/labelers \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "did": "did:plc:ar7c4by46qjdydhdevvrndac" }'
@@ -37,7 +37,7 @@ GET /admin/labelers
 Requires `labelers:read` permission.
 
 ```sh
-curl http://localhost:3000/admin/labelers -H "$AUTH"
+curl http://127.0.0.1:3000/admin/labelers -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -71,7 +71,7 @@ PATCH /admin/labelers/{did}
 Requires `labelers:create` permission.
 
 ```sh
-curl -X PATCH http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
+curl -X PATCH http://127.0.0.1:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "status": "paused" }'
@@ -92,7 +92,7 @@ DELETE /admin/labelers/{did}
 Requires `labelers:delete` permission. Removes the subscription and all labels emitted by this labeler.
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
+curl -X DELETE http://127.0.0.1:3000/admin/labelers/did:plc:ar7c4by46qjdydhdevvrndac \
   -H "$AUTH"
 ```
 

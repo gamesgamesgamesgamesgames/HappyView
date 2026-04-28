@@ -30,7 +30,7 @@ end
 ## Usage
 
 ```sh
-curl -X POST http://localhost:3000/xrpc/xyz.statusphere.batchCreate \
+curl -X POST http://127.0.0.1:3000/xrpc/xyz.statusphere.batchCreate \
   -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \

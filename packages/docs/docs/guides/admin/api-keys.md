@@ -27,7 +27,7 @@ Each API key has its own set of **scoped permissions**. When you create a key, y
 Pass the key as a Bearer token in the `Authorization` header:
 
 ```sh
-curl http://localhost:3000/admin/lexicons \
+curl http://127.0.0.1:3000/admin/lexicons \
   -H "Authorization: Bearer hv_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
 ```
 

@@ -24,7 +24,7 @@ GET /admin/api-clients
 Requires `api-clients:view`. Returns clients ordered by `created_at` descending. Secrets are never returned.
 
 ```sh
-curl http://localhost:3000/admin/api-clients -H "$AUTH"
+curl http://127.0.0.1:3000/admin/api-clients -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -60,7 +60,7 @@ POST /admin/api-clients
 Requires `api-clients:create`. Generates a `client_key` and `client_secret`. Store the secret — it won't be shown again.
 
 ```sh
-curl -X POST http://localhost:3000/admin/api-clients \
+curl -X POST http://127.0.0.1:3000/admin/api-clients \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{

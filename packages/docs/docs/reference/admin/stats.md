@@ -12,7 +12,7 @@ GET /admin/stats
 ```
 
 ```sh
-curl http://localhost:3000/admin/stats -H "$AUTH"
+curl http://127.0.0.1:3000/admin/stats -H "$AUTH"
 ```
 
 **Response**: `200 OK`

@@ -14,7 +14,7 @@ GET /admin/events
 ```
 
 ```sh
-curl "http://localhost:3000/admin/events?severity=error&limit=10" -H "$AUTH"
+curl "http://127.0.0.1:3000/admin/events?severity=error&limit=10" -H "$AUTH"
 ```
 
 | Param        | Type   | Required | Description                                                           |

@@ -22,7 +22,7 @@ GET /health
 ```
 
 ```sh
-curl http://localhost:3000/health
+curl http://127.0.0.1:3000/health
 ```
 
 **Response**: `200 OK` with body `ok`
@@ -36,7 +36,7 @@ GET /xrpc/app.bsky.actor.getProfile
 Returns the authenticated user's profile, resolved from their PDS via PLC directory lookup.
 
 ```sh
-curl http://localhost:3000/xrpc/app.bsky.actor.getProfile \
+curl http://127.0.0.1:3000/xrpc/app.bsky.actor.getProfile \
   -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN"
 ```
@@ -62,7 +62,7 @@ POST /xrpc/com.atproto.repo.uploadBlob
 Proxies a blob upload to the authenticated user's PDS. Maximum size: 50MB.
 
 ```sh
-curl -X POST http://localhost:3000/xrpc/com.atproto.repo.uploadBlob \
+curl -X POST http://127.0.0.1:3000/xrpc/com.atproto.repo.uploadBlob \
   -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: image/png" \
@@ -82,7 +82,7 @@ GET /xrpc/{method}?uri={at-uri}
 ```
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?uri=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fxyz.statusphere.status%2Fabc123" \
+curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?uri=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fxyz.statusphere.status%2Fabc123" \
   -H "X-Client-Key: $CLIENT_KEY"
 ```
 
@@ -114,7 +114,7 @@ GET /xrpc/{method}?limit=20&cursor=<opaque>&did=optional
 | `did` | string | --- | Filter records by DID |
 
 ```sh
-curl "http://localhost:3000/xrpc/xyz.statusphere.listStatuses?limit=10&did=did:plc:abc" \
+curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?limit=10&did=did:plc:abc" \
   -H "X-Client-Key: $CLIENT_KEY"
 ```
 
@@ -148,7 +148,7 @@ POST /xrpc/{method}
 When the body does **not** contain a `uri` field, a new record is created.
 
 ```sh
-curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+curl -X POST http://127.0.0.1:3000/xrpc/xyz.statusphere.setStatus \
   -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -162,7 +162,7 @@ HappyView proxies this to the user's PDS as `com.atproto.repo.createRecord`, the
 When the body **contains** a `uri` field, the existing record is updated.
 
 ```sh
-curl -X POST http://localhost:3000/xrpc/xyz.statusphere.setStatus \
+curl -X POST http://127.0.0.1:3000/xrpc/xyz.statusphere.setStatus \
   -H "X-Client-Key: $CLIENT_KEY" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \

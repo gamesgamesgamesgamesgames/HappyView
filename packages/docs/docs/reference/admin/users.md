@@ -16,7 +16,7 @@ POST /admin/users
 Requires `users:create` permission. You cannot grant permissions you don't have yourself (escalation guard).
 
 ```sh
-curl -X POST http://localhost:3000/admin/users \
+curl -X POST http://127.0.0.1:3000/admin/users \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
@@ -53,7 +53,7 @@ GET /admin/users
 Requires `users:read` permission.
 
 ```sh
-curl http://localhost:3000/admin/users -H "$AUTH"
+curl http://127.0.0.1:3000/admin/users -H "$AUTH"
 ```
 
 **Response**: `200 OK`
@@ -80,7 +80,7 @@ GET /admin/users/{id}
 Requires `users:read` permission.
 
 ```sh
-curl http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-446655440000 -H "$AUTH"
+curl http://127.0.0.1:3000/admin/users/550e8400-e29b-41d4-a716-446655440000 -H "$AUTH"
 ```
 
 **Response**: `200 OK` with the same shape as a single item from the list response.
@@ -94,7 +94,7 @@ PATCH /admin/users/{id}/permissions
 Requires `users:update` permission. You cannot grant permissions you don't have yourself, and you cannot modify the super user's permissions.
 
 ```sh
-curl -X PATCH http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-446655440000/permissions \
+curl -X PATCH http://127.0.0.1:3000/admin/users/550e8400-e29b-41d4-a716-446655440000/permissions \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{
@@ -119,7 +119,7 @@ POST /admin/users/transfer-super
 Only the current super user can call this endpoint. Transfers super user status to another existing user.
 
 ```sh
-curl -X POST http://localhost:3000/admin/users/transfer-super \
+curl -X POST http://127.0.0.1:3000/admin/users/transfer-super \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
   -d '{ "target_user_id": "550e8400-e29b-41d4-a716-446655440000" }'
@@ -140,7 +140,7 @@ DELETE /admin/users/{id}
 Requires `users:delete` permission. You cannot delete the super user or yourself.
 
 ```sh
-curl -X DELETE http://localhost:3000/admin/users/550e8400-e29b-41d4-a716-446655440000 \
+curl -X DELETE http://127.0.0.1:3000/admin/users/550e8400-e29b-41d4-a716-446655440000 \
   -H "$AUTH"
 ```
 
