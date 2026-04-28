@@ -151,7 +151,7 @@ async fn get_api_client_not_found() {
     let user_did = "did:plc:testowner404";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
 
-    let request_url = "http://127.0.0.1:0/xrpc/dev.happyview.getApiClient?id=nonexistent-id";
+    let request_url = "http://127.0.0.1:0/xrpc/dev.happyview.getApiClient";
     let proof = generate_dpop_proof(&dpop_key, "GET", request_url, &access_token, None)
         .expect("failed to generate DPoP proof");
 
@@ -208,7 +208,7 @@ async fn create_api_client_via_xrpc() {
     assert_eq!(resp.status(), StatusCode::CREATED, "expected 201 CREATED");
 
     let resp_body = response_json(resp).await;
-    let client_key_val = resp_body["clientKey"].as_str().unwrap_or("");
+    let client_key_val = resp_body["client"]["clientKey"].as_str().unwrap_or("");
     assert!(
         client_key_val.starts_with("hvc_"),
         "clientKey should start with 'hvc_', got: {client_key_val}"
@@ -221,7 +221,7 @@ async fn create_api_client_via_xrpc() {
     );
 
     assert_eq!(
-        resp_body["clientType"].as_str().unwrap_or(""),
+        resp_body["client"]["clientType"].as_str().unwrap_or(""),
         "confidential"
     );
 }
@@ -260,7 +260,7 @@ async fn create_api_client_public_no_secret() {
     assert_eq!(resp.status(), StatusCode::CREATED, "expected 201 CREATED");
 
     let resp_body = response_json(resp).await;
-    let client_key_val = resp_body["clientKey"].as_str().unwrap_or("");
+    let client_key_val = resp_body["client"]["clientKey"].as_str().unwrap_or("");
     assert!(
         client_key_val.starts_with("hvc_"),
         "clientKey should start with 'hvc_', got: {client_key_val}"
@@ -272,7 +272,10 @@ async fn create_api_client_public_no_secret() {
         resp_body["clientSecret"]
     );
 
-    assert_eq!(resp_body["clientType"].as_str().unwrap_or(""), "public");
+    assert_eq!(
+        resp_body["client"]["clientType"].as_str().unwrap_or(""),
+        "public"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -338,8 +341,8 @@ async fn delete_api_client_success() {
 
     // Verify GET now returns 404.
     let get_uri = format!("/xrpc/dev.happyview.getApiClient?id={}", client_id);
-    let get_url = format!("http://127.0.0.1:0{}", get_uri);
-    let get_proof = generate_dpop_proof(&dpop_key, "GET", &get_url, &access_token, None)
+    let get_url = "http://127.0.0.1:0/xrpc/dev.happyview.getApiClient";
+    let get_proof = generate_dpop_proof(&dpop_key, "GET", get_url, &access_token, None)
         .expect("failed to generate DPoP proof for get");
 
     let get_req = Request::builder()
@@ -426,8 +429,8 @@ async fn get_api_client_returns_client() {
         .expect("failed to insert owned client");
 
     let uri = format!("/xrpc/dev.happyview.getApiClient?id={}", client_id);
-    let request_url = format!("http://127.0.0.1:0{}", uri);
-    let proof = generate_dpop_proof(&dpop_key, "GET", &request_url, &access_token, None)
+    let request_url = "http://127.0.0.1:0/xrpc/dev.happyview.getApiClient";
+    let proof = generate_dpop_proof(&dpop_key, "GET", request_url, &access_token, None)
         .expect("failed to generate DPoP proof");
 
     let req = Request::builder()
