@@ -46,47 +46,71 @@ jobs:
           username: ${{ secrets.ATCR_USERNAME }}
           password: ${{ secrets.ATCR_PASSWORD }}
 
-      - name: Extract metadata (tags, labels)
-        id: meta
+      - name: Extract GHCR metadata
+        id: meta-ghcr
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.GHCR_IMAGE }}
-            ${{ env.ATCR_IMAGE }}
+          images: ${{ env.GHCR_IMAGE }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
 
-      - name: Build and push by digest
+      - name: Extract ATCR metadata
+        id: meta-atcr
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ATCR_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Build and push to GHCR by digest
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: ${{ steps.meta-ghcr.outputs.labels }}
           build-args: |
             HAPPYVIEW_VERSION=${{ github.event.release.tag_name }}
           cache-from: type=gha,scope=build-${{ matrix.platform }}
           cache-to: type=gha,scope=build-${{ matrix.platform }},mode=max,ignore-error=true
-          outputs: type=image,"name=${{ env.GHCR_IMAGE }},${{ env.ATCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,"name=${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
+
+      - name: Push to ATCR by digest
+        id: build-atcr
+        continue-on-error: true
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta-atcr.outputs.labels }}
+          build-args: |
+            HAPPYVIEW_VERSION=${{ github.event.release.tag_name }}
+          cache-from: type=gha,scope=build-${{ matrix.platform }}
+          outputs: type=image,"name=${{ env.ATCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
 
       - name: Create GHCR manifest
         run: |
-          GHCR_TAGS=$(jq -cr '.tags | map(select(startswith("ghcr.io"))) | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          GHCR_TAGS=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ steps.meta-ghcr.outputs.json }}')
           docker buildx imagetools create --append $GHCR_TAGS \
             ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }} 2>/dev/null || \
           docker buildx imagetools create $GHCR_TAGS \
             ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}
 
       - name: Create ATCR manifest
+        if: steps.build-atcr.outcome == 'success'
+        continue-on-error: true
         run: |
-          ATCR_TAGS=$(jq -cr '.tags | map(select(startswith("atcr.io"))) | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          ATCR_TAGS=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ steps.meta-atcr.outputs.json }}')
           if [ -n "$ATCR_TAGS" ]; then
             docker buildx imagetools create --append $ATCR_TAGS \
-              ${{ env.ATCR_IMAGE }}@${{ steps.build.outputs.digest }} 2>/dev/null || \
+              ${{ env.ATCR_IMAGE }}@${{ steps.build-atcr.outputs.digest }} 2>/dev/null || \
             docker buildx imagetools create $ATCR_TAGS \
-              ${{ env.ATCR_IMAGE }}@${{ steps.build.outputs.digest }}
+              ${{ env.ATCR_IMAGE }}@${{ steps.build-atcr.outputs.digest }}
           fi
 
