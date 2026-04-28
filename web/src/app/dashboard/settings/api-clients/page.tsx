@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Check, Trash2, X, ExternalLink } from "lucide-react";
+import {
+  AlertTriangle,
+  Copy,
+  Check,
+  Trash2,
+  X,
+  ExternalLink,
+} from "lucide-react";
 
 import { useConfig } from "@/lib/config-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -11,7 +18,10 @@ import {
   updateApiClient,
   deleteApiClient,
 } from "@/lib/api";
-import type { ApiClientSummary, CreateApiClientResponse } from "@/types/api-clients";
+import type {
+  ApiClientSummary,
+  CreateApiClientResponse,
+} from "@/types/api-clients";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,7 +80,10 @@ function MultiInput({
     onChange(next);
   }
 
-  function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) {
     if (e.key === "Backspace" && values[index] === "" && values.length > 1) {
       e.preventDefault();
       handleRemove(index);
@@ -182,7 +195,9 @@ export default function ApiClientsPage() {
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {client.client_type === "public" ? "Public" : "Confidential"}
+                      {client.client_type === "public"
+                        ? "Public"
+                        : "Confidential"}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-sm">
@@ -193,9 +208,14 @@ export default function ApiClientsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {client.scopes.split(/\s+/).filter(Boolean).map((scope) => (
-                        <Badge key={scope} variant="secondary">{scope}</Badge>
-                      ))}
+                      {client.scopes
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((scope) => (
+                          <Badge key={scope} variant="secondary">
+                            {scope}
+                          </Badge>
+                        ))}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -208,7 +228,8 @@ export default function ApiClientsPage() {
                   </TableCell>
                   <TableCell className="text-sm">
                     {client.parent_client_id
-                      ? clients.find((c) => c.id === client.parent_client_id)?.name ?? client.parent_client_id
+                      ? (clients.find((c) => c.id === client.parent_client_id)
+                          ?.name ?? client.parent_client_id)
                       : "—"}
                   </TableCell>
                   <TableCell className="text-sm max-w-48 truncate">
@@ -220,7 +241,10 @@ export default function ApiClientsPage() {
                         <EditApiClientDialog client={client} onSuccess={load} />
                       )}
                       {hasPermission("api-clients:delete") && (
-                        <DeleteApiClientDialog client={client} onSuccess={load} />
+                        <DeleteApiClientDialog
+                          client={client}
+                          onSuccess={load}
+                        />
                       )}
                     </div>
                   </TableCell>
@@ -238,7 +262,9 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   const config = useConfig();
   const happyviewCallbackUri = `${config.public_url.replace(/\/$/, "")}/auth/callback`;
 
-  const [clientType, setClientType] = useState<"confidential" | "public">("confidential");
+  const [clientType, setClientType] = useState<"confidential" | "public">(
+    "confidential",
+  );
   const [name, setName] = useState("");
   const [clientIdUrl, setClientIdUrl] = useState("");
   const [clientUri, setClientUri] = useState("");
@@ -247,10 +273,10 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   const [scopes, setScopes] = useState<string[]>([""]);
   const [rateLimitEnabled, setRateLimitEnabled] = useState(true);
   const [rateLimitCapacity, setRateLimitCapacity] = useState(
-    String(config.default_rate_limit_capacity)
+    String(config.default_rate_limit_capacity),
   );
   const [rateLimitRefillRate, setRateLimitRefillRate] = useState(
-    String(config.default_rate_limit_refill_rate)
+    String(config.default_rate_limit_refill_rate),
   );
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -300,7 +326,9 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
       return;
     }
     try {
-      const filteredOrigins = allowedOrigins.map((o) => o.trim()).filter(Boolean);
+      const filteredOrigins = allowedOrigins
+        .map((o) => o.trim())
+        .filter(Boolean);
       const result = await createApiClient({
         name: name.trim(),
         client_id_url: clientIdUrl.trim(),
@@ -308,9 +336,16 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
         redirect_uris: allUris,
         scopes: allScopes,
         client_type: clientType,
-        allowed_origins: clientType === "public" && filteredOrigins.length > 0 ? filteredOrigins : undefined,
-        rate_limit_capacity: rateLimitEnabled ? Number(rateLimitCapacity) : null,
-        rate_limit_refill_rate: rateLimitEnabled ? Number(rateLimitRefillRate) : null,
+        allowed_origins:
+          clientType === "public" && filteredOrigins.length > 0
+            ? filteredOrigins
+            : undefined,
+        rate_limit_capacity: rateLimitEnabled
+          ? Number(rateLimitCapacity)
+          : null,
+        rate_limit_refill_rate: rateLimitEnabled
+          ? Number(rateLimitRefillRate)
+          : null,
       });
       setCreated(result);
     } catch (e: unknown) {
@@ -361,8 +396,11 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
-                Public identifier. Send as the <code className="bg-muted px-1 rounded">X-Client-Key</code> header
-                or <code className="bg-muted px-1 rounded">client_key</code> query parameter.
+                Public identifier. Send as the{" "}
+                <code className="bg-muted px-1 rounded">X-Client-Key</code>{" "}
+                header or{" "}
+                <code className="bg-muted px-1 rounded">client_key</code> query
+                parameter.
               </p>
             </div>
             {created.client_secret ? (
@@ -388,14 +426,17 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                   </Button>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  Keep this secret. Send as the <code className="bg-muted px-1 rounded">X-Client-Secret</code> header
-                  for server-to-server requests. Browser requests are validated by Origin instead.
+                  Keep this secret. Send as the{" "}
+                  <code className="bg-muted px-1 rounded">X-Client-Secret</code>{" "}
+                  header for server-to-server requests. Browser requests are
+                  validated by Origin instead.
                 </p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 rounded-lg border p-4 bg-muted/50">
                 <p className="text-sm">
-                  This is a public client. Authenticate using PKCE instead of a client secret.
+                  This is a public client. Authenticate using PKCE instead of a
+                  client secret.
                 </p>
                 <a
                   href="/docs/getting-started/authentication#pkce"
@@ -410,30 +451,52 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
             )}
           </div>
         ) : (
-        <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+          <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
             {error && <p className="text-destructive text-sm">{error}</p>}
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
               <legend className="text-sm font-medium px-1">Client Type</legend>
               <RadioGroup
                 value={clientType}
-                onValueChange={(v) => setClientType(v as "confidential" | "public")}
+                onValueChange={(v) =>
+                  setClientType(v as "confidential" | "public")
+                }
                 className="flex flex-col gap-3"
               >
                 <div className="flex items-start gap-3">
-                  <RadioGroupItem value="confidential" id="type-confidential" className="mt-0.5" />
+                  <RadioGroupItem
+                    value="confidential"
+                    id="type-confidential"
+                    className="mt-0.5"
+                  />
                   <div className="flex flex-col gap-0.5">
-                    <Label htmlFor="type-confidential" className="cursor-pointer font-medium">Confidential</Label>
+                    <Label
+                      htmlFor="type-confidential"
+                      className="cursor-pointer font-medium"
+                    >
+                      Confidential
+                    </Label>
                     <p className="text-muted-foreground text-xs">
-                      Server-side applications that can securely store a client secret.
+                      Server-side applications that can securely store a client
+                      secret.
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <RadioGroupItem value="public" id="type-public" className="mt-0.5" />
+                  <RadioGroupItem
+                    value="public"
+                    id="type-public"
+                    className="mt-0.5"
+                  />
                   <div className="flex flex-col gap-0.5">
-                    <Label htmlFor="type-public" className="cursor-pointer font-medium">Public</Label>
+                    <Label
+                      htmlFor="type-public"
+                      className="cursor-pointer font-medium"
+                    >
+                      Public
+                    </Label>
                     <p className="text-muted-foreground text-xs">
-                      Browser or native apps that authenticate using PKCE (no secret).
+                      Browser or native apps that authenticate using PKCE (no
+                      secret).
                     </p>
                   </div>
                 </div>
@@ -475,10 +538,12 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
               </div>
             </fieldset>
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
-              <legend className="text-sm font-medium px-1">Redirect URIs</legend>
+              <legend className="text-sm font-medium px-1">
+                Redirect URIs
+              </legend>
               <p className="text-muted-foreground text-xs">
-                URLs that the authorization server may redirect to after authentication.
-                The AppView callback is always included.
+                URLs that the authorization server may redirect to after
+                authentication. The AppView callback is always included.
               </p>
               <MultiInput
                 id="redirect-uris"
@@ -490,10 +555,12 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
             </fieldset>
             {clientType === "public" && (
               <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
-                <legend className="text-sm font-medium px-1">Allowed Origins</legend>
+                <legend className="text-sm font-medium px-1">
+                  Allowed Origins
+                </legend>
                 <p className="text-muted-foreground text-xs">
-                  Origins permitted to use this client. Requests from unlisted origins will be
-                  rejected. Leave empty to allow any origin.
+                  Origins permitted to use this client. Requests from unlisted
+                  origins will be rejected. Leave empty to allow any origin.
                 </p>
                 <MultiInput
                   id="allowed-origins"
@@ -506,8 +573,9 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
               <legend className="text-sm font-medium px-1">Scopes</legend>
               <p className="text-muted-foreground text-xs">
-                OAuth scopes this client is allowed to request. The <code className="bg-muted px-1 rounded">atproto</code> scope
-                is always required.
+                OAuth scopes this client is allowed to request. The{" "}
+                <code className="bg-muted px-1 rounded">atproto</code> scope is
+                always required.
               </p>
               <MultiInput
                 id="scopes"
@@ -516,21 +584,43 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 placeholder="scope.name"
                 readonlyValues={["atproto"]}
               />
+              {scopes.some((s) => s.trim() === "transition:generic") && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
+                  <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-500">
+                    <code>transition:generic</code> grants broad write access to
+                    any collection. Prefer specific scopes or{" "}
+                    <a
+                      href="https://docs.happyview.dev/guides/features/api-clients#permission-sets"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      permission sets
+                    </a>
+                    .
+                  </p>
+                </div>
+              )}
             </fieldset>
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
-              <legend className="text-sm font-medium px-1">Rate Limiting</legend>
+              <legend className="text-sm font-medium px-1">
+                Rate Limiting
+              </legend>
               <div className="flex items-center gap-3">
                 <Switch
                   id="rl-enabled"
                   checked={rateLimitEnabled}
                   onCheckedChange={setRateLimitEnabled}
                 />
-                <Label htmlFor="rl-enabled" className="cursor-pointer">Enabled</Label>
+                <Label htmlFor="rl-enabled" className="cursor-pointer">
+                  Enabled
+                </Label>
               </div>
               <p className="text-muted-foreground text-xs">
-                Each client gets a token bucket. Requests consume tokens and the bucket
-                refills over time. When the bucket is empty, requests are rejected until
-                tokens replenish.
+                Each client gets a token bucket. Requests consume tokens and the
+                bucket refills over time. When the bucket is empty, requests are
+                rejected until tokens replenish.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
@@ -613,21 +703,23 @@ function EditApiClientDialog({
 
   const [name, setName] = useState(client.name);
   const [redirectUris, setRedirectUris] = useState<string[]>(
-    parseRedirectUris(client.redirect_uris)
+    parseRedirectUris(client.redirect_uris),
   );
   const [allowedOrigins, setAllowedOrigins] = useState<string[]>(
-    parseAllowedOrigins(client.allowed_origins)
+    parseAllowedOrigins(client.allowed_origins),
   );
   const [scopes, setScopes] = useState<string[]>(parseScopes(client.scopes));
   const [isActive, setIsActive] = useState(client.is_active);
   const [rateLimitEnabled, setRateLimitEnabled] = useState(
-    client.rate_limit_capacity != null && client.rate_limit_refill_rate != null
+    client.rate_limit_capacity != null && client.rate_limit_refill_rate != null,
   );
   const [rateLimitCapacity, setRateLimitCapacity] = useState(
-    String(client.rate_limit_capacity ?? config.default_rate_limit_capacity)
+    String(client.rate_limit_capacity ?? config.default_rate_limit_capacity),
   );
   const [rateLimitRefillRate, setRateLimitRefillRate] = useState(
-    String(client.rate_limit_refill_rate ?? config.default_rate_limit_refill_rate)
+    String(
+      client.rate_limit_refill_rate ?? config.default_rate_limit_refill_rate,
+    ),
   );
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -642,13 +734,19 @@ function EditApiClientDialog({
       setScopes(parseScopes(client.scopes));
       setIsActive(client.is_active);
       setRateLimitEnabled(
-        client.rate_limit_capacity != null && client.rate_limit_refill_rate != null
+        client.rate_limit_capacity != null &&
+          client.rate_limit_refill_rate != null,
       );
       setRateLimitCapacity(
-        String(client.rate_limit_capacity ?? config.default_rate_limit_capacity)
+        String(
+          client.rate_limit_capacity ?? config.default_rate_limit_capacity,
+        ),
       );
       setRateLimitRefillRate(
-        String(client.rate_limit_refill_rate ?? config.default_rate_limit_refill_rate)
+        String(
+          client.rate_limit_refill_rate ??
+            config.default_rate_limit_refill_rate,
+        ),
       );
       setError(null);
     }
@@ -667,17 +765,26 @@ function EditApiClientDialog({
       const extraScopes = scopes.map((s) => s.trim()).filter(Boolean);
       const allScopes = ["atproto", ...extraScopes].join(" ");
 
-      const filteredOrigins = allowedOrigins.map((o) => o.trim()).filter(Boolean);
+      const filteredOrigins = allowedOrigins
+        .map((o) => o.trim())
+        .filter(Boolean);
       await updateApiClient(client.id, {
         name: name.trim() || undefined,
         redirect_uris: allUris,
         scopes: allScopes,
-        allowed_origins: client.client_type === "public"
-          ? (filteredOrigins.length > 0 ? filteredOrigins : null)
-          : undefined,
+        allowed_origins:
+          client.client_type === "public"
+            ? filteredOrigins.length > 0
+              ? filteredOrigins
+              : null
+            : undefined,
         is_active: isActive,
-        rate_limit_capacity: rateLimitEnabled ? Number(rateLimitCapacity) : null,
-        rate_limit_refill_rate: rateLimitEnabled ? Number(rateLimitRefillRate) : null,
+        rate_limit_capacity: rateLimitEnabled
+          ? Number(rateLimitCapacity)
+          : null,
+        rate_limit_refill_rate: rateLimitEnabled
+          ? Number(rateLimitRefillRate)
+          : null,
       });
       setOpen(false);
       onSuccess();
@@ -720,14 +827,16 @@ function EditApiClientDialog({
                 checked={isActive}
                 onCheckedChange={setIsActive}
               />
-              <Label htmlFor="edit-active" className="cursor-pointer">Active</Label>
+              <Label htmlFor="edit-active" className="cursor-pointer">
+                Active
+              </Label>
             </div>
           </fieldset>
           <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
             <legend className="text-sm font-medium px-1">Redirect URIs</legend>
             <p className="text-muted-foreground text-xs">
-              URLs that the authorization server may redirect to after authentication.
-              The AppView callback is always included.
+              URLs that the authorization server may redirect to after
+              authentication. The AppView callback is always included.
             </p>
             <MultiInput
               id="edit-redirect-uris"
@@ -739,10 +848,12 @@ function EditApiClientDialog({
           </fieldset>
           {client.client_type === "public" && (
             <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
-              <legend className="text-sm font-medium px-1">Allowed Origins</legend>
+              <legend className="text-sm font-medium px-1">
+                Allowed Origins
+              </legend>
               <p className="text-muted-foreground text-xs">
-                Origins permitted to use this client. Requests from unlisted origins will be
-                rejected. Leave empty to allow any origin.
+                Origins permitted to use this client. Requests from unlisted
+                origins will be rejected. Leave empty to allow any origin.
               </p>
               <MultiInput
                 id="edit-allowed-origins"
@@ -755,8 +866,9 @@ function EditApiClientDialog({
           <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
             <legend className="text-sm font-medium px-1">Scopes</legend>
             <p className="text-muted-foreground text-xs">
-              OAuth scopes this client is allowed to request. The <code className="bg-muted px-1 rounded">atproto</code> scope
-              is always required.
+              OAuth scopes this client is allowed to request. The{" "}
+              <code className="bg-muted px-1 rounded">atproto</code> scope is
+              always required.
             </p>
             <MultiInput
               id="edit-scopes"
@@ -765,6 +877,25 @@ function EditApiClientDialog({
               placeholder="scope.name"
               readonlyValues={["atproto"]}
             />
+            {scopes.some((s) => s.trim() === "transition:generic") && (
+              <div className="flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
+                <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-500">
+                  <span className="font-medium">transition:generic</span> grants
+                  broad write access to any collection. Prefer specific scopes
+                  or{" "}
+                  <a
+                    href="https://docs.happyview.dev/guides/features/api-clients#permission-sets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    permission sets
+                  </a>{" "}
+                  to follow the principle of least privilege.
+                </p>
+              </div>
+            )}
           </fieldset>
           <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
             <legend className="text-sm font-medium px-1">Rate Limiting</legend>
@@ -774,12 +905,14 @@ function EditApiClientDialog({
                 checked={rateLimitEnabled}
                 onCheckedChange={setRateLimitEnabled}
               />
-              <Label htmlFor="edit-rl-enabled" className="cursor-pointer">Enabled</Label>
+              <Label htmlFor="edit-rl-enabled" className="cursor-pointer">
+                Enabled
+              </Label>
             </div>
             <p className="text-muted-foreground text-xs">
-              Each client gets a token bucket. Requests consume tokens and the bucket
-              refills over time. When the bucket is empty, requests are rejected until
-              tokens replenish.
+              Each client gets a token bucket. Requests consume tokens and the
+              bucket refills over time. When the bucket is empty, requests are
+              rejected until tokens replenish.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
@@ -865,9 +998,9 @@ function DeleteApiClientDialog({
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Delete API Client</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            This will permanently delete &ldquo;{client.name}&rdquo; and revoke its
-            OAuth identity. Any applications using this client will lose the ability
-            to authenticate.
+            This will permanently delete &ldquo;{client.name}&rdquo; and revoke
+            its OAuth identity. Any applications using this client will lose the
+            ability to authenticate.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <ResponsiveDialogFooter>
