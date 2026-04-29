@@ -16,6 +16,7 @@ pub mod lua;
 pub mod oauth;
 pub mod plugin;
 pub mod profile;
+pub mod proxy_config;
 pub mod rate_limit;
 pub mod record_handler;
 pub mod record_refs;
@@ -71,6 +72,7 @@ pub struct AppState {
     pub attestation_signer: Option<Arc<plugin::attestation::AttestationSigner>>,
     pub official_registry: SharedRegistry,
     pub official_registry_config: RegistryConfig,
+    pub proxy_config: Arc<arc_swap::ArcSwap<proxy_config::ProxyConfig>>,
 }
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {
