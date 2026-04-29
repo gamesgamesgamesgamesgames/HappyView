@@ -11,10 +11,8 @@ pub fn extract_at_uris(value: &Value) -> HashSet<String> {
 
 fn collect_at_uris(value: &Value, uris: &mut HashSet<String>) {
     match value {
-        Value::String(s) => {
-            if s.starts_with("at://") {
-                uris.insert(s.clone());
-            }
+        Value::String(s) if s.starts_with("at://") => {
+            uris.insert(s.clone());
         }
         Value::Array(arr) => {
             for item in arr {
