@@ -584,6 +584,17 @@ async fn main() {
         official_registry.clone(),
     );
 
+    let proxy_config = {
+        let json_str =
+            happyview::admin::settings::get_setting(&db_pool, "xrpc_proxy_config", db_backend)
+                .await;
+        let config = json_str
+            .and_then(|s| serde_json::from_str::<happyview::proxy_config::ProxyConfig>(&s).ok())
+            .unwrap_or_default();
+        info!(mode = ?config.mode, nsid_count = config.nsids.len(), "Loaded XRPC proxy config");
+        std::sync::Arc::new(arc_swap::ArcSwap::new(std::sync::Arc::new(config)))
+    };
+
     let state = AppState {
         config: config.clone(),
         http,
@@ -602,6 +613,7 @@ async fn main() {
         attestation_signer,
         official_registry,
         official_registry_config,
+        proxy_config,
     };
 
     jetstream::spawn(state.clone(), collections_rx);

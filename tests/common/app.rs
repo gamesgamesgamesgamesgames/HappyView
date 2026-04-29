@@ -152,6 +152,9 @@ impl TestApp {
                 happyview::plugin::official_registry::OfficialRegistryState::default(),
             )),
             official_registry_config: registry_config,
+            proxy_config: std::sync::Arc::new(arc_swap::ArcSwap::new(std::sync::Arc::new(
+                happyview::proxy_config::ProxyConfig::default(),
+            ))),
         };
 
         let router = server::router(state.clone());

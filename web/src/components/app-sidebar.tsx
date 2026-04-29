@@ -17,6 +17,7 @@ import {
   IconInfoCircle,
   IconApps,
   IconArrowUpCircle,
+  IconArrowsShuffle,
   IconSkull,
 } from "@tabler/icons-react";
 import Image from "next/image";
@@ -102,6 +103,12 @@ const systemItems: NavItem[] = [
     title: "General",
     url: "/dashboard/settings/general",
     icon: IconSettings,
+    requiredPermissions: ["settings:manage"],
+  },
+  {
+    title: "XRPC Proxy",
+    url: "/dashboard/settings/xrpc-proxy",
+    icon: IconArrowsShuffle,
     requiredPermissions: ["settings:manage"],
   },
   {
