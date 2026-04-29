@@ -1,4 +1,4 @@
-# Admin API: Backfill
+# Backfill
 
 Create and monitor historical backfill jobs. See the [Backfill guide](../../guides/indexing/backfill.md) for background.
 

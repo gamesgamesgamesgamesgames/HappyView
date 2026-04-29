@@ -1,4 +1,4 @@
-# Admin API: Script Variables
+# Script Variables
 
 Script variables are encrypted key/value pairs available to Lua scripts via the `vars` global. Use them for secrets like API tokens.
 

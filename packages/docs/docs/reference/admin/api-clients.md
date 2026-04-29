@@ -1,4 +1,4 @@
-# Admin API: API Clients
+# API Clients
 
 API clients identify third-party applications that call HappyView's XRPC endpoints. Every request — authenticated or not — needs an `X-Client-Key` header (or `client_key` query param). Requests without one get `401 Unauthorized`. The client key is HappyView's rate-limit bucket.
 
