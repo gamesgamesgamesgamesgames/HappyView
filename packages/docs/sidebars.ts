@@ -359,6 +359,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: "doc",
+              id: "reference/admin/xrpc-proxy",
+              label: "XRPC Proxy",
+            },
+            {
+              type: "doc",
               id: "reference/admin/domains",
               label: "Domains",
             },

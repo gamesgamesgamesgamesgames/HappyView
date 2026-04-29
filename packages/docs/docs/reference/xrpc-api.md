@@ -177,6 +177,10 @@ HappyView proxies this to the user's PDS as `com.atproto.repo.putRecord`, then u
 
 **Response** for both: proxied from the user's PDS.
 
+## XRPC proxy
+
+When a request targets an NSID that has no locally registered lexicon, HappyView resolves the NSID's authority via DNS and forwards the request. Admins can restrict which NSIDs are proxied — see [XRPC Proxy settings](admin/xrpc-proxy.md).
+
 ## Errors
 
 All error responses return JSON with an `error` field:

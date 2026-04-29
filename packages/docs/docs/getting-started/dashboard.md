@@ -83,6 +83,10 @@ Manage installed plugins and configure plugin secrets. Plugins extend HappyView 
 
 Configure labeler subscriptions for content labeling. See [Labelers](../guides/features/labelers.md) for details.
 
+### XRPC Proxy
+
+Control which unrecognized XRPC methods are forwarded to their resolved authority. Choose from four modes: **Disabled** (block all proxy requests), **Open** (proxy everything — the default), **Allowlist** (only proxy NSIDs matching your patterns), or **Blocklist** (proxy everything except matching patterns). Allowlist and blocklist modes accept NSID patterns with trailing wildcards (e.g. `com.example.*`). Locally registered lexicons are always served regardless of this setting. See [XRPC Proxy](../reference/admin/xrpc-proxy.md) for the full API reference.
+
 ### Environment Variables
 
 View the current values of all environment variables that affect HappyView's behavior. This is a read-only view — values are set via your deployment environment, not the dashboard.
