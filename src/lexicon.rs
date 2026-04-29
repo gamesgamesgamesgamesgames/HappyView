@@ -85,6 +85,8 @@ pub struct ParsedLexicon {
     pub index_hook: Option<String>,
     /// Optional per-NSID token cost for rate limiting.
     pub token_cost: Option<u32>,
+    /// Optional space type NSID indicating this lexicon is designed for use within spaces of that type.
+    pub space_type: Option<String>,
 }
 
 impl ParsedLexicon {
@@ -127,6 +129,11 @@ impl ParsedLexicon {
         let output = main_def.and_then(|m| m.get("output")).cloned();
         let record_schema = main_def.and_then(|m| m.get("record")).cloned();
 
+        let space_type = raw
+            .get("spaceType")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Ok(Self {
             id,
             lexicon_type,
@@ -142,6 +149,7 @@ impl ParsedLexicon {
             script,
             index_hook,
             token_cost,
+            space_type,
         })
     }
 }
@@ -792,5 +800,44 @@ mod tests {
         let reg = LexiconRegistry::new();
         let script = reg.get_index_hook("nonexistent").await;
         assert!(script.is_none());
+    }
+
+    #[test]
+    fn parse_space_type_from_lexicon() {
+        let raw = json!({
+            "lexicon": 1,
+            "id": "com.example.forum.post",
+            "spaceType": "com.example.forum",
+            "defs": {
+                "main": {
+                    "type": "record",
+                    "key": "tid",
+                    "record": {
+                        "type": "object",
+                        "properties": {
+                            "text": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        });
+        let parsed =
+            ParsedLexicon::parse(raw, 1, None, ProcedureAction::Upsert, None, None, None).unwrap();
+        assert_eq!(parsed.space_type.as_deref(), Some("com.example.forum"));
+    }
+
+    #[test]
+    fn parse_space_type_none_by_default() {
+        let parsed = ParsedLexicon::parse(
+            record_lexicon_json(),
+            1,
+            None,
+            ProcedureAction::Upsert,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(parsed.space_type.is_none());
     }
 }
