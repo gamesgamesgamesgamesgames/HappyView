@@ -276,27 +276,6 @@ const sidebars: SidebarsConfig = {
           id: "sdk/oauth-client-browser",
           label: "Browser Client",
         },
-        {
-          type: "category",
-          label: "Changelogs",
-          items: [
-            {
-              type: "doc",
-              id: "sdk/changelog-oauth-client",
-              label: "OAuth Client",
-            },
-            {
-              type: "doc",
-              id: "sdk/changelog-oauth-client-browser",
-              label: "Browser Client",
-            },
-            {
-              type: "doc",
-              id: "sdk/changelog-lex-agent",
-              label: "Lex Agent",
-            },
-          ],
-        },
       ],
     },
     {
@@ -452,9 +431,30 @@ const sidebars: SidebarsConfig = {
           label: "Troubleshooting",
         },
         {
-          type: "doc",
-          id: "reference/changelog",
-          label: "Changelog",
+          type: "category",
+          label: "Changelogs",
+          items: [
+            {
+              type: "doc",
+              id: "reference/changelog",
+              label: "HappyView",
+            },
+            {
+              type: "doc",
+              id: "sdk/changelog-oauth-client",
+              label: "oauth-client",
+            },
+            {
+              type: "doc",
+              id: "sdk/changelog-oauth-client-browser",
+              label: "oauth-client-browser",
+            },
+            {
+              type: "doc",
+              id: "sdk/changelog-lex-agent",
+              label: "lex-agent",
+            },
+          ],
         },
       ],
     },

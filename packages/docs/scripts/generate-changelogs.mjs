@@ -7,28 +7,24 @@ const CHANGELOGS = [
   {
     name: "HappyView",
     output: "docs/reference/changelog.md",
-    sidebarLabel: "Changelog",
     match: (tag) => /^v\d/.test(tag),
     formatVersion: (tag) => tag,
   },
   {
     name: "@happyview/oauth-client",
     output: "docs/sdk/changelog-oauth-client.md",
-    sidebarLabel: "Changelog",
     match: (tag) => tag.startsWith("@happyview/oauth-client-v"),
     formatVersion: (tag) => tag.replace("@happyview/oauth-client-", ""),
   },
   {
     name: "@happyview/oauth-client-browser",
     output: "docs/sdk/changelog-oauth-client-browser.md",
-    sidebarLabel: "Changelog",
     match: (tag) => tag.startsWith("@happyview/oauth-client-browser-v"),
     formatVersion: (tag) => tag.replace("@happyview/oauth-client-browser-", ""),
   },
   {
     name: "@happyview/lex-agent",
     output: "docs/sdk/changelog-lex-agent.md",
-    sidebarLabel: "Changelog",
     match: (tag) => tag.startsWith("@happyview/lex-agent-v"),
     formatVersion: (tag) => tag.replace("@happyview/lex-agent-", ""),
   },
@@ -82,11 +78,7 @@ function buildMarkdown(changelog, releases) {
   if (matching.length === 0) return null;
 
   const lines = [
-    "---",
-    `sidebar_label: "${changelog.sidebarLabel}"`,
-    "---",
-    "",
-    `# ${changelog.name} Changelog`,
+    `# ${changelog.name}`,
     "",
     `<!-- Generated automatically from GitHub releases. Do not edit by hand. -->`,
     "",
@@ -141,11 +133,7 @@ async function main() {
     let md = buildMarkdown(changelog, releases);
     if (!md) {
       md = [
-        "---",
-        `sidebar_label: "${changelog.sidebarLabel}"`,
-        "---",
-        "",
-        `# ${changelog.name} Changelog`,
+        `# ${changelog.name}`,
         "",
         `<!-- Generated automatically from GitHub releases. Do not edit by hand. -->`,
         "",
