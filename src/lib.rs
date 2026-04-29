@@ -23,6 +23,7 @@ pub mod record_refs;
 pub mod repo;
 pub mod resolve;
 pub mod server;
+pub mod spaces;
 pub mod xrpc;
 
 use auth::oauth_store::{DbSessionStore, DbStateStore};

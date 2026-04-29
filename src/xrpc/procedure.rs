@@ -20,7 +20,7 @@ pub(crate) async fn handle_procedure(
 ) -> Result<Response, AppError> {
     if let Some(ref script) = lexicon.script {
         return crate::lua::execute_procedure_script(
-            state, method, claims, input, params, lexicon, script,
+            state, method, claims, input, params, lexicon, script, None,
         )
         .await;
     }
