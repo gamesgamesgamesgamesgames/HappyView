@@ -1,4 +1,4 @@
-# Admin API: Lexicons
+# Lexicons
 
 Manage lexicons and network lexicons. See the [Lexicons guide](../../guides/indexing/lexicons.md) for background on how lexicons drive indexing and XRPC routing.
 

@@ -1,4 +1,4 @@
-# Admin API: Users
+# Users
 
 Manage admin users and their permissions. See the [Permissions guide](../../guides/admin/permissions.md) for available permissions and templates.
 

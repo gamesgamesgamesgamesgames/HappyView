@@ -1,4 +1,4 @@
-# Admin API: XRPC Proxy
+# XRPC Proxy
 
 Control which unrecognized XRPC methods HappyView forwards to their resolved authority. Locally registered lexicons are always served regardless of this setting.
 
