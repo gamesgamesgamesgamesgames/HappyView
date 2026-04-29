@@ -310,6 +310,7 @@ mod tests {
             script: script.map(|s| s.to_string()),
             index_hook: None,
             token_cost: None,
+            space_type: None,
         }
     }
 
@@ -329,6 +330,7 @@ mod tests {
             script: script.map(|s| s.to_string()),
             index_hook: None,
             token_cost: None,
+            space_type: None,
         }
     }
 

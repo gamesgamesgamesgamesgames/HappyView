@@ -16,8 +16,10 @@ pub(crate) async fn handle_query(
     claims: Option<&Claims>,
 ) -> Result<Response, AppError> {
     if let Some(ref script) = lexicon.script {
-        return crate::lua::execute_query_script(state, method, params, lexicon, script, claims)
-            .await;
+        return crate::lua::execute_query_script(
+            state, method, params, lexicon, script, claims, None,
+        )
+        .await;
     }
 
     // Single-record query: has a `uri` parameter

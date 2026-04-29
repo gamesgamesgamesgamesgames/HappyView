@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-/// All 29 permissions in the system.
+/// All 37 permissions in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Permission {
     #[serde(rename = "lexicons:create")]
@@ -83,6 +83,23 @@ pub enum Permission {
     DeadLettersRead,
     #[serde(rename = "dead-letters:manage")]
     DeadLettersManage,
+
+    #[serde(rename = "spaces:create")]
+    SpacesCreate,
+    #[serde(rename = "spaces:read")]
+    SpacesRead,
+    #[serde(rename = "spaces:update")]
+    SpacesUpdate,
+    #[serde(rename = "spaces:delete")]
+    SpacesDelete,
+    #[serde(rename = "spaces:manage-members")]
+    SpacesManageMembers,
+    #[serde(rename = "spaces:manage-invites")]
+    SpacesManageInvites,
+    #[serde(rename = "spaces:manage-records")]
+    SpacesManageRecords,
+    #[serde(rename = "spaces:manage-credentials")]
+    SpacesManageCredentials,
 }
 
 impl Permission {
@@ -122,6 +139,14 @@ impl Permission {
             Self::ApiClientsDelete => "api-clients:delete",
             Self::DeadLettersRead => "dead-letters:read",
             Self::DeadLettersManage => "dead-letters:manage",
+            Self::SpacesCreate => "spaces:create",
+            Self::SpacesRead => "spaces:read",
+            Self::SpacesUpdate => "spaces:update",
+            Self::SpacesDelete => "spaces:delete",
+            Self::SpacesManageMembers => "spaces:manage-members",
+            Self::SpacesManageInvites => "spaces:manage-invites",
+            Self::SpacesManageRecords => "spaces:manage-records",
+            Self::SpacesManageCredentials => "spaces:manage-credentials",
         }
     }
 
@@ -161,6 +186,14 @@ impl Permission {
             Self::ApiClientsDelete,
             Self::DeadLettersRead,
             Self::DeadLettersManage,
+            Self::SpacesCreate,
+            Self::SpacesRead,
+            Self::SpacesUpdate,
+            Self::SpacesDelete,
+            Self::SpacesManageMembers,
+            Self::SpacesManageInvites,
+            Self::SpacesManageRecords,
+            Self::SpacesManageCredentials,
         ])
     }
 }
@@ -215,6 +248,14 @@ impl Template {
                 perms.insert(Permission::ApiClientsCreate);
                 perms.insert(Permission::ApiClientsEdit);
                 perms.insert(Permission::ApiClientsDelete);
+                perms.insert(Permission::SpacesCreate);
+                perms.insert(Permission::SpacesRead);
+                perms.insert(Permission::SpacesUpdate);
+                perms.insert(Permission::SpacesDelete);
+                perms.insert(Permission::SpacesManageMembers);
+                perms.insert(Permission::SpacesManageInvites);
+                perms.insert(Permission::SpacesManageRecords);
+                perms.insert(Permission::SpacesManageCredentials);
                 perms
             }
             Self::FullAccess => Permission::all(),

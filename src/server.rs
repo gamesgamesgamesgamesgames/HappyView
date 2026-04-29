@@ -62,6 +62,7 @@ pub fn router(state: AppState) -> Router {
     let serve_dir = ServeDir::new(&static_dir).not_found_service(spa_fallback);
 
     let domain_routes = Router::new()
+        .merge(crate::spaces::routes::space_routes())
         .nest("/auth", crate::auth::routes::routes())
         .nest("/external-auth", crate::external_auth::routes())
         .nest("/oauth", crate::oauth::routes::routes())

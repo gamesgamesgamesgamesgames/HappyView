@@ -257,6 +257,181 @@ pub fn register_atproto_api(
         atproto_table.set("verify_signature", verify_fn)?;
     }
 
+    // atproto.spaces sub-table
+    let spaces_table = lua.create_table()?;
+
+    // atproto.spaces.is_member(space_uri, did) -> boolean
+    let state_clone = state.clone();
+    let is_member_fn =
+        lua.create_async_function(move |_lua, (space_uri, did): (String, String)| {
+            let state = state_clone.clone();
+            async move {
+                let uri = crate::spaces::SpaceUri::parse(&space_uri)
+                    .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
+                let space = crate::spaces::db::get_space_by_address(
+                    &state.db,
+                    state.db_backend,
+                    &uri.owner_did,
+                    &uri.type_nsid,
+                    &uri.skey,
+                )
+                .await
+                .map_err(|e| mlua::Error::runtime(format!("space lookup failed: {e}")))?;
+                let space = match space {
+                    Some(s) => s,
+                    None => return Ok(false),
+                };
+                let access =
+                    crate::spaces::members::is_member(&state.db, state.db_backend, &space.id, &did)
+                        .await
+                        .map_err(|e| {
+                            mlua::Error::runtime(format!("membership check failed: {e}"))
+                        })?;
+                Ok(access.is_some())
+            }
+        })?;
+    spaces_table.set("is_member", is_member_fn)?;
+
+    // atproto.spaces.get_access(space_uri, did) -> 'read' | 'write' | nil
+    let state_clone = state.clone();
+    let get_access_fn =
+        lua.create_async_function(move |_lua, (space_uri, did): (String, String)| {
+            let state = state_clone.clone();
+            async move {
+                let uri = crate::spaces::SpaceUri::parse(&space_uri)
+                    .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
+                let space = crate::spaces::db::get_space_by_address(
+                    &state.db,
+                    state.db_backend,
+                    &uri.owner_did,
+                    &uri.type_nsid,
+                    &uri.skey,
+                )
+                .await
+                .map_err(|e| mlua::Error::runtime(format!("space lookup failed: {e}")))?;
+                let space = match space {
+                    Some(s) => s,
+                    None => return Ok(None),
+                };
+                let access =
+                    crate::spaces::members::is_member(&state.db, state.db_backend, &space.id, &did)
+                        .await
+                        .map_err(|e| {
+                            mlua::Error::runtime(format!("membership check failed: {e}"))
+                        })?;
+                Ok(access.map(|a| a.as_str().to_string()))
+            }
+        })?;
+    spaces_table.set("get_access", get_access_fn)?;
+
+    // atproto.spaces.list_members(space_uri) -> array of { did, access }
+    let state_clone = state.clone();
+    let list_members_fn = lua.create_async_function(move |lua, space_uri: String| {
+        let state = state_clone.clone();
+        async move {
+            let uri = crate::spaces::SpaceUri::parse(&space_uri)
+                .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
+            let space = crate::spaces::db::get_space_by_address(
+                &state.db,
+                state.db_backend,
+                &uri.owner_did,
+                &uri.type_nsid,
+                &uri.skey,
+            )
+            .await
+            .map_err(|e| mlua::Error::runtime(format!("space lookup failed: {e}")))?;
+            let space = match space {
+                Some(s) => s,
+                None => {
+                    return Err(mlua::Error::runtime("space not found"));
+                }
+            };
+            let members =
+                crate::spaces::members::resolve_members(&state.db, state.db_backend, &space.id)
+                    .await
+                    .map_err(|e| mlua::Error::runtime(format!("member resolution failed: {e}")))?;
+
+            let result = lua.create_table()?;
+            for (i, member) in members.iter().enumerate() {
+                let entry = lua.create_table()?;
+                entry.set("did", member.did.as_str())?;
+                entry.set("access", member.access.as_str())?;
+                result.set(i + 1, entry)?;
+            }
+            Ok(mlua::Value::Table(result))
+        }
+    })?;
+    spaces_table.set("list_members", list_members_fn)?;
+
+    // atproto.spaces.query({ space_uri, collection, limit, cursor }) -> { records, cursor }
+    let state_clone = state.clone();
+    let query_fn = lua.create_async_function(move |lua, opts: mlua::Table| {
+        let state = state_clone.clone();
+        async move {
+            let space_uri: String = opts
+                .get("space_uri")
+                .map_err(|_| mlua::Error::runtime("space_uri is required"))?;
+            let collection: Option<String> = opts.get("collection").ok();
+            let limit: i64 = opts.get("limit").unwrap_or(50);
+            let cursor: Option<String> = opts.get("cursor").ok();
+
+            let uri = crate::spaces::SpaceUri::parse(&space_uri)
+                .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
+            let space = crate::spaces::db::get_space_by_address(
+                &state.db,
+                state.db_backend,
+                &uri.owner_did,
+                &uri.type_nsid,
+                &uri.skey,
+            )
+            .await
+            .map_err(|e| mlua::Error::runtime(format!("space lookup failed: {e}")))?;
+            let space = match space {
+                Some(s) => s,
+                None => {
+                    return Err(mlua::Error::runtime("space not found"));
+                }
+            };
+
+            let records = crate::spaces::db::list_space_records(
+                &state.db,
+                state.db_backend,
+                &space.id,
+                collection.as_deref(),
+                limit.min(100),
+                cursor.as_deref(),
+            )
+            .await
+            .map_err(|e| mlua::Error::runtime(format!("record query failed: {e}")))?;
+
+            let next_cursor = records.last().map(|r| r.indexed_at.clone());
+
+            let result = lua.create_table()?;
+            let records_table = lua.create_table()?;
+            for (i, record) in records.iter().enumerate() {
+                let entry = lua.to_value(&serde_json::json!({
+                    "uri": record.uri,
+                    "collection": record.collection,
+                    "rkey": record.rkey,
+                    "record": record.record,
+                    "cid": record.cid,
+                    "authorDid": record.author_did,
+                }))?;
+                records_table.set(i + 1, entry)?;
+            }
+            result.set("records", records_table)?;
+            match next_cursor {
+                Some(c) => result.set("cursor", c)?,
+                None => result.set("cursor", mlua::Value::Nil)?,
+            }
+
+            Ok(mlua::Value::Table(result))
+        }
+    })?;
+    spaces_table.set("query", query_fn)?;
+
+    atproto_table.set("spaces", spaces_table)?;
+
     lua.globals().set("atproto", atproto_table)?;
     Ok(())
 }
@@ -516,5 +691,22 @@ mod tests {
         "#;
         let result: bool = lua.load(chunk).eval_async().await.unwrap();
         assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn spaces_api_is_registered() {
+        let state = test_state_with_plc("");
+        let lua = mlua::Lua::new();
+        register_atproto_api(&lua, Arc::new(state), None).unwrap();
+
+        let chunk = r#"
+            return type(atproto.spaces) == "table"
+                and type(atproto.spaces.is_member) == "function"
+                and type(atproto.spaces.get_access) == "function"
+                and type(atproto.spaces.list_members) == "function"
+                and type(atproto.spaces.query) == "function"
+        "#;
+        let result: bool = lua.load(chunk).eval_async().await.unwrap();
+        assert!(result);
     }
 }
