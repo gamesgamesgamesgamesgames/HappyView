@@ -1,4 +1,4 @@
-# Admin API: Stats
+# Stats
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

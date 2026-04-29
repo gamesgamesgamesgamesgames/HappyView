@@ -1,4 +1,4 @@
-# Admin API: Instance Settings
+# Instance Settings
 
 Instance settings override environment variables at runtime — things like app name, ToS URL, privacy policy URL, and logo. Settings stored here take precedence over their env var equivalents. All endpoints require the `settings:manage` permission.
 

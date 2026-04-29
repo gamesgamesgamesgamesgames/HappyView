@@ -1,4 +1,4 @@
-# Admin API: Event Logs
+# Event Logs
 
 HappyView logs system events — lexicon changes, record operations, script errors, user actions, and more. See the [Event Logs guide](../../guides/admin/event-logs.md) for details on event types and retention.
 

@@ -1,4 +1,4 @@
-# Admin API: Labelers
+# Labelers
 
 Manage external labeler subscriptions. See the [Labelers guide](../../guides/features/labelers.md) for background.
 

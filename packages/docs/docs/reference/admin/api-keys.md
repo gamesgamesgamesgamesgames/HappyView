@@ -1,4 +1,4 @@
-# Admin API: API Keys
+# API Keys
 
 Manage API keys for programmatic access. See the [API Keys guide](../../guides/admin/api-keys.md) for usage details.
 
