@@ -381,6 +381,23 @@ export function updateProxyConfig(config: ProxyConfig) {
   });
 }
 
+// Proxy config
+export type ProxyConfig = {
+  mode: "disabled" | "open" | "allowlist" | "blocklist"
+  nsids: string[]
+}
+
+export function getProxyConfig() {
+  return apiFetch<ProxyConfig>("/admin/settings/xrpc-proxy")
+}
+
+export function updateProxyConfig(config: ProxyConfig) {
+  return apiFetch("/admin/settings/xrpc-proxy", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  })
+}
+
 // Labelers
 export function getLabelers() {
   return apiFetch<LabelerSummary[]>("/admin/labelers");
