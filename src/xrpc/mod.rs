@@ -296,6 +296,11 @@ pub async fn xrpc_get(
     let lexicon = match lexicon {
         Some(l) => l,
         None => {
+            if !state.proxy_config.load().allows(&method) {
+                return Err(AppError::Forbidden(
+                    "NSID not allowed by proxy policy".into(),
+                ));
+            }
             let mut response = proxy_to_authority(&state, &method, &raw_query, None).await?;
             if let CheckResult::Allowed {
                 remaining,
@@ -383,6 +388,11 @@ pub async fn xrpc_post(
     let lexicon = match lexicon {
         Some(l) => l,
         None => {
+            if !state.proxy_config.load().allows(&method) {
+                return Err(AppError::Forbidden(
+                    "NSID not allowed by proxy policy".into(),
+                ));
+            }
             let mut response = proxy_to_authority(&state, &method, &raw_query, Some(&body)).await?;
             if let CheckResult::Allowed {
                 remaining,

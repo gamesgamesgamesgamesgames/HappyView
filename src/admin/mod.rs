@@ -10,6 +10,7 @@ mod lexicons;
 mod network_lexicons;
 pub(crate) mod permissions;
 mod plugins;
+mod proxy_config;
 mod records;
 mod script_variables;
 pub mod settings;
@@ -75,6 +76,10 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
         .route(
             "/settings/logo",
             put(settings::upload_logo).delete(settings::delete_logo),
+        )
+        .route(
+            "/settings/xrpc-proxy",
+            get(proxy_config::get).put(proxy_config::put),
         )
         .route(
             "/settings/{key}",

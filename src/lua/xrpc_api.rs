@@ -288,6 +288,9 @@ mod tests {
             )),
             official_registry_config: crate::plugin::official_registry::RegistryConfig::production(
             ),
+            proxy_config: std::sync::Arc::new(arc_swap::ArcSwap::new(std::sync::Arc::new(
+                crate::proxy_config::ProxyConfig::default(),
+            ))),
         }
     }
 
