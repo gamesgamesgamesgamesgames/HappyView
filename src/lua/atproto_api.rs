@@ -266,6 +266,15 @@ pub fn register_atproto_api(
         lua.create_async_function(move |_lua, (space_uri, did): (String, String)| {
             let state = state_clone.clone();
             async move {
+                if !crate::feature_flags::is_enabled(
+                    &state.db,
+                    crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+                    state.db_backend,
+                )
+                .await
+                {
+                    return Err(mlua::Error::runtime("spaces feature is not enabled"));
+                }
                 let uri = crate::spaces::SpaceUri::parse(&space_uri)
                     .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
                 let space = crate::spaces::db::get_space_by_address(
@@ -298,6 +307,15 @@ pub fn register_atproto_api(
         lua.create_async_function(move |_lua, (space_uri, did): (String, String)| {
             let state = state_clone.clone();
             async move {
+                if !crate::feature_flags::is_enabled(
+                    &state.db,
+                    crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+                    state.db_backend,
+                )
+                .await
+                {
+                    return Err(mlua::Error::runtime("spaces feature is not enabled"));
+                }
                 let uri = crate::spaces::SpaceUri::parse(&space_uri)
                     .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
                 let space = crate::spaces::db::get_space_by_address(
@@ -329,6 +347,15 @@ pub fn register_atproto_api(
     let list_members_fn = lua.create_async_function(move |lua, space_uri: String| {
         let state = state_clone.clone();
         async move {
+            if !crate::feature_flags::is_enabled(
+                &state.db,
+                crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+                state.db_backend,
+            )
+            .await
+            {
+                return Err(mlua::Error::runtime("spaces feature is not enabled"));
+            }
             let uri = crate::spaces::SpaceUri::parse(&space_uri)
                 .map_err(|e| mlua::Error::runtime(format!("invalid space URI: {e}")))?;
             let space = crate::spaces::db::get_space_by_address(
@@ -368,6 +395,15 @@ pub fn register_atproto_api(
     let query_fn = lua.create_async_function(move |lua, opts: mlua::Table| {
         let state = state_clone.clone();
         async move {
+            if !crate::feature_flags::is_enabled(
+                &state.db,
+                crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+                state.db_backend,
+            )
+            .await
+            {
+                return Err(mlua::Error::runtime("spaces feature is not enabled"));
+            }
             let space_uri: String = opts
                 .get("space_uri")
                 .map_err(|_| mlua::Error::runtime("space_uri is required"))?;

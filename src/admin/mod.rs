@@ -5,6 +5,7 @@ mod backfill;
 mod dead_letters;
 mod domains;
 mod events;
+mod feature_flags;
 mod labelers;
 mod lexicons;
 mod network_lexicons;
@@ -72,6 +73,7 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/labelers/{did}",
             patch(labelers::update).delete(labelers::delete),
         )
+        .route("/feature-flags", get(feature_flags::list))
         .route("/settings", get(settings::list))
         .route(
             "/settings/logo",

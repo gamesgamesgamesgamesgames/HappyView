@@ -346,6 +346,7 @@ async fn handle_delete_record(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_dpop_procedure(
     state: &AppState,
     claims: &Claims,

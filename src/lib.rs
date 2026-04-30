@@ -10,6 +10,8 @@ pub mod domain_middleware;
 pub mod error;
 pub mod event_log;
 pub mod external_auth;
+pub mod feature_flags;
+pub mod feature_middleware;
 pub mod jetstream;
 pub mod labeler;
 pub mod lexicon;

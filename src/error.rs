@@ -52,6 +52,7 @@ pub enum AppError {
     BadGateway(String),
     BadRequest(String),
     Conflict(String),
+    FeatureDisabled(String),
     Forbidden(String),
     InsufficientPermissions(String),
     Internal(String),
@@ -78,6 +79,7 @@ impl std::fmt::Display for AppError {
             AppError::BadGateway(msg) => write!(f, "bad gateway: {msg}"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
             AppError::Conflict(msg) => write!(f, "conflict: {msg}"),
+            AppError::FeatureDisabled(msg) => write!(f, "feature disabled: {msg}"),
             AppError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
             AppError::InsufficientPermissions(perm) => write!(f, "Missing permission: {perm}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
@@ -142,6 +144,13 @@ impl IntoResponse for AppError {
                 });
                 (status, axum::Json(body)).into_response()
             }
+            AppError::FeatureDisabled(msg) => {
+                let body = serde_json::json!({
+                    "error": "FeatureDisabled",
+                    "message": msg,
+                });
+                (StatusCode::NOT_FOUND, axum::Json(body)).into_response()
+            }
             AppError::InsufficientPermissions(perm) => {
                 let body = serde_json::json!({
                     "error": "InsufficientPermissions",
@@ -181,6 +190,7 @@ impl IntoResponse for AppError {
                     AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
                     AppError::PdsError(..)
                     | AppError::AuthDpopNonce(..)
+                    | AppError::FeatureDisabled(..)
                     | AppError::InsufficientPermissions(..)
                     | AppError::RateLimited { .. }
                     | AppError::ScriptError { .. } => unreachable!(),
@@ -276,6 +286,15 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn feature_disabled_returns_404() {
+        let (status, body) =
+            response_parts(AppError::FeatureDisabled("spaces not enabled".into())).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "FeatureDisabled");
+        assert_eq!(body["message"], "spaces not enabled");
+    }
+
+    #[tokio::test]
     async fn not_found_returns_404() {
         let (status, body) = response_parts(AppError::NotFound("no such thing".into())).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -342,6 +361,10 @@ mod tests {
         assert_eq!(
             AppError::Internal("z".into()).to_string(),
             "internal error: z"
+        );
+        assert_eq!(
+            AppError::FeatureDisabled("x".into()).to_string(),
+            "feature disabled: x"
         );
         assert_eq!(AppError::NotFound("w".into()).to_string(), "not found: w");
         assert_eq!(
