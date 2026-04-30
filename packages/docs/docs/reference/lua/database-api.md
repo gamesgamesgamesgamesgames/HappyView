@@ -95,7 +95,7 @@ Parameters are passed as an array and bound to `$1`, `$2`, etc. Supported parame
 
 ### SQL dialect
 
-Write SQL in **SQLite syntax** — HappyView translates it to Postgres at runtime if you're using Postgres. See [Database Setup](../../guides/database/database-setup.md) for details on what gets translated. If you need database-specific SQL that can't be translated, check `db.is_postgres()` at runtime.
+Write SQL in **SQLite syntax** — HappyView translates it to Postgres at runtime if you're using Postgres. See [Database Setup](../../guides/database/database-setup.md) for details on what gets translated. If you need database-specific SQL that can't be translated, check `db.backend()` at runtime.
 
 ### Column type mapping
 
@@ -108,3 +108,21 @@ Write SQL in **SQLite syntax** — HappyView translates it to Postgres at runtim
 | `TEXT` (JSON)          | `JSON`, `JSONB`        | table    |
 | `TEXT` (ISO 8601)      | `TIMESTAMPTZ`          | string (ISO 8601) |
 | Other                  | Other                  | string (fallback)  |
+
+## db.backend
+
+```lua
+local backend = db.backend()
+-- "sqlite" or "postgres"
+```
+
+Returns `"sqlite"` or `"postgres"`. Useful when you need database-specific SQL that can't be automatically translated.
+
+```lua
+if db.backend() == "postgres" then
+  db.raw("SELECT * FROM records WHERE record @> $1::jsonb", { json.encode({ status = "active" }) })
+else
+  -- SQLite fallback
+  db.raw("SELECT * FROM records WHERE json_extract(record, '$.status') = $1", { "active" })
+end
+```

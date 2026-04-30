@@ -59,8 +59,11 @@ Index hooks have access to:
 
 - **[Database API](../../reference/lua/database-api.md)** — `db.query`, `db.get`, `db.search`, `db.backlinks`, `db.count`, `db.raw`
 - **[HTTP API](../../reference/lua/http-api.md)** — `http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`, `http.head`
+- **[XRPC Lua API](../../reference/lua/xrpc-lua-api.md)** — `xrpc.query`, `xrpc.procedure`
+- **[atproto API](../../reference/lua/atproto-api.md)** — `atproto.resolve_service_endpoint`, `atproto.get_labels`, `atproto.get_labels_batch`
 - **[JSON API](../../reference/lua/json-api.md)** — `json.encode`, `json.decode`
 - **[Utility globals](../scripting.md#utility-globals)** — `log()`, `now()`, `TID()`, `toarray()`
+- **[Script variables](../../reference/admin/script-variables.md)** — `env` table with key-value pairs configured in the dashboard
 
 ## Error handling and retries
 
