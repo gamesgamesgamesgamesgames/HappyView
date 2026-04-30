@@ -19,8 +19,61 @@ pub(crate) async fn handle_procedure(
     lexicon: &crate::lexicon::ParsedLexicon,
 ) -> Result<Response, AppError> {
     if let Some(ref script) = lexicon.script {
+        let delegate_did = input
+            .get("delegateDid")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        if let Some(ref did) = delegate_did {
+            let client_key = claims
+                .client_key()
+                .ok_or_else(|| AppError::Auth("delegation requires DPoP authentication".into()))?;
+            let api_client_id = repo::get_dpop_client_id(state, client_key).await?;
+
+            let role = crate::delegation::db::get_delegate_role(
+                &state.db,
+                state.db_backend,
+                did,
+                claims.did(),
+            )
+            .await?
+            .ok_or_else(|| AppError::Forbidden("you are not a delegate of this account".into()))?;
+
+            if !role.can_write() {
+                return Err(AppError::Forbidden(
+                    "your role does not have write access to this account".into(),
+                ));
+            }
+
+            let stored_client_id =
+                crate::delegation::db::get_api_client_id(&state.db, state.db_backend, did)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::Internal("delegated account missing api_client_id".into())
+                    })?;
+
+            if api_client_id != stored_client_id {
+                return Err(AppError::Forbidden(
+                    "delegation is scoped to a different application".into(),
+                ));
+            }
+        }
+
+        let mut script_input = input.clone();
+        if let Some(obj) = script_input.as_object_mut() {
+            obj.remove("delegateDid");
+        }
+
         return crate::lua::execute_procedure_script(
-            state, method, claims, input, params, lexicon, script, None,
+            state,
+            method,
+            claims,
+            &script_input,
+            params,
+            lexicon,
+            script,
+            None,
+            delegate_did.as_deref(),
         )
         .await;
     }
@@ -40,6 +93,11 @@ pub(crate) async fn handle_procedure(
 
         let api_client_id = repo::get_dpop_client_id(state, client_key).await?;
 
+        let delegate_did = input
+            .get("delegateDid")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         return handle_dpop_procedure(
             state,
             claims,
@@ -48,6 +106,7 @@ pub(crate) async fn handle_procedure(
             &lexicon.action,
             &api_client_id,
             encryption_key,
+            delegate_did.as_deref(),
         )
         .await;
     }
@@ -295,18 +354,62 @@ async fn handle_dpop_procedure(
     action: &ProcedureAction,
     api_client_id: &str,
     encryption_key: &[u8; 32],
+    delegate_did: Option<&str>,
 ) -> Result<Response, AppError> {
+    // If delegating, verify the caller has write access and resolve the
+    // api_client_id that owns the delegated session.
+    let (target_did, effective_api_client_id) = if let Some(did) = delegate_did {
+        let role = crate::delegation::db::get_delegate_role(
+            &state.db,
+            state.db_backend,
+            did,
+            claims.did(),
+        )
+        .await?
+        .ok_or_else(|| AppError::Forbidden("you are not a delegate of this account".into()))?;
+
+        if !role.can_write() {
+            return Err(AppError::Forbidden(
+                "your role does not have write access to this account".into(),
+            ));
+        }
+
+        let stored_client_id =
+            crate::delegation::db::get_api_client_id(&state.db, state.db_backend, did)
+                .await?
+                .ok_or_else(|| {
+                    AppError::Internal("delegated account missing api_client_id".into())
+                })?;
+
+        if api_client_id != stored_client_id {
+            return Err(AppError::Forbidden(
+                "delegation is scoped to a different application".into(),
+            ));
+        }
+
+        (did, stored_client_id)
+    } else {
+        (claims.did(), api_client_id.to_string())
+    };
+
+    // Strip delegateDid from input — it's a control field, not record data
+    let mut input = input.clone();
+    if let Some(obj) = input.as_object_mut() {
+        obj.remove("delegateDid");
+    }
+
     let (xrpc_method, pds_body) = match action {
         ProcedureAction::Create => {
             let mut record = input.clone();
             if let Some(obj) = record.as_object_mut() {
                 obj.insert("$type".to_string(), json!(collection));
                 obj.remove("shouldPublish");
+                obj.remove("delegateDid");
             }
             (
                 "com.atproto.repo.createRecord",
                 json!({
-                    "repo": claims.did(),
+                    "repo": target_did,
                     "collection": collection,
                     "record": record,
                 }),
@@ -326,11 +429,12 @@ async fn handle_dpop_procedure(
                 obj.insert("$type".to_string(), json!(collection));
                 obj.remove("uri");
                 obj.remove("shouldPublish");
+                obj.remove("delegateDid");
             }
             (
                 "com.atproto.repo.putRecord",
                 json!({
-                    "repo": claims.did(),
+                    "repo": target_did,
                     "collection": collection,
                     "rkey": rkey,
                     "record": record,
@@ -349,7 +453,7 @@ async fn handle_dpop_procedure(
             (
                 "com.atproto.repo.deleteRecord",
                 json!({
-                    "repo": claims.did(),
+                    "repo": target_did,
                     "collection": collection,
                     "rkey": rkey,
                 }),
@@ -368,11 +472,12 @@ async fn handle_dpop_procedure(
                     obj.insert("$type".to_string(), json!(collection));
                     obj.remove("uri");
                     obj.remove("shouldPublish");
+                    obj.remove("delegateDid");
                 }
                 (
                     "com.atproto.repo.putRecord",
                     json!({
-                        "repo": claims.did(),
+                        "repo": target_did,
                         "collection": collection,
                         "rkey": rkey,
                         "record": record,
@@ -383,11 +488,12 @@ async fn handle_dpop_procedure(
                 if let Some(obj) = record.as_object_mut() {
                     obj.insert("$type".to_string(), json!(collection));
                     obj.remove("shouldPublish");
+                    obj.remove("delegateDid");
                 }
                 (
                     "com.atproto.repo.createRecord",
                     json!({
-                        "repo": claims.did(),
+                        "repo": target_did,
                         "collection": collection,
                         "record": record,
                     }),
@@ -403,8 +509,8 @@ async fn handle_dpop_procedure(
         encryption_key,
         &state.oauth,
         &state.config.plc_url,
-        api_client_id,
-        claims.did(),
+        &effective_api_client_id,
+        target_did,
         xrpc_method,
         &pds_body,
     )

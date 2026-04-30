@@ -20,7 +20,7 @@ pub async fn truncate_all(pool: &AnyPool) {
     match backend {
         DatabaseBackend::Postgres => {
             sqlx::query(
-                "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs, labeler_subscriptions, labels, instance_settings, domains, dpop_sessions, dpop_keys, api_clients RESTART IDENTITY CASCADE",
+                "TRUNCATE records, lexicons, backfill_jobs, users, user_permissions, api_keys, event_logs, script_variables, dead_letter_hooks, record_refs, labeler_subscriptions, labels, instance_settings, domains, dpop_sessions, dpop_keys, api_clients, delegated_accounts, account_delegates RESTART IDENTITY CASCADE",
             )
             .execute(pool)
             .await
@@ -28,6 +28,8 @@ pub async fn truncate_all(pool: &AnyPool) {
         }
         DatabaseBackend::Sqlite => {
             let tables = [
+                "account_delegates",
+                "delegated_accounts",
                 "dpop_sessions",
                 "dpop_keys",
                 "api_clients",

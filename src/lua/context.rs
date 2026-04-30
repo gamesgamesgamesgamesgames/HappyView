@@ -40,6 +40,7 @@ pub fn set_procedure_context(
     caller_did: &str,
     collection: &str,
     space: Option<&SpaceContext>,
+    delegate_did: Option<&str>,
 ) -> LuaResult<()> {
     let globals = lua.globals();
     globals.set("method", method.to_string())?;
@@ -47,6 +48,10 @@ pub fn set_procedure_context(
     globals.set("params", lua.to_value(params)?)?;
     globals.set("caller_did", caller_did.to_string())?;
     globals.set("collection", collection.to_string())?;
+    match delegate_did {
+        Some(did) => globals.set("delegate_did", did.to_string())?,
+        None => globals.set("delegate_did", mlua::Value::Nil)?,
+    }
     set_space_context(lua, space)?;
     Ok(())
 }
@@ -151,6 +156,7 @@ mod tests {
             "did:plc:test",
             "com.example.thing",
             None,
+            None,
         )
         .unwrap();
 
@@ -164,6 +170,7 @@ mod tests {
             globals.get::<String>("collection").unwrap(),
             "com.example.thing"
         );
+        assert!(globals.get::<mlua::Value>("delegate_did").unwrap().is_nil());
 
         let input_table: mlua::Table = globals.get("input").unwrap();
         assert_eq!(input_table.get::<String>("key").unwrap(), "val");
@@ -201,6 +208,34 @@ mod tests {
         let params_table: mlua::Table = globals.get("params").unwrap();
         assert_eq!(params_table.get::<String>("limit").unwrap(), "10");
         assert_eq!(params_table.get::<String>("cursor").unwrap(), "abc");
+    }
+
+    #[test]
+    fn procedure_context_with_delegate_did() {
+        let lua = create_sandbox().unwrap();
+        let input = json!({"key": "val"});
+        let params = HashMap::new();
+        set_procedure_context(
+            &lua,
+            "com.example.doThing",
+            &input,
+            &params,
+            "did:plc:caller",
+            "com.example.thing",
+            None,
+            Some("did:plc:delegate"),
+        )
+        .unwrap();
+
+        let globals = lua.globals();
+        assert_eq!(
+            globals.get::<String>("delegate_did").unwrap(),
+            "did:plc:delegate"
+        );
+        assert_eq!(
+            globals.get::<String>("caller_did").unwrap(),
+            "did:plc:caller"
+        );
     }
 
     #[test]
