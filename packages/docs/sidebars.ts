@@ -90,6 +90,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: "doc",
+              id: "guides/features/attestation-signing",
+              label: "Attestation Signing",
+            },
+            {
+              type: "doc",
               id: "guides/features/labelers",
               label: "Labelers",
             },
@@ -193,6 +198,16 @@ const sidebars: SidebarsConfig = {
                   type: "doc",
                   id: "guides/scripting/complex-mutations",
                   label: "Complex Mutations",
+                },
+                {
+                  type: "doc",
+                  id: "guides/scripting/signed-record",
+                  label: "Signed Record",
+                },
+                {
+                  type: "doc",
+                  id: "guides/scripting/signed-record-verify",
+                  label: "Verify Signed Record",
                 },
                 {
                   type: "doc",
@@ -392,6 +407,11 @@ const sidebars: SidebarsConfig = {
               type: "doc",
               id: "reference/lua/http-api",
               label: "HTTP API",
+            },
+            {
+              type: "doc",
+              id: "reference/lua/xrpc-lua-api",
+              label: "XRPC Lua API",
             },
             {
               type: "doc",
