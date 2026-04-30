@@ -27,18 +27,30 @@ pub struct AvatarBlob {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DidDocument {
+pub struct DidDocument {
     #[serde(default)]
-    also_known_as: Vec<String>,
+    pub also_known_as: Vec<String>,
     #[serde(default)]
-    service: Vec<DidService>,
+    pub verification_method: Vec<DidVerificationMethod>,
+    #[serde(default)]
+    pub service: Vec<DidService>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DidService {
-    id: String,
-    service_endpoint: String,
+pub struct DidVerificationMethod {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub method_type: String,
+    #[serde(default)]
+    pub public_key_multibase: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DidService {
+    pub id: String,
+    pub service_endpoint: String,
 }
 
 #[derive(Deserialize)]
@@ -117,7 +129,7 @@ pub async fn resolve_labeler_endpoint(
 }
 
 /// Fetch a DID document from the PLC directory or via `did:web` resolution.
-async fn resolve_did_document(
+pub async fn resolve_did_document(
     http: &reqwest::Client,
     plc_url: &str,
     did: &str,

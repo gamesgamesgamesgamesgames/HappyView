@@ -2,7 +2,37 @@ use mlua::{Lua, LuaSerdeExt, Result as LuaResult};
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// Optional space context passed to Lua scripts when the request is space-scoped.
+#[derive(Debug, Clone)]
+pub struct SpaceContext {
+    pub space_uri: String,
+    pub space_id: String,
+    pub owner_did: String,
+    pub type_nsid: String,
+    pub skey: String,
+}
+
+fn set_space_context(lua: &Lua, space: Option<&SpaceContext>) -> LuaResult<()> {
+    let globals = lua.globals();
+    match space {
+        Some(ctx) => {
+            let table = lua.create_table()?;
+            table.set("space_uri", ctx.space_uri.as_str())?;
+            table.set("space_id", ctx.space_id.as_str())?;
+            table.set("owner_did", ctx.owner_did.as_str())?;
+            table.set("type_nsid", ctx.type_nsid.as_str())?;
+            table.set("skey", ctx.skey.as_str())?;
+            globals.set("space", table)?;
+        }
+        None => {
+            globals.set("space", mlua::Value::Nil)?;
+        }
+    }
+    Ok(())
+}
+
 /// Set global context variables for a procedure script.
+#[allow(clippy::too_many_arguments)]
 pub fn set_procedure_context(
     lua: &Lua,
     method: &str,
@@ -10,6 +40,8 @@ pub fn set_procedure_context(
     params: &HashMap<String, Value>,
     caller_did: &str,
     collection: &str,
+    space: Option<&SpaceContext>,
+    delegate_did: Option<&str>,
 ) -> LuaResult<()> {
     let globals = lua.globals();
     globals.set("method", method.to_string())?;
@@ -17,6 +49,11 @@ pub fn set_procedure_context(
     globals.set("params", lua.to_value(params)?)?;
     globals.set("caller_did", caller_did.to_string())?;
     globals.set("collection", collection.to_string())?;
+    match delegate_did {
+        Some(did) => globals.set("delegate_did", did.to_string())?,
+        None => globals.set("delegate_did", mlua::Value::Nil)?,
+    }
+    set_space_context(lua, space)?;
     Ok(())
 }
 
@@ -27,6 +64,7 @@ pub fn set_query_context(
     params: &HashMap<String, Value>,
     collection: &str,
     caller_did: Option<&str>,
+    space: Option<&SpaceContext>,
 ) -> LuaResult<()> {
     let globals = lua.globals();
     globals.set("method", method.to_string())?;
@@ -36,6 +74,7 @@ pub fn set_query_context(
         Some(did) => globals.set("caller_did", did.to_string())?,
         None => globals.set("caller_did", mlua::Value::Nil)?,
     }
+    set_space_context(lua, space)?;
     Ok(())
 }
 
@@ -117,6 +156,8 @@ mod tests {
             &params,
             "did:plc:test",
             "com.example.thing",
+            None,
+            None,
         )
         .unwrap();
 
@@ -130,6 +171,7 @@ mod tests {
             globals.get::<String>("collection").unwrap(),
             "com.example.thing"
         );
+        assert!(globals.get::<mlua::Value>("delegate_did").unwrap().is_nil());
 
         let input_table: mlua::Table = globals.get("input").unwrap();
         assert_eq!(input_table.get::<String>("key").unwrap(), "val");
@@ -150,6 +192,7 @@ mod tests {
             &params,
             "com.example.thing",
             Some("did:plc:test"),
+            None,
         )
         .unwrap();
 
@@ -166,6 +209,34 @@ mod tests {
         let params_table: mlua::Table = globals.get("params").unwrap();
         assert_eq!(params_table.get::<String>("limit").unwrap(), "10");
         assert_eq!(params_table.get::<String>("cursor").unwrap(), "abc");
+    }
+
+    #[test]
+    fn procedure_context_with_delegate_did() {
+        let lua = create_sandbox().unwrap();
+        let input = json!({"key": "val"});
+        let params = HashMap::new();
+        set_procedure_context(
+            &lua,
+            "com.example.doThing",
+            &input,
+            &params,
+            "did:plc:caller",
+            "com.example.thing",
+            None,
+            Some("did:plc:delegate"),
+        )
+        .unwrap();
+
+        let globals = lua.globals();
+        assert_eq!(
+            globals.get::<String>("delegate_did").unwrap(),
+            "did:plc:delegate"
+        );
+        assert_eq!(
+            globals.get::<String>("caller_did").unwrap(),
+            "did:plc:caller"
+        );
     }
 
     #[test]
@@ -191,6 +262,58 @@ mod tests {
         let globals = lua.globals();
         let env: mlua::Table = globals.get("env").unwrap();
         assert!(env.get::<mlua::Value>("anything").unwrap().is_nil());
+    }
+
+    #[test]
+    fn query_context_with_space() {
+        let lua = create_sandbox().unwrap();
+        let params = HashMap::new();
+        let space = SpaceContext {
+            space_uri: "ats://did:plc:owner/com.example.forum/main".into(),
+            space_id: "space-123".into(),
+            owner_did: "did:plc:owner".into(),
+            type_nsid: "com.example.forum".into(),
+            skey: "main".into(),
+        };
+        set_query_context(
+            &lua,
+            "com.example.listPosts",
+            &params,
+            "com.example.forum.post",
+            Some("did:plc:test"),
+            Some(&space),
+        )
+        .unwrap();
+
+        let globals = lua.globals();
+        let space_table: mlua::Table = globals.get("space").unwrap();
+        assert_eq!(
+            space_table.get::<String>("space_uri").unwrap(),
+            "ats://did:plc:owner/com.example.forum/main"
+        );
+        assert_eq!(space_table.get::<String>("space_id").unwrap(), "space-123");
+        assert_eq!(
+            space_table.get::<String>("owner_did").unwrap(),
+            "did:plc:owner"
+        );
+    }
+
+    #[test]
+    fn query_context_without_space() {
+        let lua = create_sandbox().unwrap();
+        let params = HashMap::new();
+        set_query_context(
+            &lua,
+            "com.example.listThings",
+            &params,
+            "com.example.thing",
+            None,
+            None,
+        )
+        .unwrap();
+
+        let globals = lua.globals();
+        assert!(globals.get::<mlua::Value>("space").unwrap().is_nil());
     }
 
     #[test]

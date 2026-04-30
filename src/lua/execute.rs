@@ -33,6 +33,7 @@ async fn load_env_vars(db: &sqlx::AnyPool, backend: DatabaseBackend) -> HashMap<
 }
 
 /// Execute a Lua script for a procedure endpoint.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_procedure_script(
     state: &AppState,
     method: &str,
@@ -41,6 +42,8 @@ pub async fn execute_procedure_script(
     params: &std::collections::HashMap<String, Value>,
     lexicon: &ParsedLexicon,
     script: &str,
+    space_ctx: Option<&context::SpaceContext>,
+    delegate_did: Option<&str>,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
     let backend = state.db_backend;
@@ -251,7 +254,13 @@ pub async fn execute_procedure_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) = record::register_record_api(&lua, state_arc, claims_arc, pds_auth_arc) {
+    if let Err(e) = record::register_record_api(
+        &lua,
+        state_arc,
+        claims_arc,
+        pds_auth_arc,
+        delegate_did.map(|s| s.to_string()),
+    ) {
         let error_message = format!("failed to register Record API: {e}");
         log_event(
             &state.db,
@@ -275,9 +284,16 @@ pub async fn execute_procedure_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) =
-        context::set_procedure_context(&lua, method, input, params, claims.did(), collection)
-    {
+    if let Err(e) = context::set_procedure_context(
+        &lua,
+        method,
+        input,
+        params,
+        claims.did(),
+        collection,
+        space_ctx,
+        delegate_did,
+    ) {
         let error_message = format!("failed to set context: {e}");
         log_event(
             &state.db,
@@ -503,6 +519,7 @@ pub async fn execute_query_script(
     lexicon: &ParsedLexicon,
     script: &str,
     claims: Option<&Claims>,
+    space_ctx: Option<&context::SpaceContext>,
 ) -> Result<Response, AppError> {
     let start = Instant::now();
     let backend = state.db_backend;
@@ -632,9 +649,14 @@ pub async fn execute_query_script(
         return Err(AppError::Internal(error_message));
     }
 
-    if let Err(e) =
-        context::set_query_context(&lua, method, params, collection, claims.map(|c| c.did()))
-    {
+    if let Err(e) = context::set_query_context(
+        &lua,
+        method,
+        params,
+        collection,
+        claims.map(|c| c.did()),
+        space_ctx,
+    ) {
         let error_message = format!("failed to set context: {e}");
         log_event(
             &state.db,

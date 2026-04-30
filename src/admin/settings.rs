@@ -17,6 +17,7 @@ use super::types::{SettingEntry, UpsertSettingBody};
 const ENV_FALLBACKS: &[(&str, &str)] = &[
     ("app_name", "APP_NAME"),
     ("client_uri", "CLIENT_URI"),
+    ("feature.spaces_enabled", "FEATURE_SPACES_ENABLED"),
     ("logo_uri", "LOGO_URI"),
     ("tos_uri", "TOS_URI"),
     ("policy_uri", "POLICY_URI"),

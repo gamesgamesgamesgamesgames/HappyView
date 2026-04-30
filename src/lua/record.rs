@@ -23,11 +23,15 @@ const INTERNAL_FIELDS: &[&str] = &[
 
 /// Register the `Record` global constructor and static methods.
 /// Only registered for procedure scripts (not queries).
+///
+/// When `delegate_did` is `Some`, record writes default to the delegate's repo
+/// instead of the caller's DID. Scripts can still override via `record:set_repo()`.
 pub fn register_record_api(
     lua: &Lua,
     state: Arc<AppState>,
     claims: Arc<Claims>,
     pds_auth: Arc<PdsAuth>,
+    delegate_did: Option<String>,
 ) -> LuaResult<()> {
     // -- methods table (shared by all Record instances) --
     let methods = lua.create_table()?;
@@ -37,16 +41,21 @@ pub fn register_record_api(
         let state = state.clone();
         let claims = claims.clone();
         let pds_auth = pds_auth.clone();
+        let delegate_did = delegate_did.clone();
         let save_fn = lua.create_async_function(move |lua, this: mlua::Table| {
             let state = state.clone();
             let claims = claims.clone();
             let pds_auth = pds_auth.clone();
+            let delegate_did = delegate_did.clone();
             async move {
                 let backend = state.db_backend;
                 let collection: String = this.raw_get("_collection")?;
                 let schema: mlua::Value = this.raw_get("_schema")?;
                 let repo_override: Option<String> = this.raw_get("_repo_override")?;
-                let repo = repo_override.as_deref().unwrap_or_else(|| claims.did());
+                let repo = repo_override
+                    .as_deref()
+                    .or(delegate_did.as_deref())
+                    .unwrap_or_else(|| claims.did());
 
                 // Validate required fields against schema
                 if let mlua::Value::Table(ref schema_table) = schema {
@@ -207,10 +216,12 @@ pub fn register_record_api(
         let state = state.clone();
         let claims = claims.clone();
         let pds_auth = pds_auth.clone();
+        let delegate_did = delegate_did.clone();
         let delete_fn = lua.create_async_function(move |_lua, this: mlua::Table| {
             let state = state.clone();
             let claims = claims.clone();
             let pds_auth = pds_auth.clone();
+            let delegate_did = delegate_did.clone();
             async move {
                 let backend = state.db_backend;
                 let uri: String = this.raw_get::<Option<String>>("_uri")?.ok_or_else(|| {
@@ -218,7 +229,10 @@ pub fn register_record_api(
                 })?;
                 let collection: String = this.raw_get("_collection")?;
                 let repo_override: Option<String> = this.raw_get("_repo_override")?;
-                let repo = repo_override.as_deref().unwrap_or_else(|| claims.did());
+                let repo = repo_override
+                    .as_deref()
+                    .or(delegate_did.as_deref())
+                    .unwrap_or_else(|| claims.did());
 
                 let rkey = uri
                     .split('/')
@@ -439,11 +453,13 @@ pub fn register_record_api(
         let state = state.clone();
         let claims = claims.clone();
         let pds_auth = pds_auth.clone();
+        let delegate_did = delegate_did.clone();
         let save_all_fn =
             lua.create_async_function(move |lua, records_table: mlua::Table| {
                 let state = state.clone();
                 let claims = claims.clone();
                 let pds_auth = pds_auth.clone();
+                let delegate_did = delegate_did.clone();
                 async move {
                     let backend = state.db_backend;
                     // Extract save data from each record (sync)
@@ -472,13 +488,17 @@ pub fn register_record_api(
                         let state = state.clone();
                         let claims = claims.clone();
                         let pds_auth = pds_auth.clone();
+                        let delegate_did = delegate_did.clone();
                         let collection = collection.clone();
                         let existing_uri = existing_uri.clone();
                         let rkey = rkey.clone();
                         let repo_override = repo_override.clone();
                         let data = data.clone();
                         async move {
-                            let repo = repo_override.as_deref().unwrap_or_else(|| claims.did());
+                            let repo = repo_override
+                                .as_deref()
+                                .or(delegate_did.as_deref())
+                                .unwrap_or_else(|| claims.did());
                             if let Some(ref uri) = existing_uri {
                                 let rkey = uri
                                     .split('/')

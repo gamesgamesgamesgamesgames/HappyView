@@ -62,6 +62,12 @@ pub fn router(state: AppState) -> Router {
     let serve_dir = ServeDir::new(&static_dir).not_found_service(spa_fallback);
 
     let domain_routes = Router::new()
+        .merge(
+            crate::spaces::routes::space_routes().layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                crate::feature_middleware::require_spaces,
+            )),
+        )
         .nest("/auth", crate::auth::routes::routes())
         .nest("/external-auth", crate::external_auth::routes())
         .nest("/oauth", crate::oauth::routes::routes())
@@ -87,6 +93,35 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/xrpc/dev.happyview.deleteApiClient",
             post(crate::dev_happyview::delete_api_client),
+        )
+        // Delegation
+        .route(
+            "/xrpc/dev.happyview.delegation.linkAccount",
+            post(crate::delegation::link_account::link_account),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.unlinkAccount",
+            post(crate::delegation::unlink_account::unlink_account),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.addDelegate",
+            post(crate::delegation::add_delegate::add_delegate),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.removeDelegate",
+            post(crate::delegation::remove_delegate::remove_delegate),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.listAccounts",
+            get(crate::delegation::list_accounts::list_accounts),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.getAccount",
+            get(crate::delegation::get_account::get_account),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.listDelegates",
+            get(crate::delegation::list_delegates::list_delegates),
         )
         // Catch-all for dynamically registered lexicons
         .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
@@ -158,6 +193,13 @@ async fn config_endpoint(
         _ => env!("CARGO_PKG_VERSION"),
     };
 
+    let spaces_enabled = crate::feature_flags::is_enabled(
+        pool,
+        crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+        backend,
+    )
+    .await;
+
     Json(serde_json::json!({
         "public_url": domain_url,
         "version": version,
@@ -169,6 +211,9 @@ async fn config_endpoint(
         "default_rate_limit_refill_rate": state.config.default_rate_limit_refill_rate,
         "app_name": app_name,
         "logo_url": logo_url,
+        "features": {
+            "spaces": spaces_enabled,
+        },
     }))
 }
 
