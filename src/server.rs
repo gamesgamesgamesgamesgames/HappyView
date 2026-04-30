@@ -62,7 +62,12 @@ pub fn router(state: AppState) -> Router {
     let serve_dir = ServeDir::new(&static_dir).not_found_service(spa_fallback);
 
     let domain_routes = Router::new()
-        .merge(crate::spaces::routes::space_routes())
+        .merge(
+            crate::spaces::routes::space_routes().layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                crate::feature_middleware::require_spaces,
+            )),
+        )
         .nest("/auth", crate::auth::routes::routes())
         .nest("/external-auth", crate::external_auth::routes())
         .nest("/oauth", crate::oauth::routes::routes())
@@ -190,6 +195,13 @@ async fn config_endpoint(
         _ => env!("CARGO_PKG_VERSION"),
     };
 
+    let spaces_enabled = crate::feature_flags::is_enabled(
+        pool,
+        crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+        backend,
+    )
+    .await;
+
     Json(serde_json::json!({
         "public_url": domain_url,
         "version": version,
@@ -201,6 +213,9 @@ async fn config_endpoint(
         "default_rate_limit_refill_rate": state.config.default_rate_limit_refill_rate,
         "app_name": app_name,
         "logo_url": logo_url,
+        "features": {
+            "spaces": spaces_enabled,
+        },
     }))
 }
 

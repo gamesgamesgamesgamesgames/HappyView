@@ -32,6 +32,7 @@ fn set_space_context(lua: &Lua, space: Option<&SpaceContext>) -> LuaResult<()> {
 }
 
 /// Set global context variables for a procedure script.
+#[allow(clippy::too_many_arguments)]
 pub fn set_procedure_context(
     lua: &Lua,
     method: &str,

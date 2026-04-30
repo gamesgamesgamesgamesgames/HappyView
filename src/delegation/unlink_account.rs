@@ -55,17 +55,16 @@ pub async fn unlink_account(
     db::delete_delegated_account(&state.db, state.db_backend, account_did).await?;
 
     // Delete the DPoP session for the target account using the stored api_client_id
-    if let Some(api_client_id) = stored_api_client_id {
-        if let Err(e) = crate::oauth::sessions::delete_dpop_session(
+    if let Some(api_client_id) = stored_api_client_id
+        && let Err(e) = crate::oauth::sessions::delete_dpop_session(
             &state.db,
             state.db_backend,
             &api_client_id,
             account_did,
         )
         .await
-        {
-            tracing::warn!(account_did, %e, "failed to clean up DPoP session on unlink");
-        }
+    {
+        tracing::warn!(account_did, %e, "failed to clean up DPoP session on unlink");
     }
 
     log_event(
