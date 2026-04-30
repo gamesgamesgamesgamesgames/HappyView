@@ -89,6 +89,35 @@ pub fn router(state: AppState) -> Router {
             "/xrpc/dev.happyview.deleteApiClient",
             post(crate::dev_happyview::delete_api_client),
         )
+        // Delegation
+        .route(
+            "/xrpc/dev.happyview.delegation.linkAccount",
+            post(crate::delegation::link_account::link_account),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.unlinkAccount",
+            post(crate::delegation::unlink_account::unlink_account),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.addDelegate",
+            post(crate::delegation::add_delegate::add_delegate),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.removeDelegate",
+            post(crate::delegation::remove_delegate::remove_delegate),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.listAccounts",
+            get(crate::delegation::list_accounts::list_accounts),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.getAccount",
+            get(crate::delegation::get_account::get_account),
+        )
+        .route(
+            "/xrpc/dev.happyview.delegation.listDelegates",
+            get(crate::delegation::list_delegates::list_delegates),
+        )
         // Catch-all for dynamically registered lexicons
         .route("/xrpc/{method}", get(xrpc::xrpc_get).post(xrpc::xrpc_post))
         .route("/config", get(config_endpoint))
