@@ -43,22 +43,25 @@ These globals are set automatically before `handle()` is called.
 
 ### Procedure globals
 
-| Global       | Type   | Description                                             |
-| ------------ | ------ | ------------------------------------------------------- |
-| `method`     | string | The XRPC method name (e.g. `xyz.statusphere.setStatus`) |
-| `input`      | table  | Parsed JSON request body                                |
-| `caller_did` | string | DID of the authenticated user                           |
-| `collection` | string | Target collection NSID                                  |
+| Global         | Type    | Description                                             |
+| -------------- | ------- | ------------------------------------------------------- |
+| `method`       | string  | The XRPC method name (e.g. `xyz.statusphere.setStatus`) |
+| `input`        | table   | Parsed JSON request body                                |
+| `params`       | table   | Query string parameters                                 |
+| `caller_did`   | string  | DID of the authenticated user                           |
+| `collection`   | string  | Target collection NSID                                  |
+| `delegate_did` | string? | DID of the delegated account, if using write delegation |
+| `env`          | table   | Script variables configured in the dashboard            |
 
 ### Query globals
 
-| Global       | Type   | Description                                      |
-| ------------ | ------ | ------------------------------------------------ |
-| `method`     | string | The XRPC method name                             |
-| `params`     | table  | Query string parameters (all values are strings) |
-| `collection` | string | Target collection NSID                           |
-
-Queries are unauthenticated: there is no `caller_did` or `input`.
+| Global       | Type    | Description                                      |
+| ------------ | ------- | ------------------------------------------------ |
+| `method`     | string  | The XRPC method name                             |
+| `params`     | table   | Query string parameters (all values are strings) |
+| `collection` | string  | Target collection NSID                           |
+| `caller_did` | string? | DID of the authenticated user (nil if unauthenticated) |
+| `env`        | table   | Script variables configured in the dashboard     |
 
 ## Utility globals
 
@@ -127,11 +130,24 @@ local resp = http.get("https://api.example.com/data")
 local data = json.decode(resp.body)
 ```
 
+## XRPC Lua API
+
+The `xrpc` table lets scripts call other XRPC endpoints — both local and proxied. Available in both queries and procedures.
+
+See the full [XRPC Lua API reference](../reference/lua/xrpc-lua-api.md) for `xrpc.query` and `xrpc.procedure`.
+
+Quick example:
+
+```lua
+local resp = xrpc.query("xyz.statusphere.listStatuses", { limit = 5 })
+local data = json.decode(resp.body)
+```
+
 ## atproto API
 
-The `atproto` table provides atproto utility functions like DID resolution and label queries.
+The `atproto` table provides atproto utility functions like DID resolution, label queries, and record signing.
 
-See the full [atproto API reference](../reference/lua/atproto-api.md) for `atproto.resolve_service_endpoint`, `atproto.get_labels`, and `atproto.get_labels_batch`.
+See the full [atproto API reference](../reference/lua/atproto-api.md) for `atproto.resolve_service_endpoint`, `atproto.get_labels`, `atproto.get_labels_batch`, `atproto.sign`, and `atproto.verify_signature`.
 
 ## JSON API
 
@@ -181,6 +197,7 @@ See the example script references for complete, ready-to-use scripts:
 - [Paginated list](scripting/paginated-list.md) — list records with cursor-based pagination and DID filtering
 - [List or fetch](scripting/list-or-fetch.md) — combined single-record lookup and paginated listing
 - [Expanded query](scripting/expanded-query.md) — list statuses with user profiles in a single response
+- [Verify signed record](scripting/signed-record-verify.md) — fetch a record and verify its attestation signature
 
 **Procedures:**
 - [Create a record](scripting/create-record.md) — simple write that saves input as a record
@@ -190,6 +207,7 @@ See the example script references for complete, ready-to-use scripts:
 - [Sidecar records](scripting/sidecar-records.md) — create linked records across collections with a shared rkey
 - [Cascading delete](scripting/cascading-delete.md) — delete a record and all related records
 - [Complex mutations](scripting/complex-mutations.md) — load, transform, and save a record with multiple field changes
+- [Signed record](scripting/signed-record.md) — save a record with an attestation signature
 
 **Index Hooks:**
 - [Algolia sync](scripting/algolia-sync.md) — push records to an Algolia search index on create/update/delete
