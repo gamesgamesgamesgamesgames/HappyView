@@ -2,9 +2,7 @@ pub mod auth;
 pub mod credential;
 pub mod db;
 pub mod members;
-pub mod notifications;
 pub mod routes;
-pub mod sync;
 pub mod types;
 
 use crate::error::AppError;
