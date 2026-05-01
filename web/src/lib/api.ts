@@ -338,6 +338,25 @@ export function deleteLogo() {
   return apiFetch("/admin/settings/logo", { method: "DELETE" })
 }
 
+// Feature Flags
+export type FeatureFlag = {
+  key: string
+  name: string
+  description: string
+  enabled: boolean
+}
+
+export function getFeatureFlags() {
+  return apiFetch<FeatureFlag[]>("/admin/feature-flags")
+}
+
+export function setFeatureFlag(key: string, enabled: boolean) {
+  if (enabled) {
+    return upsertSetting(key, "true")
+  }
+  return deleteSetting(key)
+}
+
 // Proxy config
 export type ProxyConfig = {
   mode: "disabled" | "open" | "allowlist" | "blocklist"
