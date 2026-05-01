@@ -139,47 +139,6 @@ pub struct SpaceInvite {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SyncStatus {
-    Pending,
-    Syncing,
-    Synced,
-    Error,
-}
-
-impl SyncStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SyncStatus::Pending => "pending",
-            SyncStatus::Syncing => "syncing",
-            SyncStatus::Synced => "synced",
-            SyncStatus::Error => "error",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "pending" => Some(SyncStatus::Pending),
-            "syncing" => Some(SyncStatus::Syncing),
-            "synced" => Some(SyncStatus::Synced),
-            "error" => Some(SyncStatus::Error),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpaceSyncState {
-    pub id: String,
-    pub space_id: String,
-    pub member_did: String,
-    pub cursor: Option<String>,
-    pub last_synced_at: Option<String>,
-    pub status: SyncStatus,
-    pub error: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

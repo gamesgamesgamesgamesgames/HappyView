@@ -146,16 +146,6 @@ struct RefreshCredentialInput {
     credential: String,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WriteNotificationInput {
-    space_uri: String,
-    author_did: String,
-    collection: String,
-    rkey: String,
-    action: crate::spaces::notifications::WriteAction,
-}
-
 // ---------------------------------------------------------------------------
 // Route registration
 // ---------------------------------------------------------------------------
@@ -207,11 +197,6 @@ pub fn space_routes() -> Router<AppState> {
         .route(
             &format!("/xrpc/{NS}.space.refreshCredential"),
             post(refresh_credential),
-        )
-        // Notifications
-        .route(
-            &format!("/xrpc/{NS}.space.writeNotification"),
-            post(write_notification),
         )
 }
 
@@ -947,36 +932,4 @@ async fn refresh_credential(
         "credential": issued.token,
         "expiresAt": issued.expires_at,
     })))
-}
-
-// ---------------------------------------------------------------------------
-// Notification handlers
-// ---------------------------------------------------------------------------
-
-async fn write_notification(
-    State(state): State<AppState>,
-    xrpc_claims: XrpcClaims,
-    Json(input): Json<WriteNotificationInput>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
-    require_space_admin(&state, &space, claims.did()).await?;
-
-    let notification = crate::spaces::notifications::WriteNotification {
-        space_uri: input.space_uri,
-        author_did: input.author_did,
-        collection: input.collection,
-        rkey: input.rkey,
-        action: input.action,
-    };
-
-    crate::spaces::notifications::handle_write_notification(
-        &state.db,
-        state.db_backend,
-        &space.id,
-        &notification,
-    )
-    .await?;
-
-    Ok(Json(serde_json::json!({ "success": true })))
 }
