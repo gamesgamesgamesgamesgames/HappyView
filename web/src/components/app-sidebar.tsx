@@ -19,6 +19,7 @@ import {
   IconArrowUpCircle,
   IconArrowsShuffle,
   IconSkull,
+  IconFlask,
 } from "@tabler/icons-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -122,6 +123,12 @@ const systemItems: NavItem[] = [
     url: "/dashboard/events",
     icon: IconClipboardList,
     requiredPermissions: ["events:read"],
+  },
+  {
+    title: "Experiments",
+    url: "/dashboard/settings/experiments",
+    icon: IconFlask,
+    requiredPermissions: ["settings:manage"],
   },
 ];
 
