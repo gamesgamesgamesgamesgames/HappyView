@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle,
   Copy,
   Check,
   Trash2,
@@ -22,6 +21,7 @@ import type {
   ApiClientSummary,
   CreateApiClientResponse,
 } from "@/types/api-clients";
+import { ScopeBuilder } from "@/components/scope-builder";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -270,7 +270,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   const [clientUri, setClientUri] = useState("");
   const [redirectUris, setRedirectUris] = useState<string[]>([""]);
   const [allowedOrigins, setAllowedOrigins] = useState<string[]>([""]);
-  const [scopes, setScopes] = useState<string[]>([""]);
+  const [scopes, setScopes] = useState<string>("atproto");
   const [rateLimitEnabled, setRateLimitEnabled] = useState(true);
   const [rateLimitCapacity, setRateLimitCapacity] = useState(
     String(config.default_rate_limit_capacity),
@@ -292,7 +292,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
       setClientUri("");
       setRedirectUris([""]);
       setAllowedOrigins([""]);
-      setScopes([""]);
+      setScopes("atproto");
       setRateLimitEnabled(true);
       setRateLimitCapacity(String(config.default_rate_limit_capacity));
       setRateLimitRefillRate(String(config.default_rate_limit_refill_rate));
@@ -314,8 +314,6 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
     const extraUris = redirectUris.map((u) => u.trim()).filter(Boolean);
     const allUris = [happyviewCallbackUri, ...extraUris];
-    const extraScopes = scopes.map((s) => s.trim()).filter(Boolean);
-    const allScopes = ["atproto", ...extraScopes].join(" ");
 
     if (!name.trim() || !clientIdUrl.trim() || !clientUri.trim()) {
       setError("Name, Client ID URL, and Client URI are required.");
@@ -334,7 +332,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
         client_id_url: clientIdUrl.trim(),
         client_uri: clientUri.trim(),
         redirect_uris: allUris,
-        scopes: allScopes,
+        scopes: scopes,
         client_type: clientType,
         allowed_origins:
           clientType === "public" && filteredOrigins.length > 0
@@ -358,7 +356,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
       <ResponsiveDialogTrigger asChild>
         <Button>Create API Client</Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent>
+      <ResponsiveDialogContent className="sm:max-w-2xl">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>
             {created ? "API Client Created" : "Create API Client"}
@@ -451,9 +449,9 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+          <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto min-w-0">
             {error && <p className="text-destructive text-sm">{error}</p>}
-            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
               <legend className="text-sm font-medium px-1">Client Type</legend>
               <RadioGroup
                 value={clientType}
@@ -502,7 +500,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 </div>
               </RadioGroup>
             </fieldset>
-            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
               <legend className="text-sm font-medium px-1">Application</legend>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="client-name">Name</Label>
@@ -537,7 +535,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 />
               </div>
             </fieldset>
-            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
               <legend className="text-sm font-medium px-1">
                 Redirect URIs
               </legend>
@@ -554,7 +552,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
               />
             </fieldset>
             {clientType === "public" && (
-              <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+              <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
                 <legend className="text-sm font-medium px-1">
                   Allowed Origins
                 </legend>
@@ -570,40 +568,16 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 />
               </fieldset>
             )}
-            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
               <legend className="text-sm font-medium px-1">Scopes</legend>
               <p className="text-muted-foreground text-xs">
                 OAuth scopes this client is allowed to request. The{" "}
                 <code className="bg-muted px-1 rounded">atproto</code> scope is
                 always required.
               </p>
-              <MultiInput
-                id="scopes"
-                values={scopes}
-                onChange={setScopes}
-                placeholder="scope.name"
-                readonlyValues={["atproto"]}
-              />
-              {scopes.some((s) => s.trim() === "transition:generic") && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
-                  <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-500">
-                    <code>transition:generic</code> grants broad write access to
-                    any collection. Prefer specific scopes or{" "}
-                    <a
-                      href="https://docs.happyview.dev/guides/features/api-clients#permission-sets"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      permission sets
-                    </a>
-                    .
-                  </p>
-                </div>
-              )}
+              <ScopeBuilder value={scopes} onChange={setScopes} />
             </fieldset>
-            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
               <legend className="text-sm font-medium px-1">
                 Rate Limiting
               </legend>
@@ -690,12 +664,6 @@ function EditApiClientDialog({
     return filtered.length > 0 ? [...filtered, ""] : [""];
   }
 
-  // Parse existing scopes: separate "atproto" from user-added ones
-  function parseScopes(scopeStr: string): string[] {
-    const parts = scopeStr.split(/\s+/).filter((s) => s && s !== "atproto");
-    return parts.length > 0 ? [...parts, ""] : [""];
-  }
-
   function parseAllowedOrigins(origins: string[] | null): string[] {
     if (!origins || origins.length === 0) return [""];
     return [...origins, ""];
@@ -708,7 +676,7 @@ function EditApiClientDialog({
   const [allowedOrigins, setAllowedOrigins] = useState<string[]>(
     parseAllowedOrigins(client.allowed_origins),
   );
-  const [scopes, setScopes] = useState<string[]>(parseScopes(client.scopes));
+  const [scopes, setScopes] = useState<string>(client.scopes);
   const [isActive, setIsActive] = useState(client.is_active);
   const [rateLimitEnabled, setRateLimitEnabled] = useState(
     client.rate_limit_capacity != null && client.rate_limit_refill_rate != null,
@@ -731,7 +699,7 @@ function EditApiClientDialog({
       setName(client.name);
       setRedirectUris(parseRedirectUris(client.redirect_uris));
       setAllowedOrigins(parseAllowedOrigins(client.allowed_origins));
-      setScopes(parseScopes(client.scopes));
+      setScopes(client.scopes);
       setIsActive(client.is_active);
       setRateLimitEnabled(
         client.rate_limit_capacity != null &&
@@ -762,8 +730,6 @@ function EditApiClientDialog({
     try {
       const extraUris = redirectUris.map((u) => u.trim()).filter(Boolean);
       const allUris = [happyviewCallbackUri, ...extraUris];
-      const extraScopes = scopes.map((s) => s.trim()).filter(Boolean);
-      const allScopes = ["atproto", ...extraScopes].join(" ");
 
       const filteredOrigins = allowedOrigins
         .map((o) => o.trim())
@@ -771,7 +737,7 @@ function EditApiClientDialog({
       await updateApiClient(client.id, {
         name: name.trim() || undefined,
         redirect_uris: allUris,
-        scopes: allScopes,
+        scopes: scopes,
         allowed_origins:
           client.client_type === "public"
             ? filteredOrigins.length > 0
@@ -802,16 +768,16 @@ function EditApiClientDialog({
           Edit
         </Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent>
+      <ResponsiveDialogContent className="sm:max-w-2xl">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Edit API Client</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             Update settings for &ldquo;{client.name}&rdquo;.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+        <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto min-w-0">
           {error && <p className="text-destructive text-sm">{error}</p>}
-          <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+          <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
             <legend className="text-sm font-medium px-1">Application</legend>
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-name">Name</Label>
@@ -832,7 +798,7 @@ function EditApiClientDialog({
               </Label>
             </div>
           </fieldset>
-          <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+          <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
             <legend className="text-sm font-medium px-1">Redirect URIs</legend>
             <p className="text-muted-foreground text-xs">
               URLs that the authorization server may redirect to after
@@ -847,7 +813,7 @@ function EditApiClientDialog({
             />
           </fieldset>
           {client.client_type === "public" && (
-            <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+            <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
               <legend className="text-sm font-medium px-1">
                 Allowed Origins
               </legend>
@@ -863,41 +829,16 @@ function EditApiClientDialog({
               />
             </fieldset>
           )}
-          <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+          <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
             <legend className="text-sm font-medium px-1">Scopes</legend>
             <p className="text-muted-foreground text-xs">
               OAuth scopes this client is allowed to request. The{" "}
               <code className="bg-muted px-1 rounded">atproto</code> scope is
               always required.
             </p>
-            <MultiInput
-              id="edit-scopes"
-              values={scopes}
-              onChange={setScopes}
-              placeholder="scope.name"
-              readonlyValues={["atproto"]}
-            />
-            {scopes.some((s) => s.trim() === "transition:generic") && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
-                <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-500">
-                  <span className="font-medium">transition:generic</span> grants
-                  broad write access to any collection. Prefer specific scopes
-                  or{" "}
-                  <a
-                    href="https://docs.happyview.dev/guides/features/api-clients#permission-sets"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    permission sets
-                  </a>{" "}
-                  to follow the principle of least privilege.
-                </p>
-              </div>
-            )}
+            <ScopeBuilder value={scopes} onChange={setScopes} />
           </fieldset>
-          <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+          <fieldset className="flex flex-col gap-3 rounded-lg border p-4 min-w-0">
             <legend className="text-sm font-medium px-1">Rate Limiting</legend>
             <div className="flex items-center gap-3">
               <Switch
