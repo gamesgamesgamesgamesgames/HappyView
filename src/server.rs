@@ -149,6 +149,8 @@ pub fn router(state: AppState) -> Router {
                     axum::http::HeaderName::from_static("x-client-key"),
                     axum::http::HeaderName::from_static("x-client-secret"),
                     axum::http::HeaderName::from_static("dpop"),
+                    axum::http::HeaderName::from_static("atproto-accept-labelers"),
+                    axum::http::HeaderName::from_static("atproto-proxy"),
                 ])
                 .allow_credentials(true),
         )
