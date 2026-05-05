@@ -116,28 +116,22 @@ const client = new HappyViewBrowserClient({
   clientKey: "hvc_your_client_key",
 });
 
-// Login — redirects to the user's PDS
-await client.login("alice.bsky.social");
+// Sign in — redirects to the user's PDS
+await client.signIn("alice.bsky.social");
 ```
 
-On your callback page:
+On page load, restore a session or process the OAuth callback:
 
 ```typescript
-const session = await client.callback();
+const result = await client.init();
+if (result) {
+  const { session } = result;
 
-// Make authenticated requests
-const response = await session.fetchHandler(
-  "/xrpc/com.example.getStuff?limit=10",
-  { method: "GET" },
-);
-```
-
-On subsequent page loads, restore the session from localStorage:
-
-```typescript
-const session = await client.restore();
-if (session) {
-  // User is still logged in
+  // Make authenticated requests
+  const response = await session.fetchHandler(
+    "/xrpc/com.example.getStuff?limit=10",
+    { method: "GET" },
+  );
 }
 ```
 

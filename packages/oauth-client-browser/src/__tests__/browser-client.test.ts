@@ -4,7 +4,10 @@ import {
   TokenExchangeError,
   type StorageAdapter,
 } from "@happyview/oauth-client";
-import { HappyViewBrowserClient } from "../browser-client";
+import {
+  HappyViewBrowserClient,
+  LoginContinuedInParentWindowError,
+} from "../browser-client";
 import { LocalStorageAdapter } from "../local-storage-adapter";
 
 // Generate a real ES256 JWK once for all tests that need importJwk to succeed
@@ -349,6 +352,56 @@ describe("HappyViewBrowserClient", () => {
     expect(payload.htu).toBe("https://pds.example.com/oauth/token");
   });
 
+  test("prepareLogin uses constructor scopes by default", async () => {
+    const fetchFn = mockFetchForFullFlow();
+    const client = new HappyViewBrowserClient({
+      instanceUrl: "https://happyview.example.com",
+      clientId: "https://example.com/oauth-client-metadata.json",
+      clientKey: "hvc_test",
+      scopes: "atproto transition:generic",
+      storage: new LocalStorageAdapter(),
+      fetch: fetchFn,
+    });
+
+    await client.prepareLogin("user.bsky.social");
+
+    const parCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/par"),
+    );
+    expect(parCall).toBeDefined();
+    const body = new URLSearchParams(
+      (parCall![1] as RequestInit).body as string,
+    );
+    expect(body.get("scope")).toBe("atproto transition:generic");
+  });
+
+  test("prepareLogin accepts per-call scope override", async () => {
+    const fetchFn = mockFetchForFullFlow();
+    const client = new HappyViewBrowserClient({
+      instanceUrl: "https://happyview.example.com",
+      clientId: "https://example.com/oauth-client-metadata.json",
+      clientKey: "hvc_test",
+      scopes: "atproto",
+      storage: new LocalStorageAdapter(),
+      fetch: fetchFn,
+    });
+
+    await client.prepareLogin("user.bsky.social", {
+      scopes: "atproto transition:generic repo:app.example.post",
+    });
+
+    const parCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/par"),
+    );
+    expect(parCall).toBeDefined();
+    const body = new URLSearchParams(
+      (parCall![1] as RequestInit).body as string,
+    );
+    expect(body.get("scope")).toBe(
+      "atproto transition:generic repo:app.example.post",
+    );
+  });
+
   test("callback throws InvalidStateError when code or state is missing", async () => {
     const client = createClient();
     try {
@@ -476,5 +529,256 @@ describe("HappyViewBrowserClient", () => {
     expect(
       localStorage.getItem("@happyview/oauth(happyview:last-active-did)"),
     ).toBeNull();
+  });
+
+  test("revoke is an alias for logout", async () => {
+    const deleteFn = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        return new Response(null, { status: 204 });
+      },
+    );
+    const client = createClient(deleteFn);
+
+    localStorage.setItem(
+      "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
+      JSON.stringify({
+        did: "did:plc:abcdefghijklmnopqrstuvwx",
+        dpopKey: testJwk,
+        accessToken: "at_stored",
+        clientKey: "hvc_test",
+        instanceUrl: "https://happyview.example.com",
+      }),
+    );
+    localStorage.setItem(
+      "@happyview/oauth(happyview:last-active-did)",
+      "did:plc:abcdefghijklmnopqrstuvwx",
+    );
+
+    await client.revoke("did:plc:abcdefghijklmnopqrstuvwx");
+
+    expect(
+      localStorage.getItem(
+        "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
+      ),
+    ).toBeNull();
+  });
+
+  test("restore with no args returns last active session", async () => {
+    const client = createClient();
+
+    localStorage.setItem(
+      "@happyview/oauth(happyview:last-active-did)",
+      "did:plc:abcdefghijklmnopqrstuvwx",
+    );
+    localStorage.setItem(
+      "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
+      JSON.stringify({
+        did: "did:plc:abcdefghijklmnopqrstuvwx",
+        dpopKey: testJwk,
+        accessToken: "at_stored",
+        clientKey: "hvc_test",
+        instanceUrl: "https://happyview.example.com",
+      }),
+    );
+
+    const session = await client.restore();
+    expect(session).not.toBeNull();
+    expect(session!.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
+  });
+
+  test("restore with DID arg returns that specific session", async () => {
+    const client = createClient();
+
+    localStorage.setItem(
+      "@happyview/oauth(happyview:session:did:plc:specific)",
+      JSON.stringify({
+        did: "did:plc:specific",
+        dpopKey: testJwk,
+        accessToken: "at_stored",
+        clientKey: "hvc_test",
+        instanceUrl: "https://happyview.example.com",
+      }),
+    );
+
+    const session = await client.restore("did:plc:specific");
+    expect(session).not.toBeNull();
+    expect(session!.did).toBe("did:plc:specific");
+  });
+
+  test("restore with DID arg updates last active DID", async () => {
+    const client = createClient();
+
+    localStorage.setItem(
+      "@happyview/oauth(happyview:session:did:plc:specific)",
+      JSON.stringify({
+        did: "did:plc:specific",
+        dpopKey: testJwk,
+        accessToken: "at_stored",
+        clientKey: "hvc_test",
+        instanceUrl: "https://happyview.example.com",
+      }),
+    );
+
+    await client.restore("did:plc:specific");
+
+    expect(
+      localStorage.getItem("@happyview/oauth(happyview:last-active-did)"),
+    ).toBe("did:plc:specific");
+  });
+
+  test("restore with DID arg does not update last active when session missing", async () => {
+    const client = createClient();
+
+    localStorage.setItem(
+      "@happyview/oauth(happyview:last-active-did)",
+      "did:plc:original",
+    );
+
+    await client.restore("did:plc:nonexistent");
+
+    expect(
+      localStorage.getItem("@happyview/oauth(happyview:last-active-did)"),
+    ).toBe("did:plc:original");
+  });
+
+  test("restore with DID arg returns null when session does not exist", async () => {
+    const client = createClient();
+    const session = await client.restore("did:plc:nonexistent");
+    expect(session).toBeNull();
+  });
+
+  test("initRestore returns session wrapper when last active exists", async () => {
+    const client = createClient();
+
+    localStorage.setItem(
+      "@happyview/oauth(happyview:last-active-did)",
+      "did:plc:abcdefghijklmnopqrstuvwx",
+    );
+    localStorage.setItem(
+      "@happyview/oauth(happyview:session:did:plc:abcdefghijklmnopqrstuvwx)",
+      JSON.stringify({
+        did: "did:plc:abcdefghijklmnopqrstuvwx",
+        dpopKey: testJwk,
+        accessToken: "at_stored",
+        clientKey: "hvc_test",
+        instanceUrl: "https://happyview.example.com",
+      }),
+    );
+
+    const result = await client.initRestore();
+    expect(result).toBeDefined();
+    expect(result!.session.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
+  });
+
+  test("initRestore returns undefined when no session exists", async () => {
+    const client = createClient();
+    const result = await client.initRestore();
+    expect(result).toBeUndefined();
+  });
+
+  test("initCallback processes callback and returns session with state", async () => {
+    const fetchFn = mockFetchForFullFlow();
+    const client = createClient(fetchFn);
+
+    const pendingState = {
+      did: "did:plc:abcdefghijklmnopqrstuvwx",
+      provisionId: "hvp_test123",
+      rawJwk: testJwk,
+      provisionPkceVerifier: "provision-verifier",
+      authPkceVerifier: "auth-verifier",
+      pdsUrl: "https://pds.example.com",
+      tokenEndpoint: "https://pds.example.com/oauth/token",
+      state: "initcb_state",
+      issuer: "https://pds.example.com",
+    };
+    localStorage.setItem(
+      "@happyview/oauth(pending-auth:initcb_state)",
+      JSON.stringify(pendingState),
+    );
+
+    const result = await client.initCallback(
+      "?code=auth-code&state=initcb_state",
+    );
+    expect(result.session.did).toBe("did:plc:abcdefghijklmnopqrstuvwx");
+    expect(result.state).toBe("initcb_state");
+  });
+
+  test("readCallbackParams returns null when no OAuth params in URL", () => {
+    const client = createClient();
+    const params = client.readCallbackParams();
+    expect(params).toBeNull();
+  });
+
+  test("findRedirectUrl returns configured redirectUri", () => {
+    const client = new HappyViewBrowserClient({
+      instanceUrl: "https://happyview.example.com",
+      clientId: "https://example.com/oauth-client-metadata.json",
+      clientKey: "hvc_test",
+      redirectUri: "https://myapp.com/callback",
+    });
+    expect(client.findRedirectUrl()).toBe("https://myapp.com/callback");
+  });
+
+  test("findRedirectUrl returns default when no redirectUri configured", () => {
+    const client = createClient();
+    expect(client.findRedirectUrl()).toBe(
+      `${window.location.origin}/oauth/callback`,
+    );
+  });
+
+  test("signInRedirect delegates to login", async () => {
+    const fetchFn = mockFetchForFullFlow();
+    const client = createClient(fetchFn);
+
+    // signInRedirect calls login which calls prepareLogin then sets window.location.href
+    // We can verify it hits the same fetch endpoints as prepareLogin
+    // Since window.location.href assignment doesn't work in tests, we just verify
+    // the PAR request was made (proving prepareLogin was called)
+    await client.signInRedirect("user.bsky.social");
+
+    const parCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/par"),
+    );
+    expect(parCall).toBeDefined();
+  });
+
+  test("signIn defaults to signInRedirect", async () => {
+    const fetchFn = mockFetchForFullFlow();
+    const client = createClient(fetchFn);
+
+    await client.signIn("user.bsky.social");
+
+    const parCall = fetchFn.mock.calls.find((call: any[]) =>
+      String(call[0]).includes("/oauth/par"),
+    );
+    expect(parCall).toBeDefined();
+  });
+
+  test("prepareLogin accepts custom state", async () => {
+    const fetchFn = mockFetchForFullFlow();
+    const client = createClient(fetchFn);
+
+    const result = await client.prepareLogin("user.bsky.social", {
+      state: "custom-state-123",
+    });
+
+    expect(result.state).toBe("custom-state-123");
+
+    const stored = localStorage.getItem(
+      "@happyview/oauth(pending-auth:custom-state-123)",
+    );
+    expect(stored).not.toBeNull();
+  });
+
+  test("dispose does not throw", () => {
+    const client = createClient();
+    expect(() => client.dispose()).not.toThrow();
+  });
+
+  test("LoginContinuedInParentWindowError has correct name and message", () => {
+    const err = new LoginContinuedInParentWindowError();
+    expect(err.name).toBe("LoginContinuedInParentWindowError");
+    expect(err.message).toBe("Login continued in parent window");
+    expect(err).toBeInstanceOf(Error);
   });
 });
