@@ -71,57 +71,49 @@ Once the backfill starts, you should see records appearing in the dashboard:
 2. Go to **Records** to browse individual indexed statuses
 3. Go to **Backfill** to watch the backfill job progress — you'll see the number of repos processed and records fetched
 
-## Step 3: Add a query lexicon for listing statuses
+## Step 3: Create an API client
+
+Before you can call any XRPC endpoint, you need an [API client](../guides/features/api-clients.md). The client key identifies your application to HappyView and is required on every request.
+
+1. Go to **Settings > API Clients > New client**
+2. Set the **Name** to something like "Statusphere Dev"
+3. Set the **Client ID URL** and **Client URI** to your app's URL (for local testing, `http://localhost:3000` works)
+4. Add a **Redirect URI** (e.g. `http://localhost:3000/oauth/callback`)
+5. Click **Create**
+
+Copy the `hvc_`-prefixed **client key** — you'll use it in every request. If you created a confidential client, also save the `hvs_`-prefixed **client secret** immediately; it's only shown once.
+
+For the rest of this tutorial, we'll use `$CLIENT_KEY` to refer to your client key.
+
+## Step 4: Add a query endpoint for listing statuses
 
 Now add a query endpoint to read the indexed data:
 
 1. Go to **Lexicons > Add Lexicon > Local**
-2. Set the NSID to `xyz.statusphere.listStatuses`
-3. Set the type to **Query**
-4. Set `target_collection` to `xyz.statusphere.status` — this tells the query which record collection it operates on (`target_collection` is a HappyView-specific field, not part of the lexicon spec)
-5. Click **Add**
-
-This creates a `GET /xrpc/xyz.statusphere.listStatuses` endpoint. Without a Lua script, it uses HappyView's built-in default behavior: listing records with `limit`, `cursor`, and `did` parameters, or fetching a single record by `uri`. Try it:
-
-```sh
-curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?limit=5" \
-  -H "X-Client-Key: $CLIENT_KEY"
-```
+2. In the JSON editor, set the `id` to `xyz.statusphere.listStatuses` and change the type to `query`:
 
 ```json
 {
-  "records": [
-    {
-      "uri": "at://did:plc:abc/xyz.statusphere.status/3abc123",
-      "status": "\ud83d\ude0a",
-      "createdAt": "2025-01-01T12:00:00Z"
-    },
-    {
-      "uri": "at://did:plc:def/xyz.statusphere.status/3def456",
-      "status": "\ud83c\udf1f",
-      "createdAt": "2025-01-01T11:30:00Z"
+  "lexicon": 1,
+  "id": "xyz.statusphere.listStatuses",
+  "defs": {
+    "main": {
+      "type": "query"
     }
-  ],
-  "cursor": "MjAyNS0wMS0wMVQxMjowMDowMFp8YXQ6Ly9kaWQ6..."
+  }
 }
 ```
 
-See [XRPC API](../reference/xrpc-api.md) for the full default query behavior.
-
-## Step 4: Customize the query with a Lua script
-
-The default query behavior works, but let's customize it with a [Lua script](../guides/scripting.md). The script will handle single-record lookups by URI and paginated listing with an optional DID filter.
-
-1. Click on **xyz.statusphere.listStatuses** in the lexicon list to open its detail page
-2. The Lua script editor is at the bottom of the page
-3. Paste in the following script:
+3. A [Lua script](../guides/scripting.md) editor appears automatically. Replace the default script with:
 
 ```lua
+collection = "xyz.statusphere.status"
+
 function handle()
   if params.uri then
     local record = db.get(params.uri)
     if not record then
-      return { error = "not found" }
+      error("record not found")
     end
     return { record = record }
   end
@@ -135,9 +127,36 @@ function handle()
 end
 ```
 
-4. Click **Save**
+The `collection` variable at the top tells the script which record collection to query. The `handle()` function supports single-record lookups by URI and paginated listing with an optional DID filter.
 
-The endpoint now uses your custom logic. Filter by a specific user:
+4. Click **Upload**
+
+Try it out:
+
+```sh
+curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?limit=5" \
+  -H "X-Client-Key: $CLIENT_KEY"
+```
+
+```json
+{
+  "records": [
+    {
+      "uri": "at://did:plc:abc/xyz.statusphere.status/3abc123",
+      "status": "😊",
+      "createdAt": "2025-01-01T12:00:00Z"
+    },
+    {
+      "uri": "at://did:plc:def/xyz.statusphere.status/3def456",
+      "status": "🌟",
+      "createdAt": "2025-01-01T11:30:00Z"
+    }
+  ],
+  "cursor": "MjAyNS0wMS0wMVQxMjowMDowMFp8YXQ6Ly9kaWQ6..."
+}
+```
+
+Filter by a specific user:
 
 ```sh
 curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?did=did:plc:abc&limit=1" \
@@ -151,17 +170,30 @@ curl "http://127.0.0.1:3000/xrpc/xyz.statusphere.listStatuses?uri=at://did:plc:a
   -H "X-Client-Key: $CLIENT_KEY"
 ```
 
-## Step 5: Add a procedure lexicon for setting status
+## Step 5: Add a procedure endpoint for setting status
 
 Add a write endpoint so users can set their status through your AppView:
 
 1. Go to **Lexicons > Add Lexicon > Local**
-2. Set the NSID to `xyz.statusphere.setStatus`
-3. Set the type to **Procedure**
-4. Set `target_collection` to `xyz.statusphere.status`
-5. A default Lua script is generated — replace it with:
+2. In the JSON editor, set the `id` to `xyz.statusphere.setStatus` and change the type to `procedure`:
+
+```json
+{
+  "lexicon": 1,
+  "id": "xyz.statusphere.setStatus",
+  "defs": {
+    "main": {
+      "type": "procedure"
+    }
+  }
+}
+```
+
+3. A default Lua script is generated — replace it with:
 
 ```lua
+collection = "xyz.statusphere.status"
+
 function handle()
   local r = Record(collection, {
     status = input.status,
@@ -172,7 +204,7 @@ function handle()
 end
 ```
 
-6. Click **Add**
+4. Click **Upload**
 
 This creates a `POST /xrpc/xyz.statusphere.setStatus` endpoint that creates records on the user's PDS and indexes them locally.
 
@@ -186,7 +218,7 @@ curl -X POST http://127.0.0.1:3000/xrpc/xyz.statusphere.setStatus \
   -H "Authorization: DPoP $TOKEN" \
   -H "DPoP: $DPOP_PROOF" \
   -H "Content-Type: application/json" \
-  -d '{ "status": "\ud83d\ude80" }'
+  -d '{ "status": "🚀" }'
 ```
 
 ```json
@@ -211,8 +243,9 @@ Everything was done through the dashboard — no server restarts, no config file
 
 ## Next steps
 
+- [API Clients](../guides/features/api-clients.md): Public vs. confidential clients, DPoP authentication, and rate limiting
 - [Lua Scripting](../guides/scripting.md): Explore the full Record and database APIs to build more complex queries
-- [Lexicons](../guides/indexing/lexicons.md): Learn about network lexicons, the backfill flag, and target collections
+- [Lexicons](../guides/indexing/lexicons.md): Learn about network lexicons, the backfill flag, and record collections
 - [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
 - [Admin API](../reference/admin/admin-api.md): Automate lexicon management via the API
 - [Statusphere example app](https://github.com/bluesky-social/statusphere-example-app): See the full Statusphere frontend
