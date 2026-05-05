@@ -23,39 +23,39 @@ const client = new HappyViewBrowserClient({
 });
 ```
 
-### Login
+### Sign In
 
 Redirects the user to their PDS authorization server:
 
 ```typescript
-await client.login("alice.bsky.social");
+await client.signIn("alice.bsky.social");
 // User is redirected to their PDS for authorization
 ```
 
-If you need the authorization URL without an immediate redirect (e.g., to open in a popup), use `prepareLogin`:
+Or sign in via a popup:
+
+```typescript
+const session = await client.signIn("alice.bsky.social", {
+  display: "popup",
+});
+```
+
+If you need the authorization URL without an immediate redirect, use `prepareLogin`:
 
 ```typescript
 const { authorizationUrl, did, state } =
   await client.prepareLogin("alice.bsky.social");
 ```
 
-### OAuth Callback
+### Initialization
 
-On the `/oauth/callback` route, call `callback()` to complete the token exchange:
-
-```typescript
-const session = await client.callback();
-// Session is now stored in localStorage
-```
-
-### Restore Session
-
-On subsequent page loads, restore the session from localStorage:
+On page load, call `init()` to restore a session or process an OAuth callback:
 
 ```typescript
-const session = await client.restore();
-if (session) {
-  // User is still logged in
+const result = await client.init();
+if (result) {
+  const { session } = result;
+  // User is logged in
 }
 ```
 
@@ -70,10 +70,10 @@ const response = await session.fetchHandler(
 );
 ```
 
-### Logout
+### Revoke Session
 
 ```typescript
-await client.logout("did:plc:abc123");
+await client.revoke("did:plc:abc123");
 ```
 
 ## Exports

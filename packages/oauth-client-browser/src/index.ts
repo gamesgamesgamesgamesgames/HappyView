@@ -15,9 +15,15 @@ export {
   type StoredSession,
 } from "@happyview/oauth-client";
 
-export { HappyViewBrowserClient } from "./browser-client";
+export {
+  HappyViewBrowserClient,
+  LoginContinuedInParentWindowError,
+} from "./browser-client";
 export type {
   HappyViewBrowserClientOptions,
+  LoginOptions,
+  PopupLoginOptions,
   PrepareLoginResult,
+  SignInOptions,
 } from "./browser-client";
 export { LocalStorageAdapter } from "./local-storage-adapter";

@@ -13,7 +13,7 @@ import type {
 } from "./types";
 
 const STORAGE_PREFIX = "happyview:session:";
-const LAST_ACTIVE_KEY = "happyview:last-active-did";
+export const LAST_ACTIVE_KEY = "happyview:last-active-did";
 
 export class HappyViewOAuthClient {
   protected readonly instanceUrl: string;

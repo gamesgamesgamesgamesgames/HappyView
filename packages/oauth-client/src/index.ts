@@ -1,4 +1,4 @@
-export { HappyViewOAuthClient } from "./client";
+export { HappyViewOAuthClient, LAST_ACTIVE_KEY } from "./client";
 export { importJwk } from "./import-jwk";
 export {
   ApiError,

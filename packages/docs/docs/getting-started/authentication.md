@@ -67,11 +67,12 @@ const oauthClient = new HappyViewBrowserClient({
   clientKey: "hvc_your_client_key",
 });
 
-// Login — redirects to the user's PDS for authorization
-await oauthClient.login("alice.bsky.social");
+// Sign in — redirects to the user's PDS for authorization
+await oauthClient.signIn("alice.bsky.social");
 
-// On /oauth/callback — complete the token exchange
-const session = await oauthClient.callback();
+// On page load — restore session or process OAuth callback
+const result = await oauthClient.init();
+const session = result?.session;
 
 // Create a type-safe Lex client
 const agent = createAgent(session);

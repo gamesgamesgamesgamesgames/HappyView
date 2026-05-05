@@ -47,26 +47,45 @@ const client = new HappyViewBrowserClient({
 The API client must be registered as a **public** client (no secret) with your app's origin in `allowed_origins`. See [Authentication — API clients](../getting-started/authentication.md#api-clients-confidential-vs-public).
 :::
 
-## Login
+## Sign in
 
-`login()` resolves the user's handle, discovers their PDS, provisions a DPoP key, and redirects the browser to the PDS authorization server:
+`signIn()` resolves the user's handle, discovers their PDS, provisions a DPoP key, and redirects the browser to the PDS authorization server:
 
 ```typescript
-await client.login("alice.bsky.social");
+await client.signIn("alice.bsky.social");
 // Browser redirects — code stops here
 ```
 
-If you need the authorization URL without redirecting (e.g., for a popup or custom UI), use `prepareLogin()`:
+To sign in via a popup window instead:
+
+```typescript
+const session = await client.signIn("alice.bsky.social", {
+  display: "popup",
+});
+```
+
+Or use the explicit methods:
+
+```typescript
+// Full-page redirect (equivalent to signIn without display option)
+await client.signInRedirect("alice.bsky.social");
+
+// Popup window
+const session = await client.signInPopup("alice.bsky.social");
+```
+
+If you need the authorization URL without redirecting (e.g., for a custom UI), use `prepareLogin()`:
 
 ```typescript
 const { authorizationUrl, did, state } =
   await client.prepareLogin("alice.bsky.social");
-
-// Open in a popup, new tab, etc.
-window.open(authorizationUrl);
 ```
 
-### What happens during login
+:::note
+`login()` still works as an alias for `signInRedirect()`.
+:::
+
+### What happens during sign in
 
 1. The handle is resolved to a DID via `resolveHandleToDid`.
 2. The DID document is fetched to find the PDS URL.
@@ -74,32 +93,60 @@ window.open(authorizationUrl);
 4. A DPoP key is provisioned from HappyView.
 5. PKCE challenge/verifier pairs are generated (one for HappyView's DPoP provisioning, one for the PDS authorization server).
 6. The pending auth state is stored in localStorage.
-7. The browser is redirected to the PDS authorization endpoint.
+7. The browser is redirected to the PDS authorization endpoint (or a popup is opened).
 
-## OAuth callback
+## Initialization
 
-Your app needs an `/oauth/callback` route. On that page, call `callback()` to complete the token exchange:
-
-```typescript
-// On /oauth/callback
-const session = await client.callback();
-// Session is now stored in localStorage and ready to use
-```
-
-`callback()` reads the `code` and `state` from the URL query string, exchanges the code for tokens at the PDS token endpoint, and registers the session with HappyView. The pending auth state is cleaned up automatically.
-
-## Restore session
-
-On subsequent page loads, restore the session from localStorage instead of re-authenticating:
+On page load, call `init()` to automatically handle both session restoration and OAuth callbacks:
 
 ```typescript
-const session = await client.restore();
-if (session) {
-  // User is still logged in
+const result = await client.init();
+if (result) {
+  const { session, state } = result;
+  // session is ready to use
 }
 ```
 
-Returns `null` if no stored session is found.
+`init()` checks the URL for OAuth callback parameters. If found, it processes the callback and returns `{ session, state }`. Otherwise, it tries to restore the last active session from localStorage.
+
+For more control, use the specific methods:
+
+```typescript
+// Restore only — ignores callback params in the URL
+const result = await client.initRestore();
+if (result) {
+  const { session } = result;
+}
+
+// Callback only — throws if no callback params are present
+const { session, state } = await client.initCallback();
+```
+
+### Restoring a specific session
+
+To restore a specific user's session by DID:
+
+```typescript
+const session = await client.restore("did:plc:abc123");
+```
+
+Calling `restore()` with no arguments returns the last active session, or `null` if none is found.
+
+:::note
+`callback()` still works as a standalone method that processes the OAuth callback and returns a session directly.
+:::
+
+## Detecting callback params
+
+`readCallbackParams()` checks the current URL for OAuth callback parameters without processing them. This is useful when your app uses client-side routing and needs to detect callbacks before the router changes the URL:
+
+```typescript
+const params = client.readCallbackParams();
+if (params) {
+  // URL contains OAuth callback params — process them
+  const { session } = await client.initCallback();
+}
+```
 
 ## Authenticated requests
 
@@ -116,11 +163,15 @@ const data = await response.json();
 
 Pass a relative path (prepends the HappyView instance URL) or a full URL (used as-is).
 
-## Logout
+## Revoke session
 
 ```typescript
-await client.logout(session.did);
+await client.revoke(session.did);
 ```
+
+:::note
+`logout()` still works as an alias for `revoke()`.
+:::
 
 ## Resolution utilities
 

@@ -4,6 +4,7 @@ import type { DidDocument } from "@atproto/did";
 import {
   HappyViewOAuthClient,
   HappyViewSession,
+  LAST_ACTIVE_KEY,
   importJwk,
   InvalidStateError,
   ResolutionError,
@@ -11,6 +12,17 @@ import {
   type StorageAdapter,
 } from "@happyview/oauth-client";
 import { LocalStorageAdapter } from "./local-storage-adapter";
+
+const NAMESPACE = "@happyview/oauth-client-browser";
+const POPUP_CHANNEL_NAME = `${NAMESPACE}(popup-channel)`;
+const POPUP_STATE_PREFIX = `${NAMESPACE}(popup-state):`;
+
+export class LoginContinuedInParentWindowError extends Error {
+  constructor() {
+    super("Login continued in parent window");
+    this.name = "LoginContinuedInParentWindowError";
+  }
+}
 
 export interface HappyViewBrowserClientOptions {
   instanceUrl: string;
@@ -32,6 +44,22 @@ interface PendingAuthState {
   tokenEndpoint: string;
   state: string;
   issuer: string;
+}
+
+export interface LoginOptions {
+  scopes?: string;
+  state?: string;
+}
+
+export interface PopupLoginOptions extends LoginOptions {
+  popupName?: string;
+  popupFeatures?: string;
+}
+
+export interface SignInOptions extends LoginOptions {
+  display?: "popup" | "page";
+  popupName?: string;
+  popupFeatures?: string;
 }
 
 export interface PrepareLoginResult {
@@ -74,7 +102,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     this.didResolver = new DidResolverCommon({ fetch: fetchFn });
   }
 
-  async prepareLogin(handle: string): Promise<PrepareLoginResult> {
+  async prepareLogin(handle: string, options?: LoginOptions): Promise<PrepareLoginResult> {
     // Resolve handle → DID → DID document → PDS URL → auth server metadata
     const resolvedDid = await this.handleResolver.resolve(handle);
     if (!resolvedDid) {
@@ -86,6 +114,8 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     const pdsUrl = extractPdsUrl(didDoc);
     const authMeta = await this.fetchAuthServerMetadata(pdsUrl);
 
+    const scopes = options?.scopes ?? this.scopes;
+
     // Provision DPoP key from HappyView
     const { provisionId, rawJwk, pkceVerifier: provisionPkceVerifier } =
       await this.provisionDpopKey();
@@ -94,10 +124,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     const authPkceVerifier = generatePkceVerifier();
     const authPkceChallenge = await computePkceChallenge(authPkceVerifier);
 
-    const stateBytes = crypto.getRandomValues(new Uint8Array(16));
-    const state = Array.from(stateBytes, (b) =>
-      b.toString(16).padStart(2, "0"),
-    ).join("");
+    const state = options?.state ?? randomHex(16);
 
     const pendingState: PendingAuthState = {
       did,
@@ -122,7 +149,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
-      scope: this.scopes,
+      scope: scopes,
       code_challenge: authPkceChallenge,
       code_challenge_method: "S256",
       login_hint: handle,
@@ -163,8 +190,8 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     return { authorizationUrl, did, state };
   }
 
-  async login(handle: string): Promise<void> {
-    const { authorizationUrl } = await this.prepareLogin(handle);
+  async login(handle: string, options?: LoginOptions): Promise<void> {
+    const { authorizationUrl } = await this.prepareLogin(handle, options);
     window.location.href = authorizationUrl;
   }
 
@@ -294,6 +321,182 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     await this.deleteSession(did);
   }
 
+  async revoke(did: string): Promise<void> {
+    return this.logout(did);
+  }
+
+  override async restore(did?: string): Promise<HappyViewSession | null> {
+    if (did) {
+      const session = await this.restoreSession(did);
+      if (session) {
+        await this.storage.set(LAST_ACTIVE_KEY, did);
+      }
+      return session;
+    }
+    return super.restore();
+  }
+
+  async init(): Promise<
+    | { session: HappyViewSession; state?: string | null }
+    | undefined
+  > {
+    const params = this.readCallbackParams();
+    if (params) {
+      return this.initCallback(`?${params.toString()}`);
+    }
+    return this.initRestore();
+  }
+
+  async initRestore(): Promise<{ session: HappyViewSession } | undefined> {
+    const session = await this.restore();
+    if (session) return { session };
+    return undefined;
+  }
+
+  async initCallback(
+    search?: string,
+  ): Promise<{ session: HappyViewSession; state: string | null }> {
+    const searchStr = search ?? window.location.search;
+    const params = new URLSearchParams(searchStr);
+    const state = params.get("state");
+
+    history.replaceState(null, "", window.location.pathname);
+
+    const session = await this.callback(searchStr);
+
+    if (state?.startsWith(POPUP_STATE_PREFIX)) {
+      const stateKey = state.slice(POPUP_STATE_PREFIX.length);
+      const received = await sendPopupResult(stateKey, {
+        status: "fulfilled",
+        value: session.did,
+      });
+      if (!received) {
+        await this.logout(session.did);
+      }
+      window.close();
+      throw new LoginContinuedInParentWindowError();
+    }
+
+    return { session, state };
+  }
+
+  async signIn(
+    handle: string,
+    options?: SignInOptions,
+  ): Promise<HappyViewSession | void> {
+    if (options?.display === "popup") {
+      return this.signInPopup(handle, options);
+    }
+    return this.signInRedirect(handle, options);
+  }
+
+  async signInRedirect(
+    handle: string,
+    options?: LoginOptions,
+  ): Promise<void> {
+    return this.login(handle, options);
+  }
+
+  async signInPopup(
+    handle: string,
+    options?: PopupLoginOptions,
+  ): Promise<HappyViewSession> {
+    const popupTarget = options?.popupName ?? "_blank";
+    const popupFeatures =
+      options?.popupFeatures ??
+      "width=600,height=600,menubar=no,toolbar=no";
+
+    let popup = window.open("about:blank", popupTarget, popupFeatures);
+
+    const stateKey = Math.random().toString(36).slice(2);
+    const result = await this.prepareLogin(handle, {
+      ...options,
+      state: `${POPUP_STATE_PREFIX}${stateKey}`,
+    });
+
+    if (popup) {
+      popup.location.href = result.authorizationUrl;
+    } else {
+      popup = window.open(
+        result.authorizationUrl,
+        popupTarget,
+        popupFeatures,
+      );
+    }
+    popup?.focus();
+
+    return new Promise<HappyViewSession>((resolve, reject) => {
+      const channel = new BroadcastChannel(POPUP_CHANNEL_NAME);
+      const cleanup = () => {
+        clearTimeout(timeout);
+        channel.removeEventListener("message", onMessage);
+        channel.close();
+        popup?.close();
+      };
+
+      const timeout = setTimeout(() => {
+        reject(new Error("Popup login timed out"));
+        cleanup();
+      }, 5 * 60e3);
+
+      const onMessage = async ({ data }: MessageEvent) => {
+        if (data.key !== stateKey) return;
+        if (!("result" in data)) return;
+
+        channel.postMessage({ key: stateKey, ack: true });
+        cleanup();
+
+        if (data.result.status === "fulfilled") {
+          const did = data.result.value as string;
+          try {
+            const session = await this.restoreSession(did);
+            if (session) {
+              resolve(session);
+            } else {
+              reject(
+                new Error(
+                  "Failed to restore session after popup login",
+                ),
+              );
+            }
+          } catch (err) {
+            reject(err);
+            await this.logout(did);
+          }
+        } else {
+          reject(
+            new Error(
+              data.result.reason?.message ?? "Popup login failed",
+            ),
+          );
+        }
+      };
+
+      channel.addEventListener("message", onMessage);
+    });
+  }
+
+  readCallbackParams(): URLSearchParams | null {
+    const params = new URLSearchParams(window.location.search);
+    if (
+      !params.has("state") ||
+      !(params.has("code") || params.has("error"))
+    ) {
+      return null;
+    }
+    return params;
+  }
+
+  findRedirectUrl(): string {
+    return (
+      this.redirectUri ?? `${window.location.origin}/oauth/callback`
+    );
+  }
+
+  dispose(): void {
+    // No persistent resources to clean up
+  }
+
   private resolveOAuthEndpoints(): { clientId: string; redirectUri: string } {
     return {
       clientId: this.clientId,
@@ -371,6 +574,31 @@ function generatePkceVerifier(): string {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+function sendPopupResult(
+  key: string,
+  result: {
+    status: "fulfilled" | "rejected";
+    value?: string;
+    reason?: { message: string };
+  },
+): Promise<boolean> {
+  const channel = new BroadcastChannel(POPUP_CHANNEL_NAME);
+  return new Promise((resolve) => {
+    const cleanup = (received: boolean) => {
+      clearTimeout(timer);
+      channel.removeEventListener("message", onMessage);
+      channel.close();
+      resolve(received);
+    };
+    const onMessage = ({ data }: MessageEvent) => {
+      if ("ack" in data && data.key === key) cleanup(true);
+    };
+    channel.addEventListener("message", onMessage);
+    channel.postMessage({ key, result });
+    const timer = setTimeout(() => cleanup(false), 500);
+  });
 }
 
 async function computePkceChallenge(verifier: string): Promise<string> {

@@ -24,7 +24,8 @@ const client = new HappyViewBrowserClient({
   instanceUrl: "https://happyview.example.com",
   clientKey: "hvc_your_client_key",
 });
-const session = await client.restore();
+const result = await client.init();
+const session = result?.session;
 
 // Create a Lex agent from the session
 const agent = createAgent(session);
