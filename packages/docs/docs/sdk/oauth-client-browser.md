@@ -190,7 +190,17 @@ const info = session.getTokenInfo();
 // { sub, scope, iss, aud }
 ```
 
-### Properties
+## Revoke session
+
+```typescript
+await client.revoke(session.did);
+```
+
+:::note
+`logout()` still works as an alias for `revoke()`.
+:::
+
+## Resolution utilities
 
 | Property | Type     | Description                              |
 | -------- | -------- | ---------------------------------------- |
