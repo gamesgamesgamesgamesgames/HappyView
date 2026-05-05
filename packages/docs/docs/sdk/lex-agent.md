@@ -25,8 +25,9 @@ const client = new HappyViewBrowserClient({
   clientKey: "hvc_your_client_key",
 });
 
-// Authenticate (or restore a session)
-const session = await client.restore();
+// Restore an existing session
+const result = await client.init();
+const session = result?.session;
 
 // Create a Lex agent from the session
 const agent = createAgent(session);
