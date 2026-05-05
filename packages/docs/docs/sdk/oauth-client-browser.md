@@ -183,13 +183,6 @@ const data = await response.json();
 
 Pass a relative path (prepends the HappyView instance URL) or a full URL (used as-is).
 
-### Token info
-
-```typescript
-const info = session.getTokenInfo();
-// { sub, scope, iss, aud }
-```
-
 ## Revoke session
 
 ```typescript
