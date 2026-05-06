@@ -70,6 +70,20 @@ const response = await session.fetchHandler(
 );
 ```
 
+### Using with @atproto/api
+
+`HappyViewSession` works directly with `@atproto/api`'s `Agent`:
+
+```typescript
+import { Agent } from "@atproto/api";
+
+const result = await client.init();
+if (result) {
+  const agent = new Agent(result.session);
+  const profile = await agent.getProfile({ actor: agent.did });
+}
+```
+
 ### Revoke Session
 
 ```typescript
