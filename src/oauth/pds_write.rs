@@ -142,6 +142,9 @@ async fn dpop_post_with_retry(
 }
 
 /// Refresh the access token and retry the PDS request.
+///
+/// If the refresh fails with `invalid_grant`, re-reads the session from the
+/// database — a concurrent request may have already refreshed the token.
 #[allow(clippy::too_many_arguments)]
 async fn retry_after_refresh(
     http: &reqwest::Client,
@@ -154,7 +157,38 @@ async fn retry_after_refresh(
     nonce: Option<&str>,
     request_builder: &impl Fn(&reqwest::Client, &str, &str) -> reqwest::RequestBuilder,
 ) -> Result<reqwest::Response, AppError> {
-    refresh_access_token(http, pool, backend, encryption_key, oauth_registry, creds).await?;
+    let stale_access_token = creds.session.access_token.clone();
+
+    if let Err(e) =
+        refresh_access_token(http, pool, backend, encryption_key, oauth_registry, creds).await
+    {
+        // If the refresh token was rejected, check whether a concurrent request
+        // already refreshed the session. Re-read from the database and compare
+        // the access token — if it changed, another refresh succeeded.
+        if is_invalid_grant_error(&e) {
+            let fresh_session = super::sessions::get_dpop_session(
+                pool,
+                backend,
+                encryption_key,
+                &creds.session.api_client_id,
+                &creds.session.user_did,
+            )
+            .await?;
+
+            if fresh_session.access_token != stale_access_token {
+                tracing::info!(
+                    user_did = %creds.session.user_did,
+                    api_client_id = %creds.session.api_client_id,
+                    "concurrent refresh detected, using updated token"
+                );
+                creds.session = fresh_session;
+            } else {
+                return Err(e);
+            }
+        } else {
+            return Err(e);
+        }
+    }
 
     let proof = generate_dpop_proof(
         &creds.private_jwk,
@@ -188,6 +222,10 @@ async fn retry_after_refresh(
     }
 
     Ok(resp)
+}
+
+fn is_invalid_grant_error(e: &AppError) -> bool {
+    matches!(e, AppError::Auth(msg) if msg.contains("invalid_grant"))
 }
 
 /// Make an authenticated POST to a PDS XRPC endpoint using a DPoP session.
@@ -317,6 +355,11 @@ fn extract_dpop_nonce(resp: &reqwest::Response) -> Option<String> {
 /// Discovers the token endpoint from the issuer's OAuth metadata, sends a
 /// `grant_type=refresh_token` request with a DPoP proof, and updates the
 /// stored session with the new tokens.
+///
+/// Unlike PDS resource endpoints, the token endpoint response body is read
+/// before deciding whether a `dpop-nonce` header indicates a retry — this
+/// avoids misinterpreting `invalid_grant` as a nonce requirement when the
+/// PDS includes `dpop-nonce` on all error responses.
 async fn refresh_access_token(
     http: &reqwest::Client,
     pool: &sqlx::AnyPool,
@@ -362,12 +405,28 @@ async fn refresh_access_token(
         .await
         .map_err(|e| AppError::Internal(format!("token refresh request failed: {e}")))?;
 
-    // Handle nonce requirement on the token endpoint
-    if let Some(nonce) = extract_dpop_nonce(&resp) {
+    let status = resp.status();
+    let dpop_nonce = resp
+        .headers()
+        .get("dpop-nonce")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let body = resp.text().await.unwrap_or_default();
+
+    if status.is_success() {
+        return apply_refresh_response(pool, backend, encryption_key, creds, &body).await;
+    }
+
+    // Only retry with a nonce if the error is actually `use_dpop_nonce`.
+    // PDS implementations include `dpop-nonce` on all responses, so checking
+    // the header alone would misinterpret `invalid_grant` as a nonce issue.
+    if let Some(nonce) = dpop_nonce
+        && is_use_dpop_nonce_error(&body)
+    {
         let proof =
             generate_dpop_proof_no_ath(&creds.private_jwk, "POST", &token_endpoint, Some(&nonce))?;
 
-        let resp = http
+        let retry_resp = http
             .post(&token_endpoint)
             .header("DPoP", &proof)
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -380,32 +439,40 @@ async fn refresh_access_token(
             .await
             .map_err(|e| AppError::Internal(format!("token refresh request failed: {e}")))?;
 
-        return handle_refresh_response(http, pool, backend, encryption_key, creds, resp).await;
+        let retry_status = retry_resp.status();
+        let retry_body = retry_resp.text().await.unwrap_or_default();
+
+        if !retry_status.is_success() {
+            return Err(AppError::Auth(format!(
+                "token refresh failed ({retry_status}): {retry_body}"
+            )));
+        }
+
+        return apply_refresh_response(pool, backend, encryption_key, creds, &retry_body).await;
     }
 
-    handle_refresh_response(http, pool, backend, encryption_key, creds, resp).await
+    Err(AppError::Auth(format!(
+        "token refresh failed ({status}): {body}"
+    )))
 }
 
-/// Parse the token refresh response and update the stored session.
-async fn handle_refresh_response(
-    _http: &reqwest::Client,
+/// Check if a token endpoint error body indicates a `use_dpop_nonce` error.
+fn is_use_dpop_nonce_error(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v["error"].as_str().map(|s| s == "use_dpop_nonce"))
+        .unwrap_or(false)
+}
+
+/// Parse a successful token refresh response body and update the stored session.
+async fn apply_refresh_response(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
     encryption_key: &[u8; 32],
     creds: &mut DpopCredentials,
-    resp: reqwest::Response,
+    body: &str,
 ) -> Result<(), AppError> {
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(AppError::Auth(format!(
-            "token refresh failed ({status}): {body}"
-        )));
-    }
-
-    let token_resp: serde_json::Value = resp
-        .json()
-        .await
+    let token_resp: serde_json::Value = serde_json::from_str(body)
         .map_err(|e| AppError::Internal(format!("invalid token refresh response: {e}")))?;
 
     let new_access_token = token_resp["access_token"]
@@ -730,5 +797,40 @@ mod tests {
             &keypair.thumbprint,
         );
         assert!(result.is_ok(), "validation failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn is_use_dpop_nonce_error_detects_nonce_error() {
+        assert!(is_use_dpop_nonce_error(r#"{"error":"use_dpop_nonce"}"#));
+    }
+
+    #[test]
+    fn is_use_dpop_nonce_error_rejects_invalid_grant() {
+        assert!(!is_use_dpop_nonce_error(
+            r#"{"error":"invalid_grant","error_description":"Invalid refresh token"}"#
+        ));
+    }
+
+    #[test]
+    fn is_use_dpop_nonce_error_rejects_garbage() {
+        assert!(!is_use_dpop_nonce_error("not json"));
+        assert!(!is_use_dpop_nonce_error(""));
+        assert!(!is_use_dpop_nonce_error("{}"));
+    }
+
+    #[test]
+    fn is_invalid_grant_error_matches() {
+        let e = AppError::Auth("token refresh failed (400 Bad Request): {\"error\":\"invalid_grant\",\"error_description\":\"Invalid refresh token\"}".into());
+        assert!(is_invalid_grant_error(&e));
+    }
+
+    #[test]
+    fn is_invalid_grant_error_ignores_other_errors() {
+        assert!(!is_invalid_grant_error(&AppError::Auth(
+            "token expired".into()
+        )));
+        assert!(!is_invalid_grant_error(&AppError::Internal(
+            "something broke".into()
+        )));
     }
 }
