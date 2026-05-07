@@ -8,6 +8,7 @@ import type {
   ProvisionKeyResponse,
   RegisterSessionParams,
   RegisterSessionResponse,
+  SessionEventHooks,
   StorageAdapter,
   StoredSession,
 } from "./types";
@@ -15,12 +16,38 @@ import type {
 const STORAGE_PREFIX = "happyview:session:";
 export const LAST_ACTIVE_KEY = "happyview:last-active-did";
 
+export interface FetchMetadataOptions {
+  clientId: string;
+  fetch?: typeof globalThis.fetch;
+  signal?: AbortSignal;
+}
+
 export class HappyViewOAuthClient {
+  static async fetchMetadata({
+    clientId,
+    fetch: fetchFn = globalThis.fetch,
+    signal,
+  }: FetchMetadataOptions): Promise<Record<string, unknown>> {
+    signal?.throwIfAborted();
+    const resp = await fetchFn(clientId, { redirect: "error", signal });
+    if (resp.status !== 200) {
+      resp.body?.cancel?.();
+      throw new Error(`Failed to fetch client metadata: ${resp.status}`);
+    }
+    const mime = resp.headers.get("content-type")?.split(";")[0].trim();
+    if (mime !== "application/json") {
+      resp.body?.cancel?.();
+      throw new Error(`Invalid client metadata content type: ${mime}`);
+    }
+    return resp.json() as Promise<Record<string, unknown>>;
+  }
+
   protected readonly instanceUrl: string;
   protected readonly clientKey: string;
   protected readonly storage: StorageAdapter;
   private readonly clientSecret: string | undefined;
   protected readonly _fetch: typeof globalThis.fetch;
+  private readonly sessionHooks: SessionEventHooks;
 
   constructor(
     options: HappyViewOAuthClientOptions & {
@@ -32,6 +59,7 @@ export class HappyViewOAuthClient {
     this.clientSecret = options.clientSecret;
     this.storage = options.storage ?? new MemoryStorage();
     this._fetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof globalThis.fetch;
+    this.sessionHooks = options.sessionHooks ?? {};
   }
 
   get isConfidential(): boolean {
@@ -135,6 +163,9 @@ export class HappyViewOAuthClient {
       accessToken: params.accessToken,
       clientKey: this.clientKey,
       instanceUrl: this.instanceUrl,
+      scopes: params.scopes,
+      pdsUrl: params.pdsUrl,
+      issuer: params.issuer,
     };
     await this.storage.set(
       `${STORAGE_PREFIX}${data.did}`,
@@ -142,14 +173,22 @@ export class HappyViewOAuthClient {
     );
     await this.storage.set(LAST_ACTIVE_KEY, data.did);
 
-    return new HappyViewSession({
+    const session = new HappyViewSession({
       did: data.did,
       dpopKey,
       accessToken: params.accessToken,
       clientKey: this.clientKey,
       instanceUrl: this.instanceUrl,
+      scopes: params.scopes,
+      pdsUrl: params.pdsUrl,
+      issuer: params.issuer,
       fetch: this._fetch,
+      onSignOut: () => this.deleteSession(data.did),
     });
+
+    this.sessionHooks.onSessionUpdate?.(data.did);
+
+    return session;
   }
 
   async deleteSession(did: string): Promise<void> {
@@ -176,6 +215,8 @@ export class HappyViewOAuthClient {
     if (lastActive === did) {
       await this.storage.delete(LAST_ACTIVE_KEY);
     }
+
+    this.sessionHooks.onSessionDelete?.(did);
   }
 
   async restoreSession(did: string): Promise<HappyViewSession | null> {
@@ -190,7 +231,11 @@ export class HappyViewOAuthClient {
       accessToken: data.accessToken,
       clientKey: data.clientKey,
       instanceUrl: data.instanceUrl,
+      scopes: data.scopes,
+      pdsUrl: data.pdsUrl,
+      issuer: data.issuer,
       fetch: this._fetch,
+      onSignOut: () => this.deleteSession(data.did),
     });
   }
 

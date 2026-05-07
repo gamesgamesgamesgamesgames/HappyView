@@ -1,4 +1,5 @@
 import type { Key } from "@atproto/jwk";
+import type { TokenInfo } from "./types";
 
 export interface HappyViewSessionOptions {
   did: string;
@@ -6,7 +7,11 @@ export interface HappyViewSessionOptions {
   accessToken: string;
   clientKey: string;
   instanceUrl: string;
+  scopes?: string;
+  pdsUrl?: string;
+  issuer?: string;
   fetch?: typeof globalThis.fetch;
+  onSignOut?: () => Promise<void>;
 }
 
 function randomHex(byteLength: number): string {
@@ -33,7 +38,11 @@ export class HappyViewSession {
   private readonly accessToken: string;
   private readonly clientKey: string;
   private readonly instanceUrl: string;
+  private readonly _scopes: string | undefined;
+  private readonly _pdsUrl: string | undefined;
+  private readonly _issuer: string | undefined;
   private readonly _fetch: typeof globalThis.fetch;
+  private readonly _onSignOut: (() => Promise<void>) | undefined;
   private dpopNonce: string | undefined;
 
   constructor(options: HappyViewSessionOptions) {
@@ -42,7 +51,30 @@ export class HappyViewSession {
     this.accessToken = options.accessToken;
     this.clientKey = options.clientKey;
     this.instanceUrl = options.instanceUrl.replace(/\/+$/, "");
+    this._scopes = options.scopes;
+    this._pdsUrl = options.pdsUrl;
+    this._issuer = options.issuer;
     this._fetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof globalThis.fetch;
+    this._onSignOut = options.onSignOut;
+  }
+
+  get sub(): string {
+    return this.did;
+  }
+
+  getTokenInfo(): TokenInfo {
+    return {
+      scope: this._scopes,
+      iss: this._issuer,
+      aud: this._pdsUrl,
+      sub: this.did,
+    };
+  }
+
+  async signOut(): Promise<void> {
+    if (this._onSignOut) {
+      await this._onSignOut();
+    }
   }
 
   async fetchHandler(url: string, init: RequestInit): Promise<Response> {

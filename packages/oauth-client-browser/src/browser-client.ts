@@ -7,8 +7,10 @@ import {
   LAST_ACTIVE_KEY,
   importJwk,
   InvalidStateError,
+  OAuthCallbackError,
   ResolutionError,
   TokenExchangeError,
+  type SessionEventHooks,
   type StorageAdapter,
 } from "@happyview/oauth-client";
 import { LocalStorageAdapter } from "./local-storage-adapter";
@@ -31,6 +33,7 @@ export interface HappyViewBrowserClientOptions {
   redirectUri?: string;
   scopes?: string;
   storage?: StorageAdapter;
+  sessionHooks?: SessionEventHooks;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -47,8 +50,21 @@ interface PendingAuthState {
 }
 
 export interface LoginOptions {
+  scope?: string;
+  /** @deprecated Use `scope` instead. */
   scopes?: string;
   state?: string;
+  redirect_uri?: string;
+  signal?: AbortSignal;
+  display?: "page" | "popup" | "touch" | "wap";
+  prompt?: string;
+  nonce?: string;
+  max_age?: number;
+  ui_locales?: string;
+  dpop_jkt?: string;
+  claims?: Record<string, Record<string, null | Record<string, unknown>>>;
+  authorization_details?: unknown[];
+  id_token_hint?: string;
 }
 
 export interface PopupLoginOptions extends LoginOptions {
@@ -77,8 +93,8 @@ interface AuthServerMetadata {
 }
 
 export class HappyViewBrowserClient extends HappyViewOAuthClient {
-  private readonly handleResolver: AtprotoDohHandleResolver;
-  private readonly didResolver: DidResolverCommon;
+  readonly handleResolver: AtprotoDohHandleResolver;
+  readonly didResolver: DidResolverCommon;
   private readonly clientId: string;
   private readonly redirectUri: string | undefined;
   private readonly scopes: string;
@@ -89,6 +105,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       instanceUrl: options.instanceUrl,
       clientKey: options.clientKey,
       storage: storageAdapter,
+      sessionHooks: options.sessionHooks,
       fetch: fetchFn,
     });
 
@@ -114,7 +131,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     const pdsUrl = extractPdsUrl(didDoc);
     const authMeta = await this.fetchAuthServerMetadata(pdsUrl);
 
-    const scopes = options?.scopes ?? this.scopes;
+    const scopes = options?.scope ?? options?.scopes ?? this.scopes;
 
     // Provision DPoP key from HappyView
     const { provisionId, rawJwk, pkceVerifier: provisionPkceVerifier } =
@@ -142,7 +159,8 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       JSON.stringify(pendingState),
     );
 
-    const { clientId, redirectUri } = this.resolveOAuthEndpoints();
+    const { clientId, redirectUri: defaultRedirectUri } = this.resolveOAuthEndpoints();
+    const redirectUri = options?.redirect_uri ?? defaultRedirectUri;
 
     const authParams = new URLSearchParams({
       response_type: "code",
@@ -154,6 +172,16 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
       code_challenge_method: "S256",
       login_hint: handle,
     });
+
+    if (options?.display) authParams.set("display", options.display);
+    if (options?.prompt) authParams.set("prompt", options.prompt);
+    if (options?.nonce) authParams.set("nonce", options.nonce);
+    if (options?.max_age != null) authParams.set("max_age", String(options.max_age));
+    if (options?.ui_locales) authParams.set("ui_locales", options.ui_locales);
+    if (options?.dpop_jkt) authParams.set("dpop_jkt", options.dpop_jkt);
+    if (options?.id_token_hint) authParams.set("id_token_hint", options.id_token_hint);
+    if (options?.claims) authParams.set("claims", JSON.stringify(options.claims));
+    if (options?.authorization_details) authParams.set("authorization_details", JSON.stringify(options.authorization_details));
 
     // ATProto requires Pushed Authorization Requests (PAR)
     const parEndpoint = authMeta.pushed_authorization_request_endpoint;
@@ -200,121 +228,128 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     const code = params.get("code");
     const state = params.get("state");
 
-    if (!code || !state) {
-      const error = params.get("error");
-      const errorDesc = params.get("error_description");
-      const raw = search ?? window.location.search;
-      throw new InvalidStateError(
-        `Missing code or state in callback URL. ` +
-        `error=${error}, error_description=${errorDesc}, ` +
-        `search=${raw}`
-      );
+    if (!state) {
+      throw new OAuthCallbackError(params, 'Missing "state" parameter');
     }
 
     const pendingJson = await this.storage.get(`pending-auth:${state}`);
     if (!pendingJson) {
-      throw new InvalidStateError(
-        "No pending auth state found for this callback",
+      throw new OAuthCallbackError(
+        params,
+        `Unknown authorization session "${state}"`,
+        state,
       );
     }
+
+    if (params.has("error")) {
+      await this.storage.delete(`pending-auth:${state}`);
+      throw new OAuthCallbackError(params, undefined, state);
+    }
+
+    if (!code) {
+      throw new OAuthCallbackError(
+        params,
+        'Missing "code" parameter',
+        state,
+      );
+    }
+
     const pending: PendingAuthState = JSON.parse(pendingJson);
 
-    // Import the stored JWK into a Key for DPoP proof generation
-    const dpopKey = await importJwk(pending.rawJwk);
-    // Build a plain public JWK object from the raw key (strip private "d" component)
-    const { d: _, ...publicJwk } = pending.rawJwk;
+    try {
+      const dpopKey = await importJwk(pending.rawJwk);
+      const { d: _, ...publicJwk } = pending.rawJwk;
 
-    const { clientId, redirectUri } = this.resolveOAuthEndpoints();
+      const { clientId, redirectUri } = this.resolveOAuthEndpoints();
 
-    // Token exchange with DPoP nonce handling — the PDS may require a nonce
-    // by responding with 400 + use_dpop_nonce error and a DPoP-Nonce header.
-    let dpopNonce: string | undefined;
-    let tokenResp!: Response;
+      let dpopNonce: string | undefined;
+      let tokenResp!: Response;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const proof = await dpopKey.createJwt(
-        {
-          alg: "ES256",
-          typ: "dpop+jwt",
-          jwk: publicJwk as any,
-        },
-        {
-          htm: "POST",
-          htu: pending.tokenEndpoint,
-          iat: Math.floor(Date.now() / 1000),
-          jti: randomHex(16),
-          ...(dpopNonce ? { nonce: dpopNonce } : {}),
-        },
-      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const proof = await dpopKey.createJwt(
+          {
+            alg: "ES256",
+            typ: "dpop+jwt",
+            jwk: publicJwk as any,
+          },
+          {
+            htm: "POST",
+            htu: pending.tokenEndpoint,
+            iat: Math.floor(Date.now() / 1000),
+            jti: randomHex(16),
+            ...(dpopNonce ? { nonce: dpopNonce } : {}),
+          },
+        );
 
-      tokenResp = await this._fetch(pending.tokenEndpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          dpop: proof,
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: redirectUri,
-          client_id: clientId,
-          code_verifier: pending.authPkceVerifier,
-        }),
-      });
+        tokenResp = await this._fetch(pending.tokenEndpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            dpop: proof,
+          },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: redirectUri,
+            client_id: clientId,
+            code_verifier: pending.authPkceVerifier,
+          }),
+        });
 
-      // If the server requires a DPoP nonce, retry with it
-      if (!tokenResp.ok && attempt === 0) {
-        const nonceHeader = tokenResp.headers.get("dpop-nonce");
-        if (nonceHeader) {
-          const errorBody = await tokenResp.text();
-          if (errorBody.includes("use_dpop_nonce")) {
-            dpopNonce = nonceHeader;
-            continue;
+        if (!tokenResp.ok && attempt === 0) {
+          const nonceHeader = tokenResp.headers.get("dpop-nonce");
+          if (nonceHeader) {
+            const errorBody = await tokenResp.text();
+            if (errorBody.includes("use_dpop_nonce")) {
+              dpopNonce = nonceHeader;
+              continue;
+            }
+            throw new TokenExchangeError(
+              `Token exchange failed: ${tokenResp.status} ${errorBody}`,
+              tokenResp.status,
+              errorBody,
+            );
           }
-          // Not a nonce error — throw
-          throw new TokenExchangeError(
-            `Token exchange failed: ${tokenResp.status} ${errorBody}`,
-            tokenResp.status,
-            errorBody,
-          );
         }
+
+        break;
       }
 
-      break;
+      if (!tokenResp!.ok) {
+        const err = await tokenResp!.text();
+        throw new TokenExchangeError(
+          `Token exchange failed: ${tokenResp!.status} ${err}`,
+          tokenResp!.status,
+          err,
+        );
+      }
+
+      const tokens = (await tokenResp.json()) as {
+        access_token: string;
+        refresh_token?: string;
+        scope?: string;
+        sub?: string;
+        iss?: string;
+      };
+
+      const session = await this.registerSession({
+        provisionId: pending.provisionId,
+        pkceVerifier: pending.provisionPkceVerifier,
+        did: pending.did,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        scopes: tokens.scope ?? this.scopes,
+        pdsUrl: pending.pdsUrl,
+        issuer: tokens.iss ?? pending.issuer,
+        dpopKey: pending.rawJwk,
+      });
+
+      await this.storage.delete(`pending-auth:${state}`);
+
+      return session;
+    } catch (err) {
+      throw OAuthCallbackError.from(err, params, state);
     }
-
-    if (!tokenResp!.ok) {
-      const err = await tokenResp!.text();
-      throw new TokenExchangeError(
-        `Token exchange failed: ${tokenResp!.status} ${err}`,
-        tokenResp!.status,
-        err,
-      );
-    }
-
-    const tokens = (await tokenResp.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      scope?: string;
-      sub?: string;
-      iss?: string;
-    };
-
-    const session = await this.registerSession({
-      provisionId: pending.provisionId,
-      pkceVerifier: pending.provisionPkceVerifier,
-      did: pending.did,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      scopes: tokens.scope ?? this.scopes,
-      pdsUrl: pending.pdsUrl,
-      issuer: tokens.iss ?? pending.issuer,
-      dpopKey: pending.rawJwk,
-    });
-
-    await this.storage.delete(`pending-auth:${state}`);
-
-    return session;
   }
 
   async logout(did: string): Promise<void> {
@@ -325,7 +360,7 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
     return this.logout(did);
   }
 
-  override async restore(did?: string): Promise<HappyViewSession | null> {
+  override async restore(did?: string, _refresh?: boolean | "auto"): Promise<HappyViewSession | null> {
     if (did) {
       const session = await this.restoreSession(did);
       if (session) {
@@ -495,6 +530,10 @@ export class HappyViewBrowserClient extends HappyViewOAuthClient {
 
   dispose(): void {
     // No persistent resources to clean up
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    this.dispose();
   }
 
   private resolveOAuthEndpoints(): { clientId: string; redirectUri: string } {
