@@ -169,6 +169,13 @@ impl TestApp {
         }
     }
 
+    pub async fn new_with_base_path(base_path: &str) -> Self {
+        let mut app = Self::new().await;
+        app.state.config.base_path = Some(base_path.to_string());
+        app.router = server::router(app.state.clone());
+        app
+    }
+
     pub async fn new_with_encryption() -> Self {
         let mut app = Self::new().await;
         // Set a test encryption key (32 bytes)

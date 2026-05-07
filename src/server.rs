@@ -138,9 +138,27 @@ pub fn router(state: AppState) -> Router {
         .fallback_service(serve_dir);
 
     let outer = if let Some(ref base_path) = state.config.base_path {
+        let bp = base_path.clone();
+        let rewrite_redirects =
+            axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
+                let bp = bp.clone();
+                async move {
+                    let mut response: Response = next.run(req).await;
+                    if response.status().is_redirection()
+                        && let Some(loc) = response.headers().get(header::LOCATION)
+                        && let Ok(loc_str) = loc.to_str()
+                        && loc_str.starts_with('/')
+                        && !loc_str.starts_with(&bp)
+                        && let Ok(new_loc) = format!("{}{}", bp, loc_str).parse()
+                    {
+                        response.headers_mut().insert(header::LOCATION, new_loc);
+                    }
+                    response
+                }
+            });
         Router::new()
             .route("/health", get(health))
-            .nest(base_path, app_routes)
+            .nest(base_path, app_routes.layer(rewrite_redirects))
     } else {
         Router::new()
             .route("/health", get(health))
