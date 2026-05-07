@@ -15,6 +15,7 @@ pub struct Config {
     pub relay_url: String,
     pub plc_url: String,
     pub static_dir: String,
+    pub base_path: Option<String>,
     pub event_log_retention_days: u32,
     pub app_name: Option<String>,
     pub logo_uri: Option<String>,
@@ -49,6 +50,16 @@ impl Config {
             relay_url: env::var("RELAY_URL").unwrap_or_else(|_| "https://bsky.network".into()),
             plc_url: env::var("PLC_URL").unwrap_or_else(|_| "https://plc.directory".into()),
             static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| "./web/out".into()),
+            base_path: env::var("BASE_PATH").ok().and_then(|s| {
+                let s = s.trim_end_matches('/').to_string();
+                if s.is_empty() {
+                    None
+                } else if !s.starts_with('/') {
+                    panic!("BASE_PATH must start with '/' (got: {s})");
+                } else {
+                    Some(s)
+                }
+            }),
             event_log_retention_days: std::env::var("EVENT_LOG_RETENTION_DAYS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -80,6 +91,20 @@ impl Config {
             .parse()
             .expect("invalid HOST/PORT")
     }
+
+    pub fn effective_public_url(&self) -> String {
+        match &self.base_path {
+            Some(bp) => format!("{}{}", self.public_url.trim_end_matches('/'), bp),
+            None => self.public_url.clone(),
+        }
+    }
+
+    pub fn url_with_base_path(&self, domain_url: &str) -> String {
+        match &self.base_path {
+            Some(bp) => format!("{}{}", domain_url.trim_end_matches('/'), bp),
+            None => domain_url.to_string(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -103,6 +128,7 @@ mod tests {
             "LOGO_URI",
             "TOS_URI",
             "POLICY_URI",
+            "BASE_PATH",
         ] {
             unsafe {
                 env::remove_var(key);
@@ -130,6 +156,7 @@ mod tests {
             relay_url: String::new(),
             plc_url: String::new(),
             static_dir: String::new(),
+            base_path: None,
             event_log_retention_days: 30,
             app_name: None,
             logo_uri: None,
@@ -285,5 +312,212 @@ mod tests {
         }
         let config = Config::from_env();
         assert_eq!(config.database_backend, DatabaseBackend::Sqlite);
+    }
+
+    #[test]
+    #[serial]
+    fn from_env_base_path_none_by_default() {
+        unsafe {
+            clear_env();
+            set_required_env();
+        }
+        let config = Config::from_env();
+        assert!(config.base_path.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn from_env_base_path_read_from_env() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("BASE_PATH", "/hv");
+        }
+        let config = Config::from_env();
+        assert_eq!(config.base_path.as_deref(), Some("/hv"));
+    }
+
+    #[test]
+    #[serial]
+    fn from_env_base_path_strips_trailing_slash() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("BASE_PATH", "/hv/");
+        }
+        let config = Config::from_env();
+        assert_eq!(config.base_path.as_deref(), Some("/hv"));
+    }
+
+    #[test]
+    #[serial]
+    fn from_env_base_path_empty_becomes_none() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("BASE_PATH", "");
+        }
+        let config = Config::from_env();
+        assert!(config.base_path.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn from_env_base_path_slash_only_becomes_none() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("BASE_PATH", "/");
+        }
+        let config = Config::from_env();
+        assert!(config.base_path.is_none());
+    }
+
+    #[test]
+    #[serial]
+    #[should_panic(expected = "BASE_PATH must start with '/'")]
+    fn from_env_base_path_without_leading_slash_panics() {
+        unsafe {
+            clear_env();
+            set_required_env();
+            env::set_var("BASE_PATH", "hv");
+        }
+        Config::from_env();
+    }
+
+    #[test]
+    fn effective_public_url_without_base_path() {
+        let config = Config {
+            host: String::new(),
+            port: 3000,
+            database_url: String::new(),
+            database_backend: DatabaseBackend::Postgres,
+            public_url: "https://example.com".into(),
+            session_secret: String::new(),
+            jetstream_url: String::new(),
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            base_path: None,
+            event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
+            token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
+        };
+        assert_eq!(config.effective_public_url(), "https://example.com");
+    }
+
+    #[test]
+    fn effective_public_url_with_base_path() {
+        let config = Config {
+            host: String::new(),
+            port: 3000,
+            database_url: String::new(),
+            database_backend: DatabaseBackend::Postgres,
+            public_url: "https://example.com".into(),
+            session_secret: String::new(),
+            jetstream_url: String::new(),
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            base_path: Some("/hv".into()),
+            event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
+            token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
+        };
+        assert_eq!(config.effective_public_url(), "https://example.com/hv");
+    }
+
+    #[test]
+    fn effective_public_url_trims_trailing_slash() {
+        let config = Config {
+            host: String::new(),
+            port: 3000,
+            database_url: String::new(),
+            database_backend: DatabaseBackend::Postgres,
+            public_url: "https://example.com/".into(),
+            session_secret: String::new(),
+            jetstream_url: String::new(),
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            base_path: Some("/hv".into()),
+            event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
+            token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
+        };
+        assert_eq!(config.effective_public_url(), "https://example.com/hv");
+    }
+
+    #[test]
+    fn url_with_base_path_appends() {
+        let config = Config {
+            host: String::new(),
+            port: 3000,
+            database_url: String::new(),
+            database_backend: DatabaseBackend::Postgres,
+            public_url: String::new(),
+            session_secret: String::new(),
+            jetstream_url: String::new(),
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            base_path: Some("/hv".into()),
+            event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
+            token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
+        };
+        assert_eq!(
+            config.url_with_base_path("https://otherdomain.com"),
+            "https://otherdomain.com/hv"
+        );
+    }
+
+    #[test]
+    fn url_with_base_path_without_base_path() {
+        let config = Config {
+            host: String::new(),
+            port: 3000,
+            database_url: String::new(),
+            database_backend: DatabaseBackend::Postgres,
+            public_url: String::new(),
+            session_secret: String::new(),
+            jetstream_url: String::new(),
+            relay_url: String::new(),
+            plc_url: String::new(),
+            static_dir: String::new(),
+            base_path: None,
+            event_log_retention_days: 30,
+            app_name: None,
+            logo_uri: None,
+            tos_uri: None,
+            policy_uri: None,
+            token_encryption_key: None,
+            default_rate_limit_capacity: 100,
+            default_rate_limit_refill_rate: 2.0,
+        };
+        assert_eq!(
+            config.url_with_base_path("https://otherdomain.com"),
+            "https://otherdomain.com"
+        );
     }
 }

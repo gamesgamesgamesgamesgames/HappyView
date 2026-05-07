@@ -229,7 +229,13 @@ async fn callback(
         .map_err(|e| AppError::Internal(format!("user lookup failed: {e}")))?;
 
         if user_exists.is_none() {
-            return Ok((jar, Redirect::to("/login?error=not_authorized")));
+            let login_url = state
+                .config
+                .base_path
+                .as_ref()
+                .map(|bp| format!("{}/login?error=not_authorized", bp))
+                .unwrap_or_else(|| "/login?error=not_authorized".into());
+            return Ok((jar, Redirect::to(&login_url)));
         }
     }
 
@@ -250,8 +256,13 @@ async fn callback(
         None
     };
 
-    // Use DB-stored redirect, or default to "/"
-    let redirect_url = redirect_url.unwrap_or_else(|| "/".into());
+    let default_redirect = state
+        .config
+        .base_path
+        .as_ref()
+        .map(|bp| format!("{}/", bp))
+        .unwrap_or_else(|| "/".into());
+    let redirect_url = redirect_url.unwrap_or(default_redirect);
     tracing::debug!(redirect_url = %redirect_url, "redirecting after callback");
 
     // Set the session cookie

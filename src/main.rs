@@ -411,7 +411,10 @@ async fn main() {
 
     // Build atrium-oauth client
     let dns = NativeDnsResolver::new();
-    let callback_url = format!("{}/auth/callback", config.public_url.trim_end_matches('/'));
+    let callback_url = format!(
+        "{}/auth/callback",
+        config.effective_public_url().trim_end_matches('/')
+    );
     let atrium_http = Arc::new(DefaultHttpClient::default());
 
     let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
@@ -459,9 +462,9 @@ async fn main() {
             client_metadata: AtprotoClientMetadata {
                 client_id: format!(
                     "{}/oauth-client-metadata.json",
-                    config.public_url.trim_end_matches('/')
+                    config.effective_public_url().trim_end_matches('/')
                 ),
-                client_uri: Some(config.public_url.clone()),
+                client_uri: Some(config.effective_public_url()),
                 redirect_uris: vec![callback_url],
                 token_endpoint_auth_method: AuthMethod::None,
                 grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
@@ -526,10 +529,12 @@ async fn main() {
             continue; // Already registered above
         }
 
-        let domain_callback_url = format!("{}/auth/callback", domain.url.trim_end_matches('/'));
+        let domain_base_url = config.url_with_base_path(&domain.url);
+        let domain_callback_url =
+            format!("{}/auth/callback", domain_base_url.trim_end_matches('/'));
         let domain_client_id = format!(
             "{}/oauth-client-metadata.json",
-            domain.url.trim_end_matches('/')
+            domain_base_url.trim_end_matches('/')
         );
 
         let domain_http = Arc::new(DefaultHttpClient::default());
@@ -549,7 +554,7 @@ async fn main() {
         match atrium_oauth::OAuthClient::new(OAuthClientConfig {
             client_metadata: AtprotoClientMetadata {
                 client_id: domain_client_id,
-                client_uri: Some(domain.url.clone()),
+                client_uri: Some(domain_base_url.clone()),
                 redirect_uris: vec![domain_callback_url],
                 token_endpoint_auth_method: AuthMethod::None,
                 grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],

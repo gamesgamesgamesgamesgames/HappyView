@@ -4,6 +4,7 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ .
+ENV NEXT_PUBLIC_BASE_PATH=/__HAPPYVIEW_BP__
 RUN npm run build
 
 FROM rust:1.93-bookworm AS builder
@@ -34,9 +35,11 @@ WORKDIR /app
 COPY --from=builder /app/target/release/happyview /usr/local/bin/happyview
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=frontend /app/web/out /srv/static
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 ENV STATIC_DIR=/srv/static
 
 EXPOSE 3000
 
-ENTRYPOINT ["happyview"]
+ENTRYPOINT ["/entrypoint.sh"]

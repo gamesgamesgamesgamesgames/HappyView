@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
 const apiBase = process.env.API_URL || "http://localhost:3000";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || undefined;
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
   trailingSlash: true,
   images: { unoptimized: true },
+  basePath,
 };
 
 if (process.env.NODE_ENV === "production") {
