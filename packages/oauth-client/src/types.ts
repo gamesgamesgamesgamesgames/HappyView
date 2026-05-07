@@ -4,11 +4,17 @@ export interface StorageAdapter {
   delete(key: string): Promise<void>;
 }
 
+export interface SessionEventHooks {
+  onSessionUpdate?: (did: string) => void;
+  onSessionDelete?: (did: string, cause?: unknown) => void;
+}
+
 export interface HappyViewOAuthClientOptions {
   instanceUrl: string;
   clientKey: string;
   clientSecret?: string;
   storage?: StorageAdapter;
+  sessionHooks?: SessionEventHooks;
 }
 
 export interface DpopProvision {
@@ -40,6 +46,18 @@ export interface StoredSession {
   accessToken: string;
   clientKey: string;
   instanceUrl: string;
+  scopes?: string;
+  pdsUrl?: string;
+  issuer?: string;
+}
+
+export interface TokenInfo {
+  expiresAt?: Date;
+  expired?: boolean;
+  scope?: string;
+  iss?: string;
+  aud?: string;
+  sub: string;
 }
 
 export interface ProvisionKeyResponse {

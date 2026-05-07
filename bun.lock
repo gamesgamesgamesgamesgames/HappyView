@@ -28,7 +28,7 @@
       "name": "@happyview/lex-agent",
       "version": "0.0.0-development",
       "dependencies": {
-        "@happyview/oauth-client": "^1.0.0-dev.2",
+        "@happyview/oauth-client": "workspace:*",
       },
       "devDependencies": {
         "@atproto/lex": "^0.0.25",
@@ -76,6 +76,27 @@
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "^16.0.0",
+        "@semantic-release/commit-analyzer": "^13.0.1",
+        "@semantic-release/exec": "^7.0.0",
+        "@semantic-release/github": "^12.0.6",
+        "@semantic-release/release-notes-generator": "^14.1.0",
+        "@types/bun": "^1.3.12",
+        "semantic-release": "^25.0.3",
+        "semantic-release-monorepo": "^8.0.2",
+        "tsup": "^8.0.0",
+        "typescript": "^5.7.0",
+      },
+    },
+    "packages/oauth-client-node": {
+      "name": "@happyview/oauth-client-node",
+      "version": "0.0.0-development",
+      "dependencies": {
+        "@atproto-labs/did-resolver": "^0.2.6",
+        "@atproto-labs/handle-resolver": "^0.3.6",
+        "@atproto/did": "^0.3.0",
+        "@happyview/oauth-client": "workspace:*",
+      },
+      "devDependencies": {
         "@semantic-release/commit-analyzer": "^13.0.1",
         "@semantic-release/exec": "^7.0.0",
         "@semantic-release/github": "^12.0.6",
@@ -635,6 +656,8 @@
     "@happyview/oauth-client": ["@happyview/oauth-client@workspace:packages/oauth-client"],
 
     "@happyview/oauth-client-browser": ["@happyview/oauth-client-browser@workspace:packages/oauth-client-browser"],
+
+    "@happyview/oauth-client-node": ["@happyview/oauth-client-node@workspace:packages/oauth-client-node"],
 
     "@iconify/types": ["@iconify/types@2.0.0", "", {}, "sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg=="],
 
@@ -3069,8 +3092,6 @@
     "@docsearch/react/@algolia/autocomplete-core": ["@algolia/autocomplete-core@1.19.2", "", { "dependencies": { "@algolia/autocomplete-plugin-algolia-insights": "1.19.2", "@algolia/autocomplete-shared": "1.19.2" } }, "sha512-mKv7RyuAzXvwmq+0XRK8HqZXt9iZ5Kkm2huLjgn5JoCPtDy+oh9yxUMfDDaVCw0oyzZ1isdJBc7l9nuCyyR7Nw=="],
 
     "@docusaurus/types/webpack-merge": ["webpack-merge@5.10.0", "", { "dependencies": { "clone-deep": "^4.0.1", "flat": "^5.0.2", "wildcard": "^2.0.0" } }, "sha512-+4zXKdx7UnO+1jaN4l2lHVD+mFvnlZQP/6ljaJVb4SZiwIKeUnrT5l0gkT8z+n4hKpC+jpOv6O9R+gLtag7pSA=="],
-
-    "@happyview/lex-agent/@happyview/oauth-client": ["@happyview/oauth-client@1.0.0", "", {}, "sha512-hvVeyVHJStZ/nrqolcWfy39AJuaws0axKx7b3UvXTSi2TmnTeCJOnelnHstt0L9S6P6b7xxP8ujzvcWZsOd0Ig=="],
 
     "@jsonjoy.com/fs-snapshot/@jsonjoy.com/json-pack": ["@jsonjoy.com/json-pack@17.67.0", "", { "dependencies": { "@jsonjoy.com/base64": "17.67.0", "@jsonjoy.com/buffers": "17.67.0", "@jsonjoy.com/codegen": "17.67.0", "@jsonjoy.com/json-pointer": "17.67.0", "@jsonjoy.com/util": "17.67.0", "hyperdyperid": "^1.2.0", "thingies": "^2.5.0", "tree-dump": "^1.1.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-t0ejURcGaZsn1ClbJ/3kFqSOjlryd92eQY465IYrezsXmPcfHPE/av4twRSxf6WE+TkZgLY+71vCZbiIiFKA/w=="],
 

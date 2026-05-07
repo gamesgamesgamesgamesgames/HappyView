@@ -1,19 +1,6 @@
-export {
-  ApiError,
-  AuthenticationError,
-  HappyViewError,
-  HappyViewSession,
-  InvalidStateError,
-  MemoryStorage,
-  ResolutionError,
-  TokenExchangeError,
-  importJwk,
-  type DpopProvision,
-  type HappyViewOAuthClientOptions,
-  type RegisterSessionParams,
-  type StorageAdapter,
-  type StoredSession,
-} from "@happyview/oauth-client";
+export * from "@happyview/oauth-client";
+export * from "@atproto-labs/handle-resolver";
+export * from "@atproto-labs/did-resolver";
 
 export {
   HappyViewBrowserClient,
@@ -27,3 +14,4 @@ export type {
   SignInOptions,
 } from "./browser-client";
 export { LocalStorageAdapter } from "./local-storage-adapter";
+export { buildLoopbackClientId } from "./util";

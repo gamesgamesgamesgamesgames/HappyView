@@ -30,6 +30,7 @@ const client = new HappyViewBrowserClient({
 | `redirectUri` | No       | OAuth callback URL. Defaults to `${window.location.origin}/oauth/callback`    |
 | `scopes`      | No       | OAuth scopes to request. Defaults to `"atproto"`                              |
 | `storage`     | No       | Custom storage adapter. Defaults to localStorage                              |
+| `sessionHooks`| No       | Event hooks for session lifecycle events                                      |
 | `fetch`       | No       | Custom fetch implementation                                                   |
 
 The client uses localStorage by default. You can override it:
@@ -148,7 +149,9 @@ if (params) {
 }
 ```
 
-## Authenticated requests
+## Session
+
+### Authenticated requests
 
 The session's `fetchHandler` attaches DPoP proof headers automatically:
 
@@ -163,32 +166,128 @@ const data = await response.json();
 
 Pass a relative path (prepends the HappyView instance URL) or a full URL (used as-is).
 
+### Token info
+
+```typescript
+const info = session.getTokenInfo();
+// { sub, scope, iss, aud }
+```
+
+### Properties
+
+| Property | Type     | Description                              |
+| -------- | -------- | ---------------------------------------- |
+| `did`    | `string` | The authenticated user's DID             |
+| `sub`    | `string` | Alias for `did` (matches upstream naming) |
+
+### Sign out
+
+Sessions can self-revoke:
+
+```typescript
+await session.signOut();
+```
+
+This is equivalent to calling `client.revoke(session.did)`.
+
+## Session event hooks
+
+React to session lifecycle events with `sessionHooks`:
+
+```typescript
+const client = new HappyViewBrowserClient({
+  // ...
+  sessionHooks: {
+    onSessionUpdate(did) {
+      console.log(`Session created/updated for ${did}`);
+    },
+    onSessionDelete(did) {
+      console.log(`Session deleted for ${did}`);
+    },
+  },
+});
+```
+
+- `onSessionUpdate(did)` fires after a session is registered (from `callback()`) or restored.
+- `onSessionDelete(did)` fires after a session is revoked (from `revoke()`, `logout()`, or `session.signOut()`).
+
+## Error handling
+
+Callback errors are always wrapped in `OAuthCallbackError`, which carries the original callback params and state:
+
+```typescript
+import { OAuthCallbackError } from "@happyview/oauth-client-browser";
+
+try {
+  const session = await client.callback();
+} catch (err) {
+  if (err instanceof OAuthCallbackError) {
+    console.log(err.state);           // the state from the callback
+    console.log(err.params.get("error")); // e.g. "access_denied"
+    console.log(err.cause);           // the underlying error, if any
+  }
+}
+```
+
+If the authorization server returns an error (e.g., the user denied access), the `params` contain the `error` and `error_description` fields from the server response. If the token exchange fails, the underlying `TokenExchangeError` is available as `err.cause`.
+
+## Using with @atproto/api
+
+`HappyViewSession` is directly compatible with `@atproto/api`'s `Agent`. Pass it as the session manager:
+
+```typescript
+import { Agent } from "@atproto/api";
+
+const result = await client.init();
+if (result) {
+  const agent = new Agent(result.session);
+
+  // Use the full @atproto/api surface
+  const profile = await agent.getProfile({ actor: agent.did });
+  await agent.like(postUri, postCid);
+}
+```
+
+This works because `HappyViewSession` implements the `SessionManager` interface that `Agent` expects — it has `did` and a `fetchHandler` that attaches DPoP authentication headers and prepends the HappyView instance URL.
+
 ## Revoke session
+
+From the client:
 
 ```typescript
 await client.revoke(session.did);
+```
+
+Or from the session itself:
+
+```typescript
+await session.signOut();
 ```
 
 :::note
 `logout()` still works as an alias for `revoke()`.
 :::
 
-## Resolution utilities
+## Identity resolution
 
-The browser client exports the resolution functions it uses internally. These are useful if you need to resolve handles or discover PDS URLs outside of the login flow:
+The client exposes its handle and DID resolvers for advanced use:
 
 ```typescript
-import {
-  resolveHandleToDid,
-  resolveDidDocument,
-  resolvePdsUrl,
-  resolveAuthServerMetadata,
-} from "@happyview/oauth-client-browser";
+const did = await client.handleResolver.resolve("alice.bsky.social");
+const doc = await client.didResolver.resolve(did);
+```
 
-const did = await resolveHandleToDid("alice.bsky.social");
-const doc = await resolveDidDocument(did);
-const pdsUrl = resolvePdsUrl(doc);
-const authMeta = await resolveAuthServerMetadata(pdsUrl);
+## Validate client metadata
+
+Verify that your OAuth client metadata is served correctly:
+
+```typescript
+import { HappyViewBrowserClient } from "@happyview/oauth-client-browser";
+
+const metadata = await HappyViewBrowserClient.fetchMetadata({
+  clientId: "https://example.com/oauth-client-metadata.json",
+});
+console.log(metadata.client_name);
 ```
 
 ## OAuth client metadata
@@ -222,16 +321,56 @@ For a static site, serve a plain JSON file at `/oauth-client-metadata.json`.
 
 The `redirect_uris` array must include the `redirectUri` your client is configured with (defaults to `${origin}/oauth/callback`).
 
+## Local development
+
+For local development with ATProto's loopback client ID convention, use `buildLoopbackClientId`:
+
+```typescript
+import { buildLoopbackClientId } from "@happyview/oauth-client-browser";
+
+const clientId = buildLoopbackClientId(window.location);
+// → "http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2F"
+```
+
+This builds a client ID that authorization servers recognize as a local development app. The `redirect_uri` is encoded in the client ID URL query string.
+
+## Cleanup
+
+The browser client implements `AsyncDisposable` for use with `await using`:
+
+```typescript
+await using client = new HappyViewBrowserClient({ ... });
+// client.dispose() called automatically when scope exits
+```
+
+Or call `dispose()` manually:
+
+```typescript
+client.dispose();
+```
+
 ## Re-exports
 
-This package re-exports everything from `@happyview/oauth-client`, so you don't need to install the core package separately. All types, error classes, and utilities are available:
+This package re-exports everything from `@happyview/oauth-client`, `@atproto-labs/handle-resolver`, and `@atproto-labs/did-resolver`. You don't need to install these packages separately:
 
 ```typescript
 import {
+  // From @happyview/oauth-client
   HappyViewBrowserClient,
   HappyViewSession,
   ApiError,
-  type CryptoAdapter,
+  OAuthCallbackError,
+  Key,
+  type SessionEventHooks,
   type StorageAdapter,
+  type TokenInfo,
+  type Jwk,
+
+  // From @atproto-labs/handle-resolver
+  AtprotoDohHandleResolver,
+
+  // From @atproto-labs/did-resolver
+  DidResolverCommon,
+  type DidDocument,
 } from "@happyview/oauth-client-browser";
 ```
