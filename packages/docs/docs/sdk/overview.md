@@ -13,6 +13,8 @@ HappyView provides JavaScript packages for building third-party apps that authen
 
 **Starting a new app?** Use `@happyview/lex-agent` with `@atproto/lex`. It gives you type-safe XRPC calls through a `Client` that routes requests to your HappyView instance with DPoP authentication. This is the recommended way to interact with HappyView from JavaScript.
 
+**Already using `@atproto/api`?** `HappyViewSession` works directly as a session manager for `@atproto/api`'s `Agent` — just pass it to `new Agent(session)`. See [Using with @atproto/api](./oauth-client-browser.md#using-with-atprotoapi).
+
 **Already using `@atproto/oauth-client-browser`?** Add `@happyview/oauth-client-browser` to get a `HappyViewBrowserClient` that handles the HappyView-specific DPoP key provisioning and session registration on top of the standard atproto OAuth flow.
 
 **Building a server-side (Node.js) app?** Use `@happyview/oauth-client-node` — it handles handle resolution, DID resolution, PDS discovery, and the full OAuth flow server-side. Matches the API surface of `@atproto/oauth-client-node`.
