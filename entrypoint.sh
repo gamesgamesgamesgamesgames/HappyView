@@ -4,10 +4,10 @@ set -e
 BP="${BASE_PATH:-}"
 STATIC="${STATIC_DIR:-/srv/static}"
 SENTINEL="/__HAPPYVIEW_BP__"
-SENTINEL_DIR="__HAPPYVIEW_BP__"
+MARKER="${STATIC}/.base-path-pending"
 
-# Only run replacement if the sentinel directory exists (first boot)
-if [ -d "${STATIC}/${SENTINEL_DIR}" ]; then
+# Only run replacement once (marker is created during Docker build)
+if [ -f "$MARKER" ]; then
     if [ -n "$BP" ]; then
         # Validate: must start with /
         case "$BP" in
@@ -16,23 +16,17 @@ if [ -d "${STATIC}/${SENTINEL_DIR}" ]; then
         esac
         # Strip trailing slash
         BP="${BP%/}"
-        BP_DIR="${BP#/}"
 
-        # Rename sentinel directory to match base path
-        mv "${STATIC}/${SENTINEL_DIR}" "${STATIC}/${BP_DIR}"
-
-        # Replace sentinel string in static files
+        # Replace sentinel string in static files with actual base path
         find "${STATIC}" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' \) \
             -exec sed -i "s|${SENTINEL}|${BP}|g" {} +
     else
-        # No base path: move files from sentinel directory to static root
-        cp -a "${STATIC}/${SENTINEL_DIR}/." "${STATIC}/"
-        rm -rf "${STATIC}/${SENTINEL_DIR}"
-
-        # Remove sentinel string from static files
+        # No base path: remove sentinel string from static files
         find "${STATIC}" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' \) \
             -exec sed -i "s|${SENTINEL}||g" {} +
     fi
+
+    rm "$MARKER"
 fi
 
 exec happyview "$@"
