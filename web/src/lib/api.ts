@@ -57,6 +57,8 @@ export type {
   BulkActionResponse,
 } from "@/types/dead-letters"
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ""
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -78,7 +80,7 @@ async function apiFetch<T = unknown>(
     headers["Content-Type"] = "application/json"
   }
 
-  const res = await fetch(path, {
+  const res = await fetch(`${BASE_PATH}${path}`, {
     ...options,
     headers: { ...headers, ...options?.headers },
     credentials: "same-origin",
@@ -239,7 +241,7 @@ export async function xrpcQuery<T = unknown>(
   params?: Record<string, string>
 ): Promise<T> {
   const search = params ? `?${new URLSearchParams(params)}` : ""
-  const res = await fetch(`/xrpc/${encodeURIComponent(method)}${search}`)
+  const res = await fetch(`${BASE_PATH}/xrpc/${encodeURIComponent(method)}${search}`)
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new ApiError(res.status, text)
@@ -323,7 +325,7 @@ export function deleteSetting(key: string) {
 export async function uploadLogo(file: File) {
   const formData = new FormData()
   formData.append("file", file)
-  const res = await fetch("/admin/settings/logo", {
+  const res = await fetch(`${BASE_PATH}/admin/settings/logo`, {
     method: "PUT",
     body: formData,
     credentials: "same-origin",

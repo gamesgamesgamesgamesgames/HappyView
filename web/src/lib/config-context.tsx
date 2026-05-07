@@ -23,7 +23,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/config")
+    fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/config`)
       .then((res) => {
         if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`)
         return res.json()

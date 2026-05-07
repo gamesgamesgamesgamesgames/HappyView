@@ -25,7 +25,7 @@ export default function AboutPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/config", { credentials: "same-origin" })
+    fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/config`, { credentials: "same-origin" })
       .then((r) => {
         if (!r.ok) throw new Error("Failed to load config")
         return r.json()

@@ -492,6 +492,7 @@ mod tests {
             relay_url: String::new(),
             plc_url: plc_url.to_string(),
             static_dir: String::new(),
+            base_path: None,
             event_log_retention_days: 30,
             app_name: None,
             logo_uri: None,

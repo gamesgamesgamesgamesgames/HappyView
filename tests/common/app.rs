@@ -54,6 +54,7 @@ impl TestApp {
             relay_url: mock_url.clone(),
             plc_url: mock_url.clone(),
             static_dir: "./web/out".into(),
+            base_path: None,
             event_log_retention_days: 30,
             app_name: None,
             logo_uri: None,

@@ -132,11 +132,22 @@ pub fn router(state: AppState) -> Router {
             resolve_domain,
         ));
 
-    Router::new()
-        .route("/health", get(health))
+    let app_routes = Router::new()
         .nest("/admin", admin::admin_routes(state.clone()))
         .merge(domain_routes)
-        .fallback_service(serve_dir)
+        .fallback_service(serve_dir);
+
+    let outer = if let Some(ref base_path) = state.config.base_path {
+        Router::new()
+            .route("/health", get(health))
+            .nest(base_path, app_routes)
+    } else {
+        Router::new()
+            .route("/health", get(health))
+            .merge(app_routes)
+    };
+
+    outer
         .layer(TraceLayer::new_for_http())
         .layer(
             CorsLayer::new()
@@ -166,8 +177,8 @@ async fn config_endpoint(
     req: axum::extract::Request,
 ) -> Json<serde_json::Value> {
     let domain_url = crate::domain_middleware::extract_domain(&req)
-        .map(|d| d.url.clone())
-        .unwrap_or_else(|| state.config.public_url.clone());
+        .map(|d| state.config.url_with_base_path(&d.url))
+        .unwrap_or_else(|| state.config.effective_public_url());
 
     let pool = &state.db;
     let backend = state.db_backend;
@@ -223,11 +234,12 @@ async fn client_metadata(
     State(state): State<AppState>,
     req: axum::extract::Request,
 ) -> Json<serde_json::Value> {
-    let domain_url = crate::domain_middleware::extract_domain(&req)
+    let raw_domain_url = crate::domain_middleware::extract_domain(&req)
         .map(|d| d.url.clone())
         .unwrap_or_else(|| state.config.public_url.clone());
+    let domain_url = state.config.url_with_base_path(&raw_domain_url);
 
-    let oauth_client = state.oauth.get_for_domain(&domain_url);
+    let oauth_client = state.oauth.get_for_domain(&raw_domain_url);
     let mut metadata = serde_json::to_value(&oauth_client.client_metadata).unwrap_or_default();
 
     // The `client_id` field in the response must exactly match the URL the

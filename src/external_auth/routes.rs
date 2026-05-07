@@ -130,8 +130,8 @@ async fn authorize(
     // Build the backend callback URL for OpenID/OAuth return_to
     // This ensures the auth provider redirects back to the backend, not the frontend
     let domain_url = domain
-        .map(|d| d.0.url.clone())
-        .unwrap_or_else(|| app_state.config.public_url.clone());
+        .map(|d| app_state.config.url_with_base_path(&d.0.url))
+        .unwrap_or_else(|| app_state.config.effective_public_url());
 
     let callback_url = format!(
         "{}/external-auth/{}/callback",

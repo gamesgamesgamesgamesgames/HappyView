@@ -32,6 +32,54 @@ PUBLIC_URL=https://happyview.example.com
 
 `PUBLIC_URL` is used to construct OAuth redirect URIs, so it must exactly match the URL users hit — including scheme. A mismatch breaks OAuth login.
 
+## Reverse proxy subpath
+
+If you need HappyView to share a domain with other services, set `BASE_PATH` to mount it at a subpath. For example, to serve the dashboard at `https://example.com/hv/`:
+
+```sh
+PUBLIC_URL=https://example.com
+BASE_PATH=/hv
+```
+
+`PUBLIC_URL` should **not** include the base path — HappyView appends it automatically when constructing OAuth callbacks and other external URLs.
+
+The base path is applied at container startup without rebuilding the image, so prebuilt Docker images (including Railway deployments) work with any subpath.
+
+### XRPC endpoints
+
+ATProto clients expect XRPC endpoints at `/xrpc/*` on the domain root. When using a base path, configure your reverse proxy to rewrite `/xrpc/*` requests so they reach HappyView under its base path. Here's an example using Caddy:
+
+```
+example.com {
+    # Dashboard and API under the base path
+    handle /hv/* {
+        reverse_proxy happyview:3000
+    }
+
+    # Redirect bare /hv to /hv/ for cleaner URLs
+    handle /hv {
+        redir /hv/ permanent
+    }
+
+    # ATProto XRPC — rewrite to base path before proxying
+    handle /xrpc/* {
+        uri prefix /hv
+        reverse_proxy happyview:3000
+    }
+
+    # Everything else goes to another service
+    handle {
+        reverse_proxy other-app:3001
+    }
+}
+```
+
+The `uri prefix /hv` directive prepends `/hv` to the request path before proxying, so `/xrpc/com.atproto.sync.getRecord` becomes `/hv/xrpc/com.atproto.sync.getRecord` — which matches HappyView's nested routes.
+
+### Health checks with a base path
+
+`GET /health` is always served at the domain root, even when `BASE_PATH` is set. This keeps load balancer probes working without routing changes.
+
 ## Database
 
 SQLite is fine for small to medium instances and is the default. Switch to Postgres if you need:

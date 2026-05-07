@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function init() {
       try {
         // Check if the user has a valid session cookie
-        const resp = await fetch("/auth/me", { credentials: "same-origin" })
+        const resp = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/auth/me`, { credentials: "same-origin" })
         if (resp.ok) {
           const data = await resp.json()
           if (!cancelled && data.did) {
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (handle: string) => {
     setError(null)
 
-    const resp = await fetch(`/auth/login?handle=${encodeURIComponent(handle)}`, {
+    const resp = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/auth/login?handle=${encodeURIComponent(handle)}`, {
       credentials: "same-origin",
     })
 
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/auth/logout", {
+      await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/auth/logout`, {
         method: "POST",
         credentials: "same-origin",
       })
