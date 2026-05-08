@@ -183,6 +183,21 @@ async fn retry_after_refresh(
                 );
                 creds.session = fresh_session;
             } else {
+                tracing::warn!(
+                    user_did = %creds.session.user_did,
+                    api_client_id = %creds.session.api_client_id,
+                    "refresh token permanently invalid, deleting broken session"
+                );
+                if let Err(del_err) = super::sessions::delete_dpop_session(
+                    pool,
+                    backend,
+                    &creds.session.api_client_id,
+                    &creds.session.user_did,
+                )
+                .await
+                {
+                    tracing::error!(%del_err, "failed to delete broken DPoP session");
+                }
                 return Err(e);
             }
         } else {
