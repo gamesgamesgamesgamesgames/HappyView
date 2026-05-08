@@ -2,7 +2,7 @@ name: Merge main to dev
 
 on:
   workflow_run:
-    workflows: [Release]
+    workflows: [CI]
     types: [completed]
     branches: [main]
 
