@@ -192,7 +192,7 @@ jobs:
         id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
-        run: npx semantic-release
+        run: npx -p semantic-release -p semantic-release-gha-output semantic-release
 
   # ---------------------------------------------------------------------------
   # SDK — per-package tests + releases
