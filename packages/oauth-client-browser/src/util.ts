@@ -10,8 +10,12 @@ export function buildLoopbackClientId(
     );
   }
 
+  const host =
+    localhost.includes(":") && !localhost.startsWith("[")
+      ? `[${localhost}]`
+      : localhost;
   const port = location.port ? `:${location.port}` : "";
-  const redirectUri = `http://${localhost}${port}${location.pathname}`;
+  const redirectUri = `http://${host}${port}${location.pathname}`;
 
   const pathname = location.pathname === "/" ? "" : location.pathname;
   const encodedRedirect = encodeURIComponent(redirectUri);
