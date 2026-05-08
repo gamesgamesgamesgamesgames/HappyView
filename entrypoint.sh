@@ -18,11 +18,11 @@ if [ -f "$MARKER" ]; then
         BP="${BP%/}"
 
         # Replace sentinel string in static files with actual base path
-        find "${STATIC}" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' \) \
+        find "${STATIC}" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' -o -name '*.txt' \) \
             -exec sed -i "s|${SENTINEL}|${BP}|g" {} +
     else
         # No base path: remove sentinel string from static files
-        find "${STATIC}" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' \) \
+        find "${STATIC}" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' -o -name '*.txt' \) \
             -exec sed -i "s|${SENTINEL}||g" {} +
     fi
 
