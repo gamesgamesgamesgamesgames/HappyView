@@ -40,6 +40,7 @@ export interface StoredSession {
   accessToken: string;
   clientKey: string;
   instanceUrl: string;
+  scopes: string[];
 }
 
 export interface ProvisionKeyResponse {
@@ -50,4 +51,10 @@ export interface ProvisionKeyResponse {
 export interface RegisterSessionResponse {
   session_id: string;
   did: string;
+  scopes: string[];
+}
+
+export interface GetSessionResponse {
+  did: string;
+  scopes: string[];
 }

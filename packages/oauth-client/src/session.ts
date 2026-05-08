@@ -6,6 +6,7 @@ export interface HappyViewSessionOptions {
   accessToken: string;
   clientKey: string;
   instanceUrl: string;
+  scopes: string[];
   fetch?: typeof globalThis.fetch;
 }
 
@@ -28,6 +29,7 @@ function base64url(buffer: ArrayBuffer): string {
 
 export class HappyViewSession {
   readonly did: string;
+  readonly scopes: string[];
 
   private readonly dpopKey: Key;
   private readonly accessToken: string;
@@ -38,6 +40,7 @@ export class HappyViewSession {
 
   constructor(options: HappyViewSessionOptions) {
     this.did = options.did;
+    this.scopes = options.scopes;
     this.dpopKey = options.dpopKey;
     this.accessToken = options.accessToken;
     this.clientKey = options.clientKey;

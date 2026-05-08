@@ -4,6 +4,7 @@ import { importJwk } from "./import-jwk";
 import { HappyViewSession } from "./session";
 import { MemoryStorage } from "./storage";
 import type {
+  GetSessionResponse,
   HappyViewOAuthClientOptions,
   ProvisionKeyResponse,
   RegisterSessionParams,
@@ -135,6 +136,7 @@ export class HappyViewOAuthClient {
       accessToken: params.accessToken,
       clientKey: this.clientKey,
       instanceUrl: this.instanceUrl,
+      scopes: data.scopes,
     };
     await this.storage.set(
       `${STORAGE_PREFIX}${data.did}`,
@@ -148,6 +150,7 @@ export class HappyViewOAuthClient {
       accessToken: params.accessToken,
       clientKey: this.clientKey,
       instanceUrl: this.instanceUrl,
+      scopes: data.scopes,
       fetch: this._fetch,
     });
   }
@@ -190,8 +193,32 @@ export class HappyViewOAuthClient {
       accessToken: data.accessToken,
       clientKey: data.clientKey,
       instanceUrl: data.instanceUrl,
+      scopes: data.scopes ?? [],
       fetch: this._fetch,
     });
+  }
+
+  async getSession(did: string): Promise<GetSessionResponse> {
+    const session = await this.restoreSession(did);
+    if (!session) {
+      throw new ApiError("No stored session for this DID", 404, {});
+    }
+
+    const resp = await session.fetchHandler(
+      `${this.instanceUrl}/oauth/sessions/${did}`,
+      { method: "GET" },
+    );
+
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new ApiError(
+        `Failed to get session: ${resp.status} ${(body as any).message ?? resp.statusText}`,
+        resp.status,
+        body,
+      );
+    }
+
+    return resp.json();
   }
 
   async restore(): Promise<HappyViewSession | null> {
