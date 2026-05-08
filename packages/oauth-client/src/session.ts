@@ -48,7 +48,7 @@ export class HappyViewSession {
 
   constructor(options: HappyViewSessionOptions) {
     this.did = options.did;
-    this.scopes = options.scopes;
+    this.scopes = options.scopes ? options.scopes.split(" ") : [];
     this.dpopKey = options.dpopKey;
     this.accessToken = options.accessToken;
     this.clientKey = options.clientKey;
