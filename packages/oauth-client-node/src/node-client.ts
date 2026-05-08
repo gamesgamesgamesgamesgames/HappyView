@@ -57,6 +57,7 @@ interface PendingAuthState {
   tokenEndpoint: string;
   state: string;
   issuer: string;
+  authUrl?: string;
 }
 
 interface AuthServerMetadata {
@@ -187,6 +188,8 @@ export class HappyViewNodeClient extends HappyViewOAuthClient {
             request_uri: parData.request_uri,
           }),
       );
+      pendingState.authUrl = url.href;
+      await this.storage.set(`pending-auth:${state}`, JSON.stringify(pendingState));
       await this.storage.set(`pending-auth-url:${url.href}`, state);
       return url;
     }
@@ -194,6 +197,8 @@ export class HappyViewNodeClient extends HappyViewOAuthClient {
     const url = new URL(
       `${authMeta.authorization_endpoint}?${authParams}`,
     );
+    pendingState.authUrl = url.href;
+    await this.storage.set(`pending-auth:${state}`, JSON.stringify(pendingState));
     await this.storage.set(`pending-auth-url:${url.href}`, state);
     return url;
   }
@@ -320,6 +325,9 @@ export class HappyViewNodeClient extends HappyViewOAuthClient {
       });
 
       await this.storage.delete(`pending-auth:${state}`);
+      if (pending.authUrl) {
+        await this.storage.delete(`pending-auth-url:${pending.authUrl}`);
+      }
 
       return { session, state };
     } catch (err) {
