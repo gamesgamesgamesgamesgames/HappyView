@@ -55,7 +55,15 @@ describe("buildLoopbackClientId", () => {
       { hostname: "localhost", pathname: "/", port: "3000" },
       "::1",
     );
-    expect(result).toContain("http%3A%2F%2F%3A%3A1%3A3000");
+    expect(result).toContain(encodeURIComponent("http://[::1]:3000/"));
+  });
+
+  test("does not double-bracket already-bracketed IPv6", () => {
+    const result = buildLoopbackClientId(
+      { hostname: "[::1]", pathname: "/", port: "3000" },
+      "[::1]",
+    );
+    expect(result).toContain(encodeURIComponent("http://[::1]:3000/"));
   });
 
   test("accepts [::1] hostname", () => {
