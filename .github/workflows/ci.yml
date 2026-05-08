@@ -20,7 +20,10 @@ jobs:
     runs-on: depot-ubuntu-24.04
     outputs:
       server: ${{ steps.filter.outputs.server }}
-      sdk: ${{ steps.filter.outputs.sdk }}
+      oauth-client: ${{ steps.filter.outputs.oauth-client }}
+      oauth-client-browser: ${{ steps.filter.outputs.oauth-client-browser }}
+      oauth-client-node: ${{ steps.filter.outputs.oauth-client-node }}
+      lex-agent: ${{ steps.filter.outputs.lex-agent }}
       postgres: ${{ steps.filter.outputs.postgres }}
     steps:
       - name: Checkout repository
@@ -35,10 +38,16 @@ jobs:
               - '**'
               - '!packages/**'
               - '!.github/workflows/merge-main-to-dev.yml'
-            sdk:
+            oauth-client:
+              - 'packages/oauth-client/**'
+            oauth-client-browser:
               - 'packages/oauth-client/**'
               - 'packages/oauth-client-browser/**'
+            oauth-client-node:
+              - 'packages/oauth-client/**'
               - 'packages/oauth-client-node/**'
+            lex-agent:
+              - 'packages/oauth-client/**'
               - 'packages/lex-agent/**'
             postgres:
               - 'docker/Dockerfile.postgres'
@@ -186,11 +195,11 @@ jobs:
         run: npx semantic-release
 
   # ---------------------------------------------------------------------------
-  # SDK — tests + per-package releases
+  # SDK — per-package tests + releases
   # ---------------------------------------------------------------------------
-  sdk-tests:
+  test-oauth-client:
     needs: changes
-    if: needs.changes.outputs.sdk == 'true'
+    if: needs.changes.outputs.oauth-client == 'true'
     runs-on: depot-ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -202,21 +211,99 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build SDK packages
-        run: bun run --filter '@happyview/*' build
+      - name: Build
+        run: bun run --filter '@happyview/oauth-client' build
 
-      - name: Typecheck SDK packages
-        run: bun run --filter '@happyview/*' typecheck
+      - name: Typecheck
+        run: bun run --filter '@happyview/oauth-client' typecheck
 
-      - name: Test SDK packages
-        run: bun run --filter '@happyview/*' test
+      - name: Test
+        run: bun run --filter '@happyview/oauth-client' test
+
+  test-oauth-client-browser:
+    needs: changes
+    if: needs.changes.outputs.oauth-client-browser == 'true'
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build oauth-client
+        run: bun run --filter '@happyview/oauth-client' build
+
+      - name: Build oauth-client-browser
+        run: bun run --filter '@happyview/oauth-client-browser' build
+
+      - name: Typecheck
+        run: bun run --filter '@happyview/oauth-client-browser' typecheck
+
+      - name: Test
+        run: bun run --filter '@happyview/oauth-client-browser' test
+
+  test-oauth-client-node:
+    needs: changes
+    if: needs.changes.outputs.oauth-client-node == 'true'
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build oauth-client
+        run: bun run --filter '@happyview/oauth-client' build
+
+      - name: Build oauth-client-node
+        run: bun run --filter '@happyview/oauth-client-node' build
+
+      - name: Typecheck
+        run: bun run --filter '@happyview/oauth-client-node' typecheck
+
+      - name: Test
+        run: bun run --filter '@happyview/oauth-client-node' test
+
+  test-lex-agent:
+    needs: changes
+    if: needs.changes.outputs.lex-agent == 'true'
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build oauth-client
+        run: bun run --filter '@happyview/oauth-client' build
+
+      - name: Build lex-agent
+        run: bun run --filter '@happyview/lex-agent' build
+
+      - name: Typecheck
+        run: bun run --filter '@happyview/lex-agent' typecheck
+
+      - name: Test
+        run: bun run --filter '@happyview/lex-agent' test
 
   release-oauth-client:
     if: >-
       github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
-      && needs.changes.outputs.sdk == 'true'
-    needs: [changes, sdk-tests]
+      && needs.changes.outputs.oauth-client == 'true'
+    needs: [changes, test-oauth-client]
     runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
@@ -254,8 +341,8 @@ jobs:
     if: >-
       github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
-      && needs.changes.outputs.sdk == 'true'
-    needs: [changes, release-oauth-client]
+      && needs.changes.outputs.oauth-client-browser == 'true'
+    needs: [changes, test-oauth-client-browser, release-oauth-client]
     runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
@@ -310,8 +397,8 @@ jobs:
     if: >-
       github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
-      && needs.changes.outputs.sdk == 'true'
-    needs: [changes, release-oauth-client]
+      && needs.changes.outputs.oauth-client-node == 'true'
+    needs: [changes, test-oauth-client-node, release-oauth-client]
     runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
@@ -366,8 +453,8 @@ jobs:
     if: >-
       github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
-      && needs.changes.outputs.sdk == 'true'
-    needs: [changes, release-oauth-client]
+      && needs.changes.outputs.lex-agent == 'true'
+    needs: [changes, test-lex-agent, release-oauth-client]
     runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
