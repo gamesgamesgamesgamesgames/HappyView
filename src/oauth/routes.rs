@@ -1,6 +1,6 @@
 use axum::extract::{FromRequest, Path, State};
 use axum::http::StatusCode;
-use axum::routing::{delete, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -17,7 +17,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/dpop-keys", post(provision_dpop_key))
         .route("/sessions", post(register_session))
-        .route("/sessions/{did}", delete(delete_session))
+        .route("/sessions/{did}", get(get_session).delete(delete_session))
 }
 
 // --- Request / response types ---
@@ -50,6 +50,13 @@ struct RegisterSessionBody {
 struct RegisterSessionResponse {
     session_id: String,
     did: String,
+    scopes: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct GetSessionResponse {
+    did: String,
+    scopes: Vec<String>,
 }
 
 // --- Handlers ---
@@ -283,13 +290,125 @@ async fn register_session(
     )
     .await;
 
+    let scopes: Vec<String> = body.scopes.split_whitespace().map(String::from).collect();
+
     Ok((
         StatusCode::CREATED,
         Json(RegisterSessionResponse {
             session_id,
             did: body.did,
+            scopes,
         }),
     ))
+}
+
+/// GET /oauth/sessions/:did — retrieve session info (scopes).
+///
+/// Same auth as DELETE: confidential clients use `X-Client-Key` + `X-Client-Secret`,
+/// public clients use `X-Client-Key` + `Authorization: DPoP <token>` + `DPoP` proof.
+async fn get_session(
+    State(state): State<AppState>,
+    Path(did): Path<String>,
+    req: axum::extract::Request,
+) -> Result<Json<GetSessionResponse>, AppError> {
+    let client_key = req
+        .headers()
+        .get("x-client-key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AppError::Auth("X-Client-Key header required".into()))?
+        .to_string();
+
+    let client_secret = req
+        .headers()
+        .get("x-client-secret")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let encryption_key = state
+        .config
+        .token_encryption_key
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("TOKEN_ENCRYPTION_KEY not configured".into()))?;
+
+    let client = if let Some(ref secret) = client_secret {
+        client_auth::authenticate_confidential(&state.db, state.db_backend, &client_key, secret)
+            .await?
+    } else {
+        let resolved =
+            client_auth::resolve_client_by_key(&state.db, state.db_backend, &client_key).await?;
+
+        if resolved.client_type == "public" {
+            let auth_header = req
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .ok_or_else(|| {
+                    AppError::Auth("public clients must provide Authorization: DPoP <token>".into())
+                })?;
+            let access_token = auth_header.strip_prefix("DPoP ").ok_or_else(|| {
+                AppError::Auth("public clients must use DPoP authorization scheme".into())
+            })?;
+            let dpop_proof = req
+                .headers()
+                .get("dpop")
+                .and_then(|v| v.to_str().ok())
+                .ok_or_else(|| {
+                    AppError::Auth("public clients must provide DPoP proof header".into())
+                })?;
+
+            let session = sessions::get_dpop_session_by_token_hash(
+                &state.db,
+                state.db_backend,
+                encryption_key,
+                &resolved.id,
+                access_token,
+            )
+            .await?;
+
+            let thumbprint =
+                keys::get_dpop_key_thumbprint(&state.db, state.db_backend, &session.dpop_key_id)
+                    .await?;
+
+            let scheme = if state.config.public_url.starts_with("https") {
+                "https"
+            } else {
+                "http"
+            };
+            let host = req
+                .headers()
+                .get("host")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("localhost");
+            let request_url = format!("{}://{}/oauth/sessions/{}", scheme, host, did);
+
+            crate::oauth::dpop_proof::validate_dpop_proof(
+                dpop_proof,
+                "GET",
+                &request_url,
+                access_token,
+                &thumbprint,
+            )?;
+        }
+
+        resolved
+    };
+
+    let session = sessions::get_dpop_session(
+        &state.db,
+        state.db_backend,
+        encryption_key,
+        &client.id,
+        &did,
+    )
+    .await?;
+
+    let scopes: Vec<String> = session
+        .scopes
+        .split_whitespace()
+        .map(String::from)
+        .collect();
+
+    Ok(Json(GetSessionResponse { did, scopes }))
 }
 
 /// DELETE /oauth/sessions/:did — logout / revoke a session.
