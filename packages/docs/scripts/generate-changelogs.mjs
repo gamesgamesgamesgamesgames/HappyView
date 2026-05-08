@@ -23,6 +23,12 @@ const CHANGELOGS = [
     formatVersion: (tag) => tag.replace("@happyview/oauth-client-browser-", ""),
   },
   {
+    name: "@happyview/oauth-client-node",
+    output: "docs/sdk/changelog-oauth-client-node.md",
+    match: (tag) => tag.startsWith("@happyview/oauth-client-node-v"),
+    formatVersion: (tag) => tag.replace("@happyview/oauth-client-node-", ""),
+  },
+  {
     name: "@happyview/lex-agent",
     output: "docs/sdk/changelog-lex-agent.md",
     match: (tag) => tag.startsWith("@happyview/lex-agent-v"),

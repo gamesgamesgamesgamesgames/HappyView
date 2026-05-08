@@ -59,6 +59,23 @@ const session = await client.registerSession({
 
 The returned `HappyViewSession` is ready to make authenticated requests. The session data is also persisted to the `StorageAdapter` for later restoration.
 
+The response includes the scopes that were approved by the authorization server, available on the session:
+
+```typescript
+console.log(session.scopes);
+// ["atproto", "transition:generic"]
+```
+
+## Retrieving session info
+
+To fetch the current session's approved scopes from the server (e.g., after restoring from storage):
+
+```typescript
+const info = await client.getSession("did:plc:abc123");
+console.log(info.scopes);
+// ["atproto", "transition:generic"]
+```
+
 ## Making authenticated requests
 
 `HappyViewSession.fetchHandler` works like `fetch` but automatically attaches DPoP proof, authorization, and client key headers:

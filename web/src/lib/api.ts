@@ -381,6 +381,42 @@ export function updateProxyConfig(config: ProxyConfig) {
   });
 }
 
+// Feature Flags
+export type FeatureFlag = {
+  key: string
+  name: string
+  description: string
+  enabled: boolean
+}
+
+export function getFeatureFlags() {
+  return apiFetch<FeatureFlag[]>("/admin/feature-flags")
+}
+
+export function setFeatureFlag(key: string, enabled: boolean) {
+  if (enabled) {
+    return upsertSetting(key, "true")
+  }
+  return deleteSetting(key)
+}
+
+// Proxy config
+export type ProxyConfig = {
+  mode: "disabled" | "open" | "allowlist" | "blocklist"
+  nsids: string[]
+}
+
+export function getProxyConfig() {
+  return apiFetch<ProxyConfig>("/admin/settings/xrpc-proxy")
+}
+
+export function updateProxyConfig(config: ProxyConfig) {
+  return apiFetch("/admin/settings/xrpc-proxy", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  })
+}
+
 // Labelers
 export function getLabelers() {
   return apiFetch<LabelerSummary[]>("/admin/labelers");

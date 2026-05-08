@@ -25,6 +25,11 @@ impl std::fmt::Display for ScriptErrorType {
 
 /// Parse a Lua error message to extract a line number.
 ///
+/// Prefix used to tag auth errors that pass through the Lua runtime boundary.
+/// The script executor checks for this prefix to recover `AppError::Auth` from
+/// a generic `mlua::Error::runtime`, returning 401 instead of 500.
+pub const LUA_AUTH_ERROR_PREFIX: &str = "AUTH_ERROR:";
+
 /// mlua errors look like:
 /// - `[string "..."]:42: attempt to index a nil value`
 /// - `runtime error: [string "..."]:10: bad argument`

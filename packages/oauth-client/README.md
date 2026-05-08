@@ -52,6 +52,21 @@ const session = await client.registerSession({
 });
 ```
 
+The returned session includes the approved scopes:
+
+```typescript
+console.log(session.scopes); // ["atproto", "transition:generic"]
+```
+
+### Retrieving Session Info
+
+Fetch the current session's approved scopes from the server:
+
+```typescript
+const info = await client.getSession("did:plc:abc123");
+console.log(info.scopes); // ["atproto", "transition:generic"]
+```
+
 ### Making Authenticated Requests
 
 The returned `HappyViewSession` provides a `fetchHandler` that automatically attaches DPoP proof headers:

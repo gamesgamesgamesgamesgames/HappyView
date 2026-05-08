@@ -18,6 +18,7 @@ export type { HappyViewSessionOptions } from "./session";
 export { MemoryStorage } from "./storage";
 export type {
   DpopProvision,
+  GetSessionResponse,
   HappyViewOAuthClientOptions,
   ProvisionKeyResponse,
   RegisterSessionParams,

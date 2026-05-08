@@ -6,10 +6,19 @@ use std::sync::Arc;
 use crate::AppState;
 use crate::auth::Claims;
 use crate::db::{adapt_sql, now_rfc3339};
+use crate::error::{AppError, LUA_AUTH_ERROR_PREFIX};
 use crate::record_refs::sync_refs;
 use crate::repo::PdsAuth;
 
 use super::tid::generate_tid;
+
+fn pds_error(context: &str, e: AppError) -> mlua::Error {
+    if matches!(&e, AppError::Auth(_)) {
+        mlua::Error::runtime(format!("{LUA_AUTH_ERROR_PREFIX}{e}"))
+    } else {
+        mlua::Error::runtime(format!("PDS {context} failed: {e}"))
+    }
+}
 
 const INTERNAL_FIELDS: &[&str] = &[
     "_collection",
@@ -85,7 +94,7 @@ pub fn register_record_api(
                     let resp = pds_auth
                         .post_json(&state, repo, "com.atproto.repo.putRecord", &pds_body)
                         .await
-                        .map_err(|e| mlua::Error::runtime(format!("PDS putRecord failed: {e}")))?;
+                        .map_err(|e| pds_error("putRecord", e))?;
 
                     if !resp.status().is_success() {
                         let status = resp.status();
@@ -148,7 +157,7 @@ pub fn register_record_api(
                     let resp = pds_auth
                         .post_json(&state, repo, "com.atproto.repo.createRecord", &pds_body)
                         .await
-                        .map_err(|e| mlua::Error::runtime(format!("PDS createRecord failed: {e}")))?;
+                        .map_err(|e| pds_error("createRecord", e))?;
 
                     if !resp.status().is_success() {
                         let status = resp.status();
@@ -249,7 +258,7 @@ pub fn register_record_api(
                 let resp = pds_auth
                     .post_json(&state, repo, "com.atproto.repo.deleteRecord", &pds_body)
                     .await
-                    .map_err(|e| mlua::Error::runtime(format!("PDS deleteRecord failed: {e}")))?;
+                    .map_err(|e| pds_error("deleteRecord", e))?;
 
                 if !resp.status().is_success() {
                     let status = resp.status();
@@ -516,9 +525,7 @@ pub fn register_record_api(
                                 let resp = pds_auth
                                     .post_json(&state, repo, "com.atproto.repo.putRecord", &pds_body)
                                     .await
-                                    .map_err(|e| {
-                                        mlua::Error::runtime(format!("PDS putRecord failed: {e}"))
-                                    })?;
+                                    .map_err(|e| pds_error("putRecord", e))?;
 
                                 if !resp.status().is_success() {
                                     let status = resp.status();

@@ -9,7 +9,7 @@ use std::time::Instant;
 use crate::AppState;
 use crate::auth::Claims;
 use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
-use crate::error::{AppError, ScriptErrorType, parse_lua_line};
+use crate::error::{AppError, LUA_AUTH_ERROR_PREFIX, ScriptErrorType, parse_lua_line};
 use crate::event_log::{EventLog, Severity, log_event};
 use crate::lexicon::ParsedLexicon;
 use crate::repo;
@@ -411,7 +411,15 @@ pub async fn execute_procedure_script(
             let msg = e.to_string();
             tracing::error!(method, error = %msg, "lua script execution failed");
             let (line, clean_msg) = parse_lua_line(&msg);
-            let app_error = if msg.contains("execution limit") {
+            let app_error = if msg.contains(LUA_AUTH_ERROR_PREFIX)
+                || clean_msg.contains(LUA_AUTH_ERROR_PREFIX)
+            {
+                let auth_msg = clean_msg
+                    .strip_prefix(LUA_AUTH_ERROR_PREFIX)
+                    .unwrap_or(&clean_msg)
+                    .to_string();
+                AppError::Auth(auth_msg)
+            } else if msg.contains("execution limit") {
                 AppError::ScriptError {
                     error_type: ScriptErrorType::Timeout,
                     message: "script exceeded execution time limit".to_string(),
@@ -766,7 +774,15 @@ pub async fn execute_query_script(
             let msg = e.to_string();
             tracing::error!(method, error = %msg, "lua script execution failed");
             let (line, clean_msg) = parse_lua_line(&msg);
-            let app_error = if msg.contains("execution limit") {
+            let app_error = if msg.contains(LUA_AUTH_ERROR_PREFIX)
+                || clean_msg.contains(LUA_AUTH_ERROR_PREFIX)
+            {
+                let auth_msg = clean_msg
+                    .strip_prefix(LUA_AUTH_ERROR_PREFIX)
+                    .unwrap_or(&clean_msg)
+                    .to_string();
+                AppError::Auth(auth_msg)
+            } else if msg.contains("execution limit") {
                 AppError::ScriptError {
                     error_type: ScriptErrorType::Timeout,
                     message: "script exceeded execution time limit".to_string(),

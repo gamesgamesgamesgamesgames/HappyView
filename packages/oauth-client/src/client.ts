@@ -4,6 +4,7 @@ import { importJwk } from "./import-jwk";
 import { HappyViewSession } from "./session";
 import { MemoryStorage } from "./storage";
 import type {
+  GetSessionResponse,
   HappyViewOAuthClientOptions,
   ProvisionKeyResponse,
   RegisterSessionParams,
@@ -237,6 +238,29 @@ export class HappyViewOAuthClient {
       fetch: this._fetch,
       onSignOut: () => this.deleteSession(data.did),
     });
+  }
+
+  async getSession(did: string): Promise<GetSessionResponse> {
+    const session = await this.restoreSession(did);
+    if (!session) {
+      throw new ApiError("No stored session for this DID", 404, {});
+    }
+
+    const resp = await session.fetchHandler(
+      `${this.instanceUrl}/oauth/sessions/${did}`,
+      { method: "GET" },
+    );
+
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new ApiError(
+        `Failed to get session: ${resp.status} ${(body as any).message ?? resp.statusText}`,
+        resp.status,
+        body,
+      );
+    }
+
+    return resp.json();
   }
 
   async restore(): Promise<HappyViewSession | null> {
