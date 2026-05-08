@@ -260,8 +260,8 @@ async fn callback(
         .config
         .base_path
         .as_ref()
-        .map(|bp| format!("{}/", bp))
-        .unwrap_or_else(|| "/".into());
+        .map(|bp| format!("{}/dashboard/", bp))
+        .unwrap_or_else(|| "/dashboard/".into());
     let redirect_url = redirect_url.unwrap_or(default_redirect);
     tracing::debug!(redirect_url = %redirect_url, "redirecting after callback");
 

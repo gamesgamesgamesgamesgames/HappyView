@@ -1,6 +1,6 @@
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{Method, header};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
@@ -135,6 +135,7 @@ pub fn router(state: AppState) -> Router {
     let app_routes = Router::new()
         .nest("/admin", admin::admin_routes(state.clone()))
         .merge(domain_routes)
+        .route("/", get(|| async { Redirect::to("/dashboard/") }))
         .fallback_service(serve_dir);
 
     let outer = if let Some(ref base_path) = state.config.base_path {
