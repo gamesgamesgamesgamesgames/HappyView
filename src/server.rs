@@ -149,7 +149,9 @@ pub fn router(state: AppState) -> Router {
                         && let Some(loc) = response.headers().get(header::LOCATION)
                         && let Ok(loc_str) = loc.to_str()
                         && loc_str.starts_with('/')
-                        && !loc_str.starts_with(&bp)
+                        && !(loc_str.starts_with(&bp)
+                            && (loc_str.len() == bp.len()
+                                || loc_str.as_bytes().get(bp.len()) == Some(&b'/')))
                         && let Ok(new_loc) = format!("{}{}", bp, loc_str).parse()
                     {
                         response.headers_mut().insert(header::LOCATION, new_loc);
