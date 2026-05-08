@@ -2,11 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev, ci/merge-workflows]
+    branches: [main, dev]
   pull_request:
-    branches: [main, dev, ci/merge-workflows]
-  release:
-    types: [published]
+    branches: [main, dev]
   delete:
 
 env:
@@ -166,6 +164,8 @@ jobs:
       && needs.changes.outputs.server == 'true'
     needs: [changes, unit-tests, e2e-tests, frontend, lint]
     runs-on: depot-ubuntu-24.04
+    outputs:
+      version: ${{ steps.semantic.outputs.version }}
     permissions:
       contents: write
     steps:
@@ -180,6 +180,7 @@ jobs:
           node-version: 22
 
       - name: Release
+        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
         run: npx semantic-release
@@ -421,7 +422,8 @@ jobs:
   # Docker — main app image (triggered by GitHub release)
   # ---------------------------------------------------------------------------
   docker:
-    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v')
+    needs: release
+    if: needs.release.outputs.version != ''
     runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
@@ -460,15 +462,26 @@ jobs:
       #     username: ${{ secrets.ATCR_USERNAME }}
       #     password: ${{ secrets.ATCR_PASSWORD }}
 
+      - name: Parse version
+        id: version
+        run: |
+          VERSION="${{ needs.release.outputs.version }}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION#*.}"
+          MINOR="${MINOR%%.*}"
+          echo "full=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
+
       - name: Extract GHCR metadata
         id: meta-ghcr
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.GHCR_IMAGE }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.version.outputs.full }}
+            type=raw,value=${{ steps.version.outputs.major_minor }}
+            type=raw,value=${{ steps.version.outputs.major }}
             type=sha
 
       # TODO: Re-enable once ATCR rate limit issue is resolved
@@ -491,7 +504,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
           build-args: |
-            HAPPYVIEW_VERSION=${{ github.event.release.tag_name }}
+            HAPPYVIEW_VERSION=v${{ needs.release.outputs.version }}
           cache-from: type=gha,scope=build-${{ matrix.platform }}
           cache-to: type=gha,scope=build-${{ matrix.platform }},mode=max,ignore-error=true
           outputs: type=image,"name=${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
