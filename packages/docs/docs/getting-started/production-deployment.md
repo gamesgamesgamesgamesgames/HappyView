@@ -63,7 +63,7 @@ example.com {
 
     # ATProto XRPC — rewrite to base path before proxying
     handle /xrpc/* {
-        uri prefix /hv
+        rewrite * /hv{uri}
         reverse_proxy happyview:3000
     }
 
@@ -74,7 +74,7 @@ example.com {
 }
 ```
 
-The `uri prefix /hv` directive prepends `/hv` to the request path before proxying, so `/xrpc/com.atproto.sync.getRecord` becomes `/hv/xrpc/com.atproto.sync.getRecord` — which matches HappyView's nested routes.
+The `rewrite * /hv{uri}` directive prepends `/hv` to the request path before proxying, so `/xrpc/com.atproto.sync.getRecord` becomes `/hv/xrpc/com.atproto.sync.getRecord` — which matches HappyView's nested routes.
 
 ### Health checks with a base path
 
