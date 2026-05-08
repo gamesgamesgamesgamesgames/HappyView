@@ -198,7 +198,9 @@ async fn retry_after_refresh(
                 {
                     tracing::error!(%del_err, "failed to delete broken DPoP session");
                 }
-                return Err(e);
+                return Err(AppError::Auth(
+                    "session expired, please re-authenticate".to_string(),
+                ));
             }
         } else {
             return Err(e);
