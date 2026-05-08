@@ -57,15 +57,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Cache cargo dependencies
+      - name: Cache cargo
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            cargo-deps-${{ runner.os }}-
+            cargo-${{ runner.os }}-
 
       - name: Run unit tests
         run: cargo test --lib
@@ -92,15 +93,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Cache cargo dependencies
+      - name: Cache cargo
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            cargo-deps-${{ runner.os }}-
+            cargo-${{ runner.os }}-
 
       - name: Add WASM target
         run: rustup target add wasm32-unknown-unknown
