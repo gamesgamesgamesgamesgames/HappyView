@@ -291,6 +291,11 @@ const sidebars: SidebarsConfig = {
           id: "sdk/oauth-client-browser",
           label: "Browser Client",
         },
+        {
+          type: "doc",
+          id: "sdk/oauth-client-node",
+          label: "Node Client",
+        },
       ],
     },
     {
@@ -468,6 +473,11 @@ const sidebars: SidebarsConfig = {
               type: "doc",
               id: "sdk/changelog-oauth-client-browser",
               label: "oauth-client-browser",
+            },
+            {
+              type: "doc",
+              id: "sdk/changelog-oauth-client-node",
+              label: "oauth-client-node",
             },
             {
               type: "doc",
