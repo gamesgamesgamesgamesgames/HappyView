@@ -216,7 +216,7 @@ const client = new HappyViewNodeClient({
 });
 ```
 
-- `onSessionUpdate(did)` fires after a session is registered (from `callback()`) or restored.
+- `onSessionUpdate(did)` fires after a new session is registered (from `callback()`).
 - `onSessionDelete(did)` fires after a session is revoked (from `revoke()` or `session.signOut()`).
 
 ## Error handling
