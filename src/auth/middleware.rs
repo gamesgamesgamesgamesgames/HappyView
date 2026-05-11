@@ -252,13 +252,18 @@ impl FromRequestParts<AppState> for XrpcClaims {
             }
             Some(h) if h.starts_with("Bearer ") => {
                 let token = &h[7..];
+                let path = parts.uri.path();
+                let is_space_route = path.contains("/dev.happyview.space.");
                 match crate::spaces::credential::peek_jwt_typ(token) {
-                    Some(typ) if typ == "space_credential" => {
+                    Some(typ) if typ == "space_credential" && is_space_route => {
                         Ok(XrpcClaims {
                             identity: None,
                             space_credential: Some(token.to_string()),
                         })
                     }
+                    Some(typ) if typ == "space_credential" => Err(AppError::Auth(
+                        "space credentials are only accepted on space routes".into(),
+                    )),
                     _ => Err(AppError::Auth(
                         "XRPC routes do not accept Bearer auth. Use DPoP auth, a space credential, or omit the Authorization header for anonymous access.".into(),
                     )),
