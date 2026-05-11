@@ -71,7 +71,7 @@ Available in both queries and procedures:
 | ---------------- | ------- | ------------------------------------------------------------------- |
 | `now()`          | string  | Current UTC timestamp in ISO 8601 format                            |
 | `log(message)`   | —       | Log a message (appears in server logs at debug level)               |
-| `TID()`          | string  | Generate a fresh atproto TID (13-character sortable identifier) |
+| `TID()`          | string  | Generate a fresh atproto TID (13-character sortable identifier). Also provides conversion methods — see [Utility Globals reference](../reference/lua/utility-globals.md#tid). |
 | `toarray(table)` | table   | Mark a table as a JSON array for serialization (see [below](#toarray)) |
 
 ### toarray

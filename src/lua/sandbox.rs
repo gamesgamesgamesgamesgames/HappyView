@@ -1,6 +1,9 @@
 use mlua::{Lua, LuaSerdeExt, Result as LuaResult};
 
-use super::tid::generate_tid;
+use super::tid::{
+    generate_tid, tid_from_iso8601, tid_from_number, tid_from_unix_microseconds, tid_to_iso8601,
+    tid_to_number, tid_to_unix_microseconds,
+};
 
 const INSTRUCTION_LIMIT: u32 = 1_000_000;
 
@@ -59,9 +62,51 @@ pub fn create_sandbox() -> LuaResult<Lua> {
     })?;
     globals.set("log", log_fn)?;
 
-    // Utility: TID() returns a fresh AT Protocol TID string
-    let tid_fn = lua.create_function(|_, ()| Ok(generate_tid()))?;
-    globals.set("TID", tid_fn)?;
+    // Utility: TID table — callable as TID() to generate, plus conversion methods
+    let tid_table = lua.create_table()?;
+    tid_table.set(
+        "toISO8601",
+        lua.create_function(|_, tid: String| {
+            tid_to_iso8601(&tid).ok_or_else(|| mlua::Error::runtime(format!("invalid TID: {tid}")))
+        })?,
+    )?;
+    tid_table.set(
+        "fromISO8601",
+        lua.create_function(|_, iso: String| {
+            tid_from_iso8601(&iso)
+                .ok_or_else(|| mlua::Error::runtime(format!("invalid ISO 8601: {iso}")))
+        })?,
+    )?;
+    tid_table.set(
+        "toUnixMicroseconds",
+        lua.create_function(|_, tid: String| {
+            tid_to_unix_microseconds(&tid)
+                .ok_or_else(|| mlua::Error::runtime(format!("invalid TID: {tid}")))
+        })?,
+    )?;
+    tid_table.set(
+        "fromUnixMicroseconds",
+        lua.create_function(|_, us: i64| Ok(tid_from_unix_microseconds(us)))?,
+    )?;
+    tid_table.set(
+        "toNumber",
+        lua.create_function(|_, tid: String| {
+            tid_to_number(&tid)
+                .map(|v| v as i64)
+                .ok_or_else(|| mlua::Error::runtime(format!("invalid TID: {tid}")))
+        })?,
+    )?;
+    tid_table.set(
+        "fromNumber",
+        lua.create_function(|_, val: i64| Ok(tid_from_number(val as u64)))?,
+    )?;
+    let tid_meta = lua.create_table()?;
+    tid_meta.set(
+        "__call",
+        lua.create_function(|_, _: mlua::MultiValue| Ok(generate_tid()))?,
+    )?;
+    let _ = tid_table.set_metatable(Some(tid_meta));
+    globals.set("TID", tid_table)?;
 
     // Utility: toarray(table) marks a table as a JSON array for serialization.
     // Ensures empty tables serialize as [] instead of {}.
@@ -185,6 +230,100 @@ mod tests {
         let a: String = lua.load("return TID()").eval().unwrap();
         let b: String = lua.load("return TID()").eval().unwrap();
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn sandbox_tid_to_iso8601() {
+        let lua = create_sandbox().unwrap();
+        let iso: String = lua.load(r#"return TID.toISO8601(TID())"#).eval().unwrap();
+        assert!(iso.contains("T") && iso.ends_with("Z"));
+    }
+
+    #[test]
+    fn sandbox_tid_from_iso8601() {
+        let lua = create_sandbox().unwrap();
+        let tid: String = lua
+            .load(r#"return TID.fromISO8601("2024-01-01T00:00:00Z")"#)
+            .eval()
+            .unwrap();
+        assert_eq!(tid.len(), 13);
+    }
+
+    #[test]
+    fn sandbox_tid_roundtrip() {
+        let lua = create_sandbox().unwrap();
+        let result: String = lua
+            .load(
+                r#"
+                local tid = TID()
+                local iso = TID.toISO8601(tid)
+                local tid2 = TID.fromISO8601(iso)
+                return TID.toISO8601(tid2)
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(result.contains("T") && result.ends_with("Z"));
+    }
+
+    #[test]
+    fn sandbox_tid_to_unix_microseconds() {
+        let lua = create_sandbox().unwrap();
+        let us: i64 = lua
+            .load(r#"return TID.toUnixMicroseconds(TID.fromISO8601("2024-01-01T00:00:00Z"))"#)
+            .eval()
+            .unwrap();
+        assert_eq!(us, 1_704_067_200_000_000);
+    }
+
+    #[test]
+    fn sandbox_tid_from_unix_microseconds() {
+        let lua = create_sandbox().unwrap();
+        let tid: String = lua
+            .load("return TID.fromUnixMicroseconds(1704067200000000)")
+            .eval()
+            .unwrap();
+        assert_eq!(tid.len(), 13);
+        let iso: String = lua
+            .load(format!(r#"return TID.toISO8601("{tid}")"#))
+            .eval()
+            .unwrap();
+        assert_eq!(iso, "2024-01-01T00:00:00.000000Z");
+    }
+
+    #[test]
+    fn sandbox_tid_number_lossless_roundtrip() {
+        let lua = create_sandbox().unwrap();
+        let result: bool = lua
+            .load(
+                r#"
+                local tid = TID()
+                local n = TID.toNumber(tid)
+                local tid2 = TID.fromNumber(n)
+                return tid == tid2
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(result, "toNumber/fromNumber should be lossless");
+    }
+
+    #[test]
+    fn sandbox_tid_to_iso8601_errors_on_invalid() {
+        let lua = create_sandbox().unwrap();
+        let result = lua
+            .load(r#"return TID.toISO8601("garbage")"#)
+            .eval::<String>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_tid_from_iso8601_errors_on_invalid() {
+        let lua = create_sandbox().unwrap();
+        let result = lua
+            .load(r#"return TID.fromISO8601("not a date")"#)
+            .eval::<String>();
+        assert!(result.is_err());
     }
 
     #[test]

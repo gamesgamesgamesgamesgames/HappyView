@@ -35,6 +35,58 @@ r:set_rkey(TID())
 r:save()
 ```
 
+### TID.toISO8601
+
+```lua
+local iso = TID.toISO8601(tid)
+-- "2026-04-19T15:30:00.123456Z"
+```
+
+Converts a TID to an ISO 8601 timestamp string with microsecond precision. This is lossy — the 10-bit clock ID embedded in the TID is discarded.
+
+### TID.fromISO8601
+
+```lua
+local tid = TID.fromISO8601("2026-04-19T15:30:00Z")
+```
+
+Creates a TID from an ISO 8601 timestamp string. Accepts timezone offsets and fractional seconds. The resulting TID uses a zero clock ID, so it won't match any specific generated TID but will sort correctly relative to TIDs from the same moment.
+
+### TID.toUnixMicroseconds
+
+```lua
+local us = TID.toUnixMicroseconds(tid)
+-- 1745074200123456
+```
+
+Extracts the microsecond timestamp from a TID (microseconds since the Unix epoch). Lossy — drops the clock ID.
+
+### TID.fromUnixMicroseconds
+
+```lua
+local tid = TID.fromUnixMicroseconds(1745074200123456)
+```
+
+Creates a TID from a microsecond timestamp. Uses a zero clock ID.
+
+### TID.toNumber
+
+```lua
+local n = TID.toNumber(tid)
+local same_tid = TID.fromNumber(n)
+-- same_tid == tid
+```
+
+Decodes a TID to its full numeric representation (timestamp + clock ID). This is the only lossless conversion — `TID.fromNumber(TID.toNumber(tid))` always returns the original TID.
+
+### TID.fromNumber
+
+```lua
+local tid = TID.fromNumber(n)
+```
+
+Encodes a number back into a TID. Inverse of `TID.toNumber`.
+
 ## toarray
 
 ```lua
