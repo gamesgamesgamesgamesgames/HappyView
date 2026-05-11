@@ -5,7 +5,7 @@ mod execute;
 mod http_api;
 mod record;
 pub(crate) mod sandbox;
-mod tid;
+pub(crate) mod tid;
 mod xrpc_api;
 
 #[allow(unused_imports)]

@@ -7,6 +7,43 @@ use crate::error::AppError;
 use crate::profile;
 
 pub const DEFAULT_CREDENTIAL_TTL_SECS: u64 = 4 * 60 * 60; // 4 hours
+pub const GRANT_TTL_SECS: u64 = 5 * 60; // 5 minutes
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberGrantClaims {
+    pub sub: String,
+    pub space: String,
+    pub scope: String,
+    pub iat: u64,
+    pub exp: u64,
+}
+
+pub fn sign_grant(claims: &MemberGrantClaims, secret: &[u8; 32]) -> Result<String, AppError> {
+    let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256);
+    let key = jsonwebtoken::EncodingKey::from_secret(secret);
+    jsonwebtoken::encode(&header, claims, &key)
+        .map_err(|e| AppError::Internal(format!("failed to sign member grant: {e}")))
+}
+
+pub fn verify_grant(token: &str, secret: &[u8; 32]) -> Result<MemberGrantClaims, AppError> {
+    let key = jsonwebtoken::DecodingKey::from_secret(secret);
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+    validation.required_spec_claims.clear();
+    validation.validate_exp = false;
+    let data = jsonwebtoken::decode::<MemberGrantClaims>(token, &key, &validation)
+        .map_err(|e| AppError::Auth(format!("invalid member grant: {e}")))?;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    if now > data.claims.exp {
+        return Err(AppError::Auth("member grant has expired".into()));
+    }
+
+    Ok(data.claims)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpaceCredentialClaims {
@@ -280,5 +317,74 @@ mod tests {
         let keypair = generate_dpop_keypair().unwrap();
         let result = verify_credential("not-a-jwt", &keypair.public_jwk);
         assert!(result.is_err());
+    }
+
+    fn test_secret() -> [u8; 32] {
+        [0xAB; 32]
+    }
+
+    #[test]
+    fn grant_sign_and_verify_roundtrip() {
+        let secret = test_secret();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = MemberGrantClaims {
+            sub: "did:plc:member".into(),
+            space: "ats://did:plc:space/com.example.forum/main".into(),
+            scope: "read".into(),
+            iat: now,
+            exp: now + GRANT_TTL_SECS,
+        };
+
+        let token = sign_grant(&claims, &secret).unwrap();
+        let verified = verify_grant(&token, &secret).unwrap();
+
+        assert_eq!(verified.sub, claims.sub);
+        assert_eq!(verified.space, claims.space);
+        assert_eq!(verified.scope, claims.scope);
+    }
+
+    #[test]
+    fn grant_rejects_wrong_secret() {
+        let secret1 = [0xAB; 32];
+        let secret2 = [0xCD; 32];
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = MemberGrantClaims {
+            sub: "did:plc:member".into(),
+            space: "ats://did:plc:space/com.example.forum/main".into(),
+            scope: "read".into(),
+            iat: now,
+            exp: now + GRANT_TTL_SECS,
+        };
+
+        let token = sign_grant(&claims, &secret1).unwrap();
+        let result = verify_grant(&token, &secret2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn grant_rejects_expired() {
+        let secret = test_secret();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = MemberGrantClaims {
+            sub: "did:plc:member".into(),
+            space: "ats://did:plc:space/com.example.forum/main".into(),
+            scope: "read".into(),
+            iat: now - 600,
+            exp: now - 300,
+        };
+
+        let token = sign_grant(&claims, &secret).unwrap();
+        let result = verify_grant(&token, &secret);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("expired"));
     }
 }

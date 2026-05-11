@@ -9,7 +9,7 @@ use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::plugin::encryption::{decrypt, encrypt};
 use crate::spaces::credential::{
-    DEFAULT_CREDENTIAL_TTL_SECS, SpaceCredentialClaims, sign_credential, verify_credential,
+    DEFAULT_CREDENTIAL_TTL_SECS, SpaceCredentialClaims, sign_credential,
 };
 use crate::spaces::types::{AccessMode, Space};
 
@@ -37,9 +37,9 @@ pub async fn issue_credential(
     let exp = now + DEFAULT_CREDENTIAL_TTL_SECS;
 
     let claims = SpaceCredentialClaims {
-        iss: space.owner_did.clone(),
+        iss: space.did.clone(),
         sub: subject_did.to_string(),
-        space: format!("{}/{}/{}", space.owner_did, space.type_nsid, space.skey),
+        space: format!("ats://{}/{}/{}", space.did, space.type_nsid, space.skey),
         scope: "read".into(),
         iat: now,
         exp,
@@ -55,19 +55,6 @@ pub async fn issue_credential(
         .unwrap_or_default();
 
     Ok(IssuedCredential { token, expires_at })
-}
-
-pub async fn refresh_credential(
-    pool: &sqlx::AnyPool,
-    backend: DatabaseBackend,
-    encryption_key: &[u8; 32],
-    space: &Space,
-    current_token: &str,
-) -> Result<IssuedCredential, AppError> {
-    let public_jwk = get_public_key(pool, backend, encryption_key, space).await?;
-    let claims = verify_credential(current_token, &public_jwk)?;
-
-    issue_credential(pool, backend, encryption_key, space, &claims.sub, None).await
 }
 
 pub fn check_app_access(space: &Space, client_id: Option<&str>) -> Result<(), AppError> {
@@ -148,7 +135,7 @@ async fn get_or_create_signing_key(
 
     sqlx::query(&insert_sql)
         .bind(Uuid::new_v4().to_string())
-        .bind(&space.owner_did)
+        .bind(&space.did)
         .bind(&space.id)
         .bind(&encrypted_signing)
         .bind(&encrypted_rotation)
@@ -159,21 +146,6 @@ async fn get_or_create_signing_key(
         .map_err(|e| AppError::Internal(format!("failed to store space signing key: {e}")))?;
 
     Ok(keypair.private_jwk)
-}
-
-async fn get_public_key(
-    pool: &sqlx::AnyPool,
-    backend: DatabaseBackend,
-    encryption_key: &[u8; 32],
-    space: &Space,
-) -> Result<serde_json::Value, AppError> {
-    let private_jwk = get_or_create_signing_key(pool, backend, encryption_key, space).await?;
-    Ok(serde_json::json!({
-        "kty": "EC",
-        "crv": "P-256",
-        "x": private_jwk["x"],
-        "y": private_jwk["y"],
-    }))
 }
 
 struct SpaceKeypair {
@@ -252,6 +224,7 @@ mod tests {
     fn test_space(access_mode: AccessMode) -> Space {
         Space {
             id: "test-space".into(),
+            did: "did:plc:owner".into(),
             owner_did: "did:plc:owner".into(),
             type_nsid: "com.example.forum".into(),
             skey: "main".into(),
@@ -262,6 +235,7 @@ mod tests {
             app_denylist: None,
             managing_app_did: None,
             config: SpaceConfig::default(),
+            revision: None,
             created_at: String::new(),
             updated_at: String::new(),
         }

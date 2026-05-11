@@ -11,6 +11,7 @@ use crate::AppState;
 use crate::auth::XrpcClaims;
 use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
+use crate::lua::tid::generate_tid;
 use crate::spaces::types::*;
 use crate::spaces::{SpaceUri, db, members};
 
@@ -21,6 +22,7 @@ use crate::spaces::{SpaceUri, db, members};
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateSpaceInput {
+    #[serde(rename = "type")]
     type_nsid: String,
     skey: String,
     display_name: Option<String>,
@@ -33,25 +35,27 @@ struct CreateSpaceInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SpaceUriQuery {
-    space_uri: String,
+    space: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ListSpacesQuery {
-    owner_did: Option<String>,
+    did: Option<String>,
+    limit: Option<i64>,
+    cursor: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteSpaceInput {
-    space_uri: String,
+    space: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateSpaceInput {
-    space_uri: String,
+    space: String,
     display_name: Option<Option<String>>,
     description: Option<Option<String>>,
     access_mode: Option<AccessMode>,
@@ -64,24 +68,26 @@ struct UpdateSpaceInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PutRecordInput {
-    space_uri: String,
+    space: String,
     collection: String,
     rkey: String,
     record: serde_json::Value,
+    swap_record: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteRecordInput {
-    space_uri: String,
+    space: String,
     collection: String,
     rkey: String,
+    swap_record: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GetRecordQuery {
-    space_uri: String,
+    space: String,
     collection: String,
     rkey: String,
 }
@@ -89,17 +95,19 @@ struct GetRecordQuery {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ListRecordsQuery {
-    space_uri: String,
+    space: String,
+    repo: Option<String>,
     collection: Option<String>,
     limit: Option<i64>,
     cursor: Option<String>,
+    reverse: Option<bool>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AddMemberInput {
-    space_uri: String,
-    member_did: String,
+    space: String,
+    did: String,
     access: Option<SpaceAccess>,
     is_delegation: Option<bool>,
 }
@@ -107,14 +115,14 @@ struct AddMemberInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoveMemberInput {
-    space_uri: String,
-    member_did: String,
+    space: String,
+    did: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateInviteInput {
-    space_uri: String,
+    space: String,
     access: Option<SpaceAccess>,
     max_uses: Option<i64>,
     expires_at: Option<String>,
@@ -129,21 +137,59 @@ struct RedeemInviteInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RevokeInviteInput {
-    space_uri: String,
+    space: String,
     invite_id: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetCredentialInput {
-    space_uri: String,
+struct GetMemberGrantInput {
+    space: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RefreshCredentialInput {
-    space_uri: String,
-    credential: String,
+struct GetSpaceCredentialInput {
+    grant: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateRecordInput {
+    space: String,
+    collection: String,
+    record: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplyWritesInput {
+    space: String,
+    swap_commit: Option<String>,
+    writes: Vec<WriteOp>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "action", rename_all = "camelCase")]
+enum WriteOp {
+    Create {
+        collection: String,
+        rkey: Option<String>,
+        value: serde_json::Value,
+    },
+    Update {
+        collection: String,
+        rkey: String,
+        value: serde_json::Value,
+        #[serde(rename = "swapRecord")]
+        swap_record: Option<String>,
+    },
+    Delete {
+        collection: String,
+        rkey: String,
+        #[serde(rename = "swapRecord")]
+        swap_record: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -161,11 +207,16 @@ pub fn space_routes() -> Router<AppState> {
         .route(&format!("/xrpc/{NS}.space.delete"), post(delete_space))
         .route(&format!("/xrpc/{NS}.space.update"), post(update_space))
         // Records
+        .route(
+            &format!("/xrpc/{NS}.space.createRecord"),
+            post(create_record),
+        )
         .route(&format!("/xrpc/{NS}.space.putRecord"), post(put_record))
         .route(
             &format!("/xrpc/{NS}.space.deleteRecord"),
             post(delete_record),
         )
+        .route(&format!("/xrpc/{NS}.space.applyWrites"), post(apply_writes))
         .route(&format!("/xrpc/{NS}.space.getRecord"), get(get_record))
         .route(&format!("/xrpc/{NS}.space.listRecords"), get(list_records))
         // Members
@@ -191,12 +242,12 @@ pub fn space_routes() -> Router<AppState> {
         .route(&format!("/xrpc/{NS}.space.invite.list"), get(list_invites))
         // Credentials
         .route(
-            &format!("/xrpc/{NS}.space.getCredential"),
-            post(get_credential),
+            &format!("/xrpc/{NS}.space.getMemberGrant"),
+            post(get_member_grant),
         )
         .route(
-            &format!("/xrpc/{NS}.space.refreshCredential"),
-            post(refresh_credential),
+            &format!("/xrpc/{NS}.space.getSpaceCredential"),
+            post(get_space_credential),
         )
 }
 
@@ -216,7 +267,7 @@ async fn resolve_space(state: &AppState, space_uri: &str) -> Result<Space, AppEr
     db::get_space_by_address(
         &state.db,
         state.db_backend,
-        &uri.owner_did,
+        &uri.did,
         &uri.type_nsid,
         &uri.skey,
     )
@@ -257,10 +308,7 @@ async fn require_membership(
     space_credential: Option<&str>,
 ) -> Result<SpaceAccess, AppError> {
     if let Some(token) = space_credential {
-        let space_uri = format!(
-            "ats://{}/{}/{}",
-            space.owner_did, space.type_nsid, space.skey
-        );
+        let space_uri = format!("ats://{}/{}/{}", space.did, space.type_nsid, space.skey);
         match crate::spaces::credential::verify_external_credential(
             token,
             &state.http,
@@ -319,9 +367,7 @@ async fn create_space(
     let did = claims.did().to_string();
 
     if input.type_nsid.is_empty() || input.skey.is_empty() {
-        return Err(AppError::BadRequest(
-            "type_nsid and skey are required".into(),
-        ));
+        return Err(AppError::BadRequest("type and skey are required".into()));
     }
 
     let existing = db::get_space_by_address(
@@ -340,6 +386,7 @@ async fn create_space(
 
     let space = Space {
         id: Uuid::new_v4().to_string(),
+        did: did.clone(),
         owner_did: did.clone(),
         type_nsid: input.type_nsid,
         skey: input.skey,
@@ -350,6 +397,7 @@ async fn create_space(
         app_denylist: None,
         managing_app_did: input.managing_app_did,
         config: input.config.unwrap_or_default(),
+        revision: None,
         created_at: now_rfc3339(),
         updated_at: now_rfc3339(),
     };
@@ -360,7 +408,7 @@ async fn create_space(
     let member = SpaceMember {
         id: Uuid::new_v4().to_string(),
         space_id: space.id.clone(),
-        member_did: did.clone(),
+        did: did.clone(),
         access: SpaceAccess::Write,
         is_delegation: false,
         granted_by: Some(did),
@@ -368,13 +416,9 @@ async fn create_space(
     };
     db::add_member(&state.db, state.db_backend, &member).await?;
 
-    let space_uri = format!(
-        "ats://{}/{}/{}",
-        space.owner_did, space.type_nsid, space.skey
-    );
+    let space_uri = format!("ats://{}/{}/{}", space.did, space.type_nsid, space.skey);
     let body = serde_json::json!({
-        "spaceUri": space_uri,
-        "space": space,
+        "uri": space_uri,
     });
 
     let mut response = Json(body).into_response();
@@ -387,7 +431,7 @@ async fn get_space(
     xrpc_claims: XrpcClaims,
     Query(query): Query<SpaceUriQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let space = resolve_space(&state, &query.space_uri).await?;
+    let space = resolve_space(&state, &query.space).await?;
 
     // If the space's membership is not public, require auth + membership
     if !space.config.membership_public {
@@ -400,12 +444,9 @@ async fn get_space(
         }
     }
 
-    let space_uri = format!(
-        "ats://{}/{}/{}",
-        space.owner_did, space.type_nsid, space.skey
-    );
+    let space_uri = format!("ats://{}/{}/{}", space.did, space.type_nsid, space.skey);
     Ok(Json(serde_json::json!({
-        "spaceUri": space_uri,
+        "uri": space_uri,
         "space": space,
     })))
 }
@@ -416,20 +457,38 @@ async fn list_spaces(
     Query(query): Query<ListSpacesQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let did = claims.did().to_string();
+    let did = query.did.unwrap_or_else(|| claims.did().to_string());
+    let limit = query.limit.unwrap_or(50).min(100);
 
-    let owner = query.owner_did.as_deref().unwrap_or(&did);
-    let spaces = db::list_spaces_by_owner(&state.db, state.db_backend, owner).await?;
+    let views = db::list_spaces_for_user(
+        &state.db,
+        state.db_backend,
+        &did,
+        limit,
+        query.cursor.as_deref(),
+    )
+    .await?;
 
-    let spaces_with_uris: Vec<serde_json::Value> = spaces
+    let cursor = if views.len() as i64 == limit {
+        views.last().map(|v| v.uri.clone())
+    } else {
+        None
+    };
+
+    let spaces_json: Vec<serde_json::Value> = views
         .into_iter()
-        .map(|s| {
-            let uri = format!("ats://{}/{}/{}", s.owner_did, s.type_nsid, s.skey);
-            serde_json::json!({ "spaceUri": uri, "space": s })
+        .map(|v| {
+            serde_json::json!({
+                "uri": v.uri,
+                "isOwner": v.is_owner,
+            })
         })
         .collect();
 
-    Ok(Json(serde_json::json!({ "spaces": spaces_with_uris })))
+    Ok(Json(serde_json::json!({
+        "spaces": spaces_json,
+        "cursor": cursor,
+    })))
 }
 
 async fn delete_space(
@@ -438,7 +497,7 @@ async fn delete_space(
     Json(input): Json<DeleteSpaceInput>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
     db::delete_space(&state.db, state.db_backend, &space.id).await?;
@@ -452,7 +511,7 @@ async fn update_space(
     Json(input): Json<UpdateSpaceInput>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let mut space = resolve_space(&state, &input.space_uri).await?;
+    let mut space = resolve_space(&state, &input.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
     if let Some(name) = input.display_name {
@@ -479,12 +538,9 @@ async fn update_space(
 
     db::update_space(&state.db, state.db_backend, &space).await?;
 
-    let space_uri = format!(
-        "ats://{}/{}/{}",
-        space.owner_did, space.type_nsid, space.skey
-    );
+    let space_uri = format!("ats://{}/{}/{}", space.did, space.type_nsid, space.skey);
     Ok(Json(serde_json::json!({
-        "spaceUri": space_uri,
+        "uri": space_uri,
         "space": space,
     })))
 }
@@ -492,6 +548,51 @@ async fn update_space(
 // ---------------------------------------------------------------------------
 // Record handlers
 // ---------------------------------------------------------------------------
+
+async fn create_record(
+    State(state): State<AppState>,
+    xrpc_claims: XrpcClaims,
+    headers: HeaderMap,
+    Json(input): Json<CreateRecordInput>,
+) -> Result<Response, AppError> {
+    let claims = require_auth(&xrpc_claims)?;
+    let did = claims.did().to_string();
+    let space = resolve_space(&state, &input.space).await?;
+    let cred = extract_space_credential(&headers);
+    require_membership(&state, &space, &did, true, cred.as_deref()).await?;
+
+    let rkey = generate_tid();
+    let cid = content_cid(&input.record);
+    let record_uri = format!(
+        "ats://{}/{}/{}/{}/{}/{}",
+        space.did, space.type_nsid, space.skey, did, input.collection, rkey
+    );
+
+    let record = SpaceRecord {
+        uri: record_uri.clone(),
+        space_id: space.id.clone(),
+        author_did: did,
+        collection: input.collection,
+        rkey,
+        record: input.record,
+        cid: cid.clone(),
+        indexed_at: now_rfc3339(),
+    };
+
+    db::insert_space_record(&state.db, state.db_backend, &record).await?;
+
+    let rev = generate_tid();
+    db::update_space_revision(&state.db, state.db_backend, &space.id, &rev).await?;
+
+    let body = serde_json::json!({
+        "uri": record_uri,
+        "cid": cid,
+    });
+
+    let mut response = Json(body).into_response();
+    *response.status_mut() = StatusCode::CREATED;
+    Ok(response)
+}
 
 async fn put_record(
     State(state): State<AppState>,
@@ -501,19 +602,19 @@ async fn put_record(
 ) -> Result<Response, AppError> {
     let claims = require_auth(&xrpc_claims)?;
     let did = claims.did().to_string();
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
     let cred = extract_space_credential(&headers);
     require_membership(&state, &space, &did, true, cred.as_deref()).await?;
 
     let cid = content_cid(&input.record);
     let record_uri = format!(
         "ats://{}/{}/{}/{}/{}/{}",
-        space.owner_did, space.type_nsid, space.skey, did, input.collection, input.rkey
+        space.did, space.type_nsid, space.skey, did, input.collection, input.rkey
     );
 
     let record = SpaceRecord {
         uri: record_uri.clone(),
-        space_id: space.id,
+        space_id: space.id.clone(),
         author_did: did,
         collection: input.collection,
         rkey: input.rkey,
@@ -522,7 +623,14 @@ async fn put_record(
         indexed_at: now_rfc3339(),
     };
 
-    db::upsert_space_record(&state.db, state.db_backend, &record).await?;
+    if let Some(swap_cid) = input.swap_record {
+        db::upsert_space_record_with_swap(&state.db, state.db_backend, &record, &swap_cid).await?;
+    } else {
+        db::upsert_space_record(&state.db, state.db_backend, &record).await?;
+    }
+
+    let rev = generate_tid();
+    db::update_space_revision(&state.db, state.db_backend, &space.id, &rev).await?;
 
     let body = serde_json::json!({
         "uri": record_uri,
@@ -541,29 +649,161 @@ async fn delete_record(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
     let did = claims.did().to_string();
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
 
     let record_uri = format!(
         "ats://{}/{}/{}/{}/{}/{}",
-        space.owner_did, space.type_nsid, space.skey, did, input.collection, input.rkey
+        space.did, space.type_nsid, space.skey, did, input.collection, input.rkey
     );
 
-    let record = db::get_space_record(&state.db, state.db_backend, &record_uri).await?;
-    match record {
-        Some(r) if r.author_did != did => {
-            return Err(AppError::Forbidden(
-                "You can only delete your own records".into(),
-            ));
+    if let Some(swap_cid) = input.swap_record {
+        db::delete_space_record_with_swap(&state.db, state.db_backend, &record_uri, &swap_cid)
+            .await?;
+    } else {
+        let record = db::get_space_record(&state.db, state.db_backend, &record_uri).await?;
+        match record {
+            Some(r) if r.author_did != did => {
+                return Err(AppError::Forbidden(
+                    "You can only delete your own records".into(),
+                ));
+            }
+            None => {
+                return Err(AppError::NotFound("Record not found".into()));
+            }
+            _ => {}
         }
-        None => {
-            return Err(AppError::NotFound("Record not found".into()));
-        }
-        _ => {}
+        db::delete_space_record(&state.db, state.db_backend, &record_uri).await?;
     }
 
-    db::delete_space_record(&state.db, state.db_backend, &record_uri).await?;
+    let rev = generate_tid();
+    db::update_space_revision(&state.db, state.db_backend, &space.id, &rev).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
+}
+
+async fn apply_writes(
+    State(state): State<AppState>,
+    xrpc_claims: XrpcClaims,
+    headers: HeaderMap,
+    Json(input): Json<ApplyWritesInput>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let claims = require_auth(&xrpc_claims)?;
+    let did = claims.did().to_string();
+    let space = resolve_space(&state, &input.space).await?;
+    let cred = extract_space_credential(&headers);
+    require_membership(&state, &space, &did, true, cred.as_deref()).await?;
+
+    if let Some(ref expected_rev) = input.swap_commit {
+        match &space.revision {
+            Some(current_rev) if current_rev != expected_rev => {
+                return Err(AppError::Conflict("swapCommit mismatch".into()));
+            }
+            None if !expected_rev.is_empty() => {
+                return Err(AppError::Conflict("swapCommit mismatch".into()));
+            }
+            _ => {}
+        }
+    }
+
+    let mut results = Vec::with_capacity(input.writes.len());
+
+    for op in input.writes {
+        match op {
+            WriteOp::Create {
+                collection,
+                rkey,
+                value,
+            } => {
+                let rkey = rkey.unwrap_or_else(generate_tid);
+                let cid = content_cid(&value);
+                let record_uri = format!(
+                    "ats://{}/{}/{}/{}/{}/{}",
+                    space.did, space.type_nsid, space.skey, did, collection, rkey
+                );
+                let record = SpaceRecord {
+                    uri: record_uri.clone(),
+                    space_id: space.id.clone(),
+                    author_did: did.clone(),
+                    collection,
+                    rkey,
+                    record: value,
+                    cid: cid.clone(),
+                    indexed_at: now_rfc3339(),
+                };
+                db::insert_space_record(&state.db, state.db_backend, &record).await?;
+                results.push(serde_json::json!({
+                    "uri": record_uri,
+                    "cid": cid,
+                }));
+            }
+            WriteOp::Update {
+                collection,
+                rkey,
+                value,
+                swap_record,
+            } => {
+                let cid = content_cid(&value);
+                let record_uri = format!(
+                    "ats://{}/{}/{}/{}/{}/{}",
+                    space.did, space.type_nsid, space.skey, did, collection, rkey
+                );
+                let record = SpaceRecord {
+                    uri: record_uri.clone(),
+                    space_id: space.id.clone(),
+                    author_did: did.clone(),
+                    collection,
+                    rkey,
+                    record: value,
+                    cid: cid.clone(),
+                    indexed_at: now_rfc3339(),
+                };
+                if let Some(swap_cid) = swap_record {
+                    db::upsert_space_record_with_swap(
+                        &state.db,
+                        state.db_backend,
+                        &record,
+                        &swap_cid,
+                    )
+                    .await?;
+                } else {
+                    db::upsert_space_record(&state.db, state.db_backend, &record).await?;
+                }
+                results.push(serde_json::json!({
+                    "uri": record_uri,
+                    "cid": cid,
+                }));
+            }
+            WriteOp::Delete {
+                collection,
+                rkey,
+                swap_record,
+            } => {
+                let record_uri = format!(
+                    "ats://{}/{}/{}/{}/{}/{}",
+                    space.did, space.type_nsid, space.skey, did, collection, rkey
+                );
+                if let Some(swap_cid) = swap_record {
+                    db::delete_space_record_with_swap(
+                        &state.db,
+                        state.db_backend,
+                        &record_uri,
+                        &swap_cid,
+                    )
+                    .await?;
+                } else {
+                    db::delete_space_record(&state.db, state.db_backend, &record_uri).await?;
+                }
+                results.push(serde_json::json!({}));
+            }
+        }
+    }
+
+    let rev = generate_tid();
+    db::update_space_revision(&state.db, state.db_backend, &space.id, &rev).await?;
+
+    Ok(Json(serde_json::json!({
+        "results": results,
+    })))
 }
 
 async fn get_record(
@@ -573,7 +813,7 @@ async fn get_record(
     Query(query): Query<GetRecordQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &query.space_uri).await?;
+    let space = resolve_space(&state, &query.space).await?;
     let cred = extract_space_credential(&headers);
     require_membership(&state, &space, claims.did(), false, cred.as_deref()).await?;
 
@@ -589,10 +829,8 @@ async fn get_record(
 
     Ok(Json(serde_json::json!({
         "uri": record.uri,
-        "space": query.space_uri,
-        "collection": record.collection,
-        "record": record.record,
         "cid": record.cid,
+        "value": record.record,
     })))
 }
 
@@ -603,18 +841,29 @@ async fn list_records(
     Query(query): Query<ListRecordsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &query.space_uri).await?;
+    let space = resolve_space(&state, &query.space).await?;
     let cred = extract_space_credential(&headers);
     require_membership(&state, &space, claims.did(), false, cred.as_deref()).await?;
 
+    let repo = query.repo.as_deref().or_else(|| {
+        if cred.is_some() {
+            None
+        } else {
+            Some(claims.did())
+        }
+    });
+
     let limit = query.limit.unwrap_or(50).min(100);
+    let reverse = query.reverse.unwrap_or(false);
     let records = db::list_space_records(
         &state.db,
         state.db_backend,
         &space.id,
+        repo,
         query.collection.as_deref(),
         limit,
         query.cursor.as_deref(),
+        reverse,
     )
     .await?;
 
@@ -624,10 +873,8 @@ async fn list_records(
         .into_iter()
         .map(|r| {
             serde_json::json!({
-                "uri": r.uri,
-                "space": query.space_uri,
                 "collection": r.collection,
-                "record": r.record,
+                "rkey": r.rkey,
                 "cid": r.cid,
             })
         })
@@ -649,7 +896,7 @@ async fn list_members(
     headers: HeaderMap,
     Query(query): Query<SpaceUriQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let space = resolve_space(&state, &query.space_uri).await?;
+    let space = resolve_space(&state, &query.space).await?;
 
     if !space.config.membership_public {
         let claims = require_auth(&xrpc_claims)?;
@@ -668,11 +915,10 @@ async fn add_member(
     Json(input): Json<AddMemberInput>,
 ) -> Result<Response, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
-    let existing =
-        db::get_member(&state.db, state.db_backend, &space.id, &input.member_did).await?;
+    let existing = db::get_member(&state.db, state.db_backend, &space.id, &input.did).await?;
     if existing.is_some() {
         return Err(AppError::Conflict(
             "Member already exists in this space".into(),
@@ -682,7 +928,7 @@ async fn add_member(
     let member = SpaceMember {
         id: Uuid::new_v4().to_string(),
         space_id: space.id,
-        member_did: input.member_did,
+        did: input.did,
         access: input.access.unwrap_or(SpaceAccess::Read),
         is_delegation: input.is_delegation.unwrap_or(false),
         granted_by: Some(claims.did().to_string()),
@@ -702,11 +948,10 @@ async fn remove_member(
     Json(input): Json<RemoveMemberInput>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
-    let removed =
-        db::remove_member(&state.db, state.db_backend, &space.id, &input.member_did).await?;
+    let removed = db::remove_member(&state.db, state.db_backend, &space.id, &input.did).await?;
 
     if !removed {
         return Err(AppError::NotFound("Member not found in this space".into()));
@@ -725,7 +970,7 @@ async fn create_invite(
     Json(input): Json<CreateInviteInput>,
 ) -> Result<Response, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
     let mut token_bytes = [0u8; 24];
@@ -802,7 +1047,7 @@ async fn redeem_invite(
     let member = SpaceMember {
         id: Uuid::new_v4().to_string(),
         space_id: invite.space_id.clone(),
-        member_did: did,
+        did,
         access: invite.access,
         is_delegation: false,
         granted_by: Some(invite.created_by.clone()),
@@ -813,10 +1058,10 @@ async fn redeem_invite(
     db::increment_invite_uses(&state.db, state.db_backend, &invite.id).await?;
 
     let space = db::get_space(&state.db, state.db_backend, &invite.space_id).await?;
-    let space_uri = space.map(|s| format!("ats://{}/{}/{}", s.owner_did, s.type_nsid, s.skey));
+    let space_uri = space.map(|s| format!("ats://{}/{}/{}", s.did, s.type_nsid, s.skey));
 
     let mut response = Json(serde_json::json!({
-        "spaceUri": space_uri,
+        "uri": space_uri,
         "access": member.access,
     }))
     .into_response();
@@ -830,7 +1075,7 @@ async fn revoke_invite(
     Json(input): Json<RevokeInviteInput>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
     let revoked = db::revoke_invite(&state.db, state.db_backend, &input.invite_id).await?;
@@ -847,7 +1092,7 @@ async fn list_invites(
     Query(query): Query<SpaceUriQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &query.space_uri).await?;
+    let space = resolve_space(&state, &query.space).await?;
     require_space_admin(&state, &space, claims.did()).await?;
 
     let invites = db::list_invites(&state.db, state.db_backend, &space.id).await?;
@@ -875,14 +1120,14 @@ async fn list_invites(
 // Credential handlers
 // ---------------------------------------------------------------------------
 
-async fn get_credential(
+async fn get_member_grant(
     State(state): State<AppState>,
     xrpc_claims: XrpcClaims,
-    Json(input): Json<GetCredentialInput>,
+    Json(input): Json<GetMemberGrantInput>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let claims = require_auth(&xrpc_claims)?;
     let did = claims.did().to_string();
-    let space = resolve_space(&state, &input.space_uri).await?;
+    let space = resolve_space(&state, &input.space).await?;
 
     require_membership(&state, &space, &did, false, None).await?;
 
@@ -890,13 +1135,55 @@ async fn get_credential(
         AppError::Internal("TOKEN_ENCRYPTION_KEY is required for space credentials".into())
     })?;
 
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let exp = now + crate::spaces::credential::GRANT_TTL_SECS;
+
+    let space_uri = format!("ats://{}/{}/{}", space.did, space.type_nsid, space.skey);
+    let grant_claims = crate::spaces::credential::MemberGrantClaims {
+        sub: did,
+        space: space_uri,
+        scope: "read".into(),
+        iat: now,
+        exp,
+    };
+
+    let grant = crate::spaces::credential::sign_grant(&grant_claims, encryption_key)?;
+
+    let expires_at = chrono::DateTime::from_timestamp(exp as i64, 0)
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_default();
+
+    Ok(Json(serde_json::json!({
+        "grant": grant,
+        "expiresAt": expires_at,
+    })))
+}
+
+async fn get_space_credential(
+    State(state): State<AppState>,
+    xrpc_claims: XrpcClaims,
+    Json(input): Json<GetSpaceCredentialInput>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let claims = require_auth(&xrpc_claims)?;
+
+    let encryption_key = state.config.token_encryption_key.as_ref().ok_or_else(|| {
+        AppError::Internal("TOKEN_ENCRYPTION_KEY is required for space credentials".into())
+    })?;
+
+    let grant_claims = crate::spaces::credential::verify_grant(&input.grant, encryption_key)?;
+
+    let space = resolve_space(&state, &grant_claims.space).await?;
+
     let client_id = claims.client_key().map(|k| k.to_string());
     let issued = crate::spaces::auth::issue_credential(
         &state.db,
         state.db_backend,
         encryption_key,
         &space,
-        &did,
+        &grant_claims.sub,
         client_id.as_deref(),
     )
     .await?;
@@ -907,29 +1194,210 @@ async fn get_credential(
     })))
 }
 
-async fn refresh_credential(
-    State(state): State<AppState>,
-    xrpc_claims: XrpcClaims,
-    Json(input): Json<RefreshCredentialInput>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    let _claims = require_auth(&xrpc_claims)?;
-    let space = resolve_space(&state, &input.space_uri).await?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-    let encryption_key = state.config.token_encryption_key.as_ref().ok_or_else(|| {
-        AppError::Internal("TOKEN_ENCRYPTION_KEY is required for space credentials".into())
-    })?;
+    #[test]
+    fn content_cid_deterministic() {
+        let record = json!({"text": "hello"});
+        let cid1 = content_cid(&record);
+        let cid2 = content_cid(&record);
+        assert_eq!(cid1, cid2);
+        assert!(cid1.starts_with("bafyrei"));
+    }
 
-    let issued = crate::spaces::auth::refresh_credential(
-        &state.db,
-        state.db_backend,
-        encryption_key,
-        &space,
-        &input.credential,
-    )
-    .await?;
+    #[test]
+    fn content_cid_changes_for_different_records() {
+        let a = content_cid(&json!({"text": "hello"}));
+        let b = content_cid(&json!({"text": "world"}));
+        assert_ne!(a, b);
+    }
 
-    Ok(Json(serde_json::json!({
-        "credential": issued.token,
-        "expiresAt": issued.expires_at,
-    })))
+    #[test]
+    fn deserialize_create_record_input() {
+        let input: CreateRecordInput = serde_json::from_value(json!({
+            "space": "ats://did:plc:abc/com.example.forum/main",
+            "collection": "com.example.forum.post",
+            "record": { "text": "hello" }
+        }))
+        .unwrap();
+        assert_eq!(input.space, "ats://did:plc:abc/com.example.forum/main");
+        assert_eq!(input.collection, "com.example.forum.post");
+        assert_eq!(input.record["text"], "hello");
+    }
+
+    #[test]
+    fn deserialize_put_record_with_swap() {
+        let input: PutRecordInput = serde_json::from_value(json!({
+            "space": "ats://did:plc:abc/com.example.forum/main",
+            "collection": "com.example.forum.post",
+            "rkey": "3k2abc",
+            "record": { "text": "updated" },
+            "swapRecord": "bafyrei123"
+        }))
+        .unwrap();
+        assert_eq!(input.swap_record.as_deref(), Some("bafyrei123"));
+    }
+
+    #[test]
+    fn deserialize_put_record_without_swap() {
+        let input: PutRecordInput = serde_json::from_value(json!({
+            "space": "ats://did:plc:abc/com.example.forum/main",
+            "collection": "com.example.forum.post",
+            "rkey": "3k2abc",
+            "record": { "text": "hello" }
+        }))
+        .unwrap();
+        assert_eq!(input.swap_record, None);
+    }
+
+    #[test]
+    fn deserialize_delete_record_with_swap() {
+        let input: DeleteRecordInput = serde_json::from_value(json!({
+            "space": "ats://did:plc:abc/com.example.forum/main",
+            "collection": "com.example.forum.post",
+            "rkey": "3k2abc",
+            "swapRecord": "bafyrei456"
+        }))
+        .unwrap();
+        assert_eq!(input.swap_record.as_deref(), Some("bafyrei456"));
+    }
+
+    #[test]
+    fn deserialize_write_op_create() {
+        let op: WriteOp = serde_json::from_value(json!({
+            "action": "create",
+            "collection": "com.example.forum.post",
+            "value": { "text": "new post" }
+        }))
+        .unwrap();
+        match op {
+            WriteOp::Create {
+                collection,
+                rkey,
+                value,
+            } => {
+                assert_eq!(collection, "com.example.forum.post");
+                assert_eq!(rkey, None);
+                assert_eq!(value["text"], "new post");
+            }
+            _ => panic!("expected Create"),
+        }
+    }
+
+    #[test]
+    fn deserialize_write_op_create_with_rkey() {
+        let op: WriteOp = serde_json::from_value(json!({
+            "action": "create",
+            "collection": "com.example.forum.post",
+            "rkey": "custom-key",
+            "value": { "text": "new post" }
+        }))
+        .unwrap();
+        match op {
+            WriteOp::Create { rkey, .. } => {
+                assert_eq!(rkey.as_deref(), Some("custom-key"));
+            }
+            _ => panic!("expected Create"),
+        }
+    }
+
+    #[test]
+    fn deserialize_write_op_update() {
+        let op: WriteOp = serde_json::from_value(json!({
+            "action": "update",
+            "collection": "com.example.forum.post",
+            "rkey": "3k2abc",
+            "value": { "text": "updated" },
+            "swapRecord": "bafyrei789"
+        }))
+        .unwrap();
+        match op {
+            WriteOp::Update {
+                collection,
+                rkey,
+                swap_record,
+                ..
+            } => {
+                assert_eq!(collection, "com.example.forum.post");
+                assert_eq!(rkey, "3k2abc");
+                assert_eq!(swap_record.as_deref(), Some("bafyrei789"));
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn deserialize_write_op_delete() {
+        let op: WriteOp = serde_json::from_value(json!({
+            "action": "delete",
+            "collection": "com.example.forum.post",
+            "rkey": "3k2abc"
+        }))
+        .unwrap();
+        match op {
+            WriteOp::Delete {
+                collection,
+                rkey,
+                swap_record,
+            } => {
+                assert_eq!(collection, "com.example.forum.post");
+                assert_eq!(rkey, "3k2abc");
+                assert_eq!(swap_record, None);
+            }
+            _ => panic!("expected Delete"),
+        }
+    }
+
+    #[test]
+    fn deserialize_apply_writes_input() {
+        let input: ApplyWritesInput = serde_json::from_value(json!({
+            "space": "ats://did:plc:abc/com.example.forum/main",
+            "swapCommit": "tid123",
+            "writes": [
+                {
+                    "action": "create",
+                    "collection": "com.example.forum.post",
+                    "value": { "text": "post 1" }
+                },
+                {
+                    "action": "delete",
+                    "collection": "com.example.forum.post",
+                    "rkey": "old-key"
+                }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(input.space, "ats://did:plc:abc/com.example.forum/main");
+        assert_eq!(input.swap_commit.as_deref(), Some("tid123"));
+        assert_eq!(input.writes.len(), 2);
+    }
+
+    #[test]
+    fn deserialize_apply_writes_without_swap_commit() {
+        let input: ApplyWritesInput = serde_json::from_value(json!({
+            "space": "ats://did:plc:abc/com.example.forum/main",
+            "writes": [
+                {
+                    "action": "create",
+                    "collection": "com.example.forum.post",
+                    "value": { "text": "post" }
+                }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(input.swap_commit, None);
+    }
+
+    #[test]
+    fn deserialize_write_op_rejects_unknown_action() {
+        let result = serde_json::from_value::<WriteOp>(json!({
+            "action": "unknown",
+            "collection": "test",
+            "rkey": "key"
+        }));
+        assert!(result.is_err());
+    }
 }

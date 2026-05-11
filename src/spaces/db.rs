@@ -24,12 +24,13 @@ pub async fn create_space(
         .map(|v| serde_json::to_string(v).unwrap_or_default());
 
     let sql = adapt_sql(
-        "INSERT INTO spaces (id, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO spaces (id, did, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         backend,
     );
 
     sqlx::query(&sql)
         .bind(&space.id)
+        .bind(&space.did)
         .bind(&space.owner_did)
         .bind(&space.type_nsid)
         .bind(&space.skey)
@@ -55,7 +56,7 @@ pub async fn get_space(
     id: &str,
 ) -> Result<Option<Space>, AppError> {
     let sql = adapt_sql(
-        "SELECT id, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, created_at, updated_at FROM spaces WHERE id = ?",
+        "SELECT id, did, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, revision, created_at, updated_at FROM spaces WHERE id = ?",
         backend,
     );
 
@@ -71,17 +72,17 @@ pub async fn get_space(
 pub async fn get_space_by_address(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
-    owner_did: &str,
+    did: &str,
     type_nsid: &str,
     skey: &str,
 ) -> Result<Option<Space>, AppError> {
     let sql = adapt_sql(
-        "SELECT id, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, created_at, updated_at FROM spaces WHERE owner_did = ? AND type_nsid = ? AND skey = ?",
+        "SELECT id, did, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, revision, created_at, updated_at FROM spaces WHERE did = ? AND type_nsid = ? AND skey = ?",
         backend,
     );
 
     let row: Option<SpaceRow> = sqlx::query_as(&sql)
-        .bind(owner_did)
+        .bind(did)
         .bind(type_nsid)
         .bind(skey)
         .fetch_optional(pool)
@@ -94,20 +95,72 @@ pub async fn get_space_by_address(
 pub async fn list_spaces_by_owner(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
-    owner_did: &str,
+    did: &str,
 ) -> Result<Vec<Space>, AppError> {
     let sql = adapt_sql(
-        "SELECT id, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, created_at, updated_at FROM spaces WHERE owner_did = ? ORDER BY created_at DESC",
+        "SELECT id, did, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, revision, created_at, updated_at FROM spaces WHERE owner_did = ? ORDER BY created_at DESC",
         backend,
     );
 
     let rows: Vec<SpaceRow> = sqlx::query_as(&sql)
-        .bind(owner_did)
+        .bind(did)
         .fetch_all(pool)
         .await
         .map_err(|e| AppError::Internal(format!("failed to list spaces: {e}")))?;
 
     rows.into_iter().map(parse_space_row).collect()
+}
+
+pub struct SpaceView {
+    pub uri: String,
+    pub is_owner: bool,
+}
+
+pub async fn list_spaces_for_user(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    did: &str,
+    limit: i64,
+    cursor: Option<&str>,
+) -> Result<Vec<SpaceView>, AppError> {
+    let (sql, has_cursor) = if cursor.is_some() {
+        (
+            adapt_sql(
+                "SELECT s.did, s.owner_did, s.type_nsid, s.skey, sm.created_at FROM space_members sm JOIN spaces s ON s.id = sm.space_id WHERE sm.member_did = ? AND sm.created_at > ? ORDER BY sm.created_at ASC LIMIT ?",
+                backend,
+            ),
+            true,
+        )
+    } else {
+        (
+            adapt_sql(
+                "SELECT s.did, s.owner_did, s.type_nsid, s.skey, sm.created_at FROM space_members sm JOIN spaces s ON s.id = sm.space_id WHERE sm.member_did = ? ORDER BY sm.created_at ASC LIMIT ?",
+                backend,
+            ),
+            false,
+        )
+    };
+
+    let mut query = sqlx::query_as::<_, (String, String, String, String, String)>(&sql).bind(did);
+    if has_cursor {
+        query = query.bind(cursor.unwrap());
+    }
+    query = query.bind(limit);
+
+    let rows = query
+        .fetch_all(pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list spaces for user: {e}")))?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(space_did, owner_did, type_nsid, skey, _created_at)| SpaceView {
+                uri: format!("ats://{}/{}/{}", space_did, type_nsid, skey),
+                is_owner: owner_did == did,
+            },
+        )
+        .collect())
 }
 
 pub async fn update_space(
@@ -170,6 +223,7 @@ type SpaceRow = (
     String,
     String,
     String,
+    String,
     Option<String>,
     Option<String>,
     String,
@@ -177,40 +231,43 @@ type SpaceRow = (
     Option<String>,
     Option<String>,
     String,
+    Option<String>,
     String,
     String,
 );
 
 fn parse_space_row(r: SpaceRow) -> Result<Space, AppError> {
-    let access_mode = AccessMode::parse(&r.6)
-        .ok_or_else(|| AppError::Internal(format!("invalid access_mode: {}", r.6)))?;
+    let access_mode = AccessMode::parse(&r.7)
+        .ok_or_else(|| AppError::Internal(format!("invalid access_mode: {}", r.7)))?;
     let app_allowlist: Option<Vec<String>> =
-        r.7.as_deref()
+        r.8.as_deref()
             .map(serde_json::from_str)
             .transpose()
             .map_err(|e| AppError::Internal(format!("invalid app_allowlist: {e}")))?;
     let app_denylist: Option<Vec<String>> =
-        r.8.as_deref()
+        r.9.as_deref()
             .map(serde_json::from_str)
             .transpose()
             .map_err(|e| AppError::Internal(format!("invalid app_denylist: {e}")))?;
-    let config: SpaceConfig = serde_json::from_str(&r.10)
+    let config: SpaceConfig = serde_json::from_str(&r.11)
         .map_err(|e| AppError::Internal(format!("invalid space config: {e}")))?;
 
     Ok(Space {
         id: r.0,
-        owner_did: r.1,
-        type_nsid: r.2,
-        skey: r.3,
-        display_name: r.4,
-        description: r.5,
+        did: r.1,
+        owner_did: r.2,
+        type_nsid: r.3,
+        skey: r.4,
+        display_name: r.5,
+        description: r.6,
         access_mode,
         app_allowlist,
         app_denylist,
-        managing_app_did: r.9,
+        managing_app_did: r.10,
         config,
-        created_at: r.11,
-        updated_at: r.12,
+        revision: r.12,
+        created_at: r.13,
+        updated_at: r.14,
     })
 }
 
@@ -232,7 +289,7 @@ pub async fn add_member(
     sqlx::query(&sql)
         .bind(&member.id)
         .bind(&member.space_id)
-        .bind(&member.member_did)
+        .bind(&member.did)
         .bind(member.access.as_str())
         .bind(member.is_delegation as i32)
         .bind(&member.granted_by)
@@ -248,7 +305,7 @@ pub async fn remove_member(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
     space_id: &str,
-    member_did: &str,
+    did: &str,
 ) -> Result<bool, AppError> {
     let sql = adapt_sql(
         "DELETE FROM space_members WHERE space_id = ? AND member_did = ?",
@@ -257,7 +314,7 @@ pub async fn remove_member(
 
     let result = sqlx::query(&sql)
         .bind(space_id)
-        .bind(member_did)
+        .bind(did)
         .execute(pool)
         .await
         .map_err(|e| AppError::Internal(format!("failed to remove member: {e}")))?;
@@ -269,7 +326,7 @@ pub async fn get_member(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
     space_id: &str,
-    member_did: &str,
+    did: &str,
 ) -> Result<Option<SpaceMember>, AppError> {
     let sql = adapt_sql(
         "SELECT id, space_id, member_did, access, is_delegation, granted_by, created_at FROM space_members WHERE space_id = ? AND member_did = ?",
@@ -278,7 +335,7 @@ pub async fn get_member(
 
     let row: Option<MemberRow> = sqlx::query_as(&sql)
         .bind(space_id)
-        .bind(member_did)
+        .bind(did)
         .fetch_optional(pool)
         .await
         .map_err(|e| AppError::Internal(format!("failed to get member: {e}")))?;
@@ -308,7 +365,7 @@ pub async fn list_direct_members(
 pub async fn list_spaces_for_member(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
-    member_did: &str,
+    did: &str,
 ) -> Result<Vec<SpaceMember>, AppError> {
     let sql = adapt_sql(
         "SELECT id, space_id, member_did, access, is_delegation, granted_by, created_at FROM space_members WHERE member_did = ? ORDER BY created_at ASC",
@@ -316,7 +373,7 @@ pub async fn list_spaces_for_member(
     );
 
     let rows: Vec<MemberRow> = sqlx::query_as(&sql)
-        .bind(member_did)
+        .bind(did)
         .fetch_all(pool)
         .await
         .map_err(|e| AppError::Internal(format!("failed to list spaces for member: {e}")))?;
@@ -333,7 +390,7 @@ fn parse_member_row(r: MemberRow) -> Result<SpaceMember, AppError> {
     Ok(SpaceMember {
         id: r.0,
         space_id: r.1,
-        member_did: r.2,
+        did: r.2,
         access,
         is_delegation: r.4 != 0,
         granted_by: r.5,
@@ -422,56 +479,49 @@ pub async fn get_space_record_by_parts(
     row.map(parse_record_row).transpose()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn list_space_records(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
     space_id: &str,
+    repo: Option<&str>,
     collection: Option<&str>,
     limit: i64,
     cursor: Option<&str>,
+    reverse: bool,
 ) -> Result<Vec<SpaceRecord>, AppError> {
-    let (sql, has_collection, has_cursor) = match (collection, cursor) {
-        (Some(_), Some(_)) => (
-            adapt_sql(
-                "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE space_id = ? AND collection = ? AND indexed_at > ? ORDER BY indexed_at ASC LIMIT ?",
-                backend,
-            ),
-            true,
-            true,
-        ),
-        (Some(_), None) => (
-            adapt_sql(
-                "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE space_id = ? AND collection = ? ORDER BY indexed_at ASC LIMIT ?",
-                backend,
-            ),
-            true,
-            false,
-        ),
-        (None, Some(_)) => (
-            adapt_sql(
-                "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE space_id = ? AND indexed_at > ? ORDER BY indexed_at ASC LIMIT ?",
-                backend,
-            ),
-            false,
-            true,
-        ),
-        (None, None) => (
-            adapt_sql(
-                "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE space_id = ? ORDER BY indexed_at ASC LIMIT ?",
-                backend,
-            ),
-            false,
-            false,
-        ),
+    let mut conditions = vec!["space_id = ?".to_string()];
+    if repo.is_some() {
+        conditions.push("author_did = ?".to_string());
+    }
+    if collection.is_some() {
+        conditions.push("collection = ?".to_string());
+    }
+    let (cursor_op, order) = if reverse {
+        ("indexed_at < ?", "DESC")
+    } else {
+        ("indexed_at > ?", "ASC")
     };
+    if cursor.is_some() {
+        conditions.push(cursor_op.to_string());
+    }
+
+    let where_clause = conditions.join(" AND ");
+    let raw = format!(
+        "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE {} ORDER BY indexed_at {} LIMIT ?",
+        where_clause, order
+    );
+    let sql = adapt_sql(&raw, backend);
 
     let mut query = sqlx::query_as::<_, RecordRow>(&sql).bind(space_id);
-
-    if has_collection {
-        query = query.bind(collection.unwrap());
+    if let Some(r) = repo {
+        query = query.bind(r);
     }
-    if has_cursor {
-        query = query.bind(cursor.unwrap());
+    if let Some(c) = collection {
+        query = query.bind(c);
+    }
+    if let Some(cur) = cursor {
+        query = query.bind(cur);
     }
     query = query.bind(limit);
 
@@ -481,6 +531,79 @@ pub async fn list_space_records(
         .map_err(|e| AppError::Internal(format!("failed to list space records: {e}")))?;
 
     rows.into_iter().map(parse_record_row).collect()
+}
+
+pub async fn insert_space_record(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    record: &SpaceRecord,
+) -> Result<(), AppError> {
+    let now = now_rfc3339();
+    let record_json = serde_json::to_string(&record.record)
+        .map_err(|e| AppError::Internal(format!("failed to serialize record: {e}")))?;
+
+    let sql = adapt_sql(
+        "INSERT INTO space_records (uri, space_id, author_did, collection, rkey, record, cid, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        backend,
+    );
+
+    sqlx::query(&sql)
+        .bind(&record.uri)
+        .bind(&record.space_id)
+        .bind(&record.author_did)
+        .bind(&record.collection)
+        .bind(&record.rkey)
+        .bind(&record_json)
+        .bind(&record.cid)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("UNIQUE") || msg.contains("duplicate") || msg.contains("unique") {
+                AppError::Conflict("Record already exists".into())
+            } else {
+                AppError::Internal(format!("failed to create space record: {e}"))
+            }
+        })?;
+
+    Ok(())
+}
+
+pub async fn upsert_space_record_with_swap(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    record: &SpaceRecord,
+    swap_cid: &str,
+) -> Result<(), AppError> {
+    let now = now_rfc3339();
+    let record_json = serde_json::to_string(&record.record)
+        .map_err(|e| AppError::Internal(format!("failed to serialize record: {e}")))?;
+
+    let sql = adapt_sql(
+        "UPDATE space_records SET record = ?, cid = ?, indexed_at = ? WHERE uri = ? AND cid = ?",
+        backend,
+    );
+
+    let result = sqlx::query(&sql)
+        .bind(&record_json)
+        .bind(&record.cid)
+        .bind(&now)
+        .bind(&record.uri)
+        .bind(swap_cid)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to update space record: {e}")))?;
+
+    if result.rows_affected() == 0 {
+        let existing = get_space_record(pool, backend, &record.uri).await?;
+        if existing.is_some() {
+            return Err(AppError::Conflict("Record CID mismatch".into()));
+        }
+        return Err(AppError::NotFound("Record not found".into()));
+    }
+
+    Ok(())
 }
 
 pub async fn delete_space_record(
@@ -497,6 +620,58 @@ pub async fn delete_space_record(
         .map_err(|e| AppError::Internal(format!("failed to delete space record: {e}")))?;
 
     Ok(result.rows_affected() > 0)
+}
+
+pub async fn delete_space_record_with_swap(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    uri: &str,
+    swap_cid: &str,
+) -> Result<bool, AppError> {
+    let sql = adapt_sql(
+        "DELETE FROM space_records WHERE uri = ? AND cid = ?",
+        backend,
+    );
+
+    let result = sqlx::query(&sql)
+        .bind(uri)
+        .bind(swap_cid)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to delete space record: {e}")))?;
+
+    if result.rows_affected() == 0 {
+        let existing = get_space_record(pool, backend, uri).await?;
+        if existing.is_some() {
+            return Err(AppError::Conflict("Record CID mismatch".into()));
+        }
+        return Err(AppError::NotFound("Record not found".into()));
+    }
+
+    Ok(true)
+}
+
+pub async fn update_space_revision(
+    pool: &sqlx::AnyPool,
+    backend: DatabaseBackend,
+    space_id: &str,
+    revision: &str,
+) -> Result<(), AppError> {
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "UPDATE spaces SET revision = ?, updated_at = ? WHERE id = ?",
+        backend,
+    );
+
+    sqlx::query(&sql)
+        .bind(revision)
+        .bind(&now)
+        .bind(space_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to update space revision: {e}")))?;
+
+    Ok(())
 }
 
 type RecordRow = (

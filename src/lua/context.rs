@@ -5,8 +5,9 @@ use std::collections::HashMap;
 /// Optional space context passed to Lua scripts when the request is space-scoped.
 #[derive(Debug, Clone)]
 pub struct SpaceContext {
-    pub space_uri: String,
+    pub space: String,
     pub space_id: String,
+    pub did: String,
     pub owner_did: String,
     pub type_nsid: String,
     pub skey: String,
@@ -17,8 +18,9 @@ fn set_space_context(lua: &Lua, space: Option<&SpaceContext>) -> LuaResult<()> {
     match space {
         Some(ctx) => {
             let table = lua.create_table()?;
-            table.set("space_uri", ctx.space_uri.as_str())?;
+            table.set("space", ctx.space.as_str())?;
             table.set("space_id", ctx.space_id.as_str())?;
+            table.set("did", ctx.did.as_str())?;
             table.set("owner_did", ctx.owner_did.as_str())?;
             table.set("type_nsid", ctx.type_nsid.as_str())?;
             table.set("skey", ctx.skey.as_str())?;
@@ -269,8 +271,9 @@ mod tests {
         let lua = create_sandbox().unwrap();
         let params = HashMap::new();
         let space = SpaceContext {
-            space_uri: "ats://did:plc:owner/com.example.forum/main".into(),
+            space: "ats://did:plc:owner/com.example.forum/main".into(),
             space_id: "space-123".into(),
+            did: "did:plc:owner".into(),
             owner_did: "did:plc:owner".into(),
             type_nsid: "com.example.forum".into(),
             skey: "main".into(),
@@ -288,14 +291,11 @@ mod tests {
         let globals = lua.globals();
         let space_table: mlua::Table = globals.get("space").unwrap();
         assert_eq!(
-            space_table.get::<String>("space_uri").unwrap(),
+            space_table.get::<String>("space").unwrap(),
             "ats://did:plc:owner/com.example.forum/main"
         );
         assert_eq!(space_table.get::<String>("space_id").unwrap(), "space-123");
-        assert_eq!(
-            space_table.get::<String>("owner_did").unwrap(),
-            "did:plc:owner"
-        );
+        assert_eq!(space_table.get::<String>("did").unwrap(), "did:plc:owner");
     }
 
     #[test]

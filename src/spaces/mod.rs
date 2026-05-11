@@ -10,11 +10,11 @@ use std::fmt;
 
 /// A parsed `ats://` URI for addressing permissioned data.
 ///
-/// Full form: `ats://<space-owner-did>/<space-type-nsid>/<skey>/<user-did>/<collection-nsid>/<rkey>`
-/// Space-only form: `ats://<space-owner-did>/<space-type-nsid>/<skey>`
+/// Full form: `ats://<space-did>/<space-type-nsid>/<skey>/<user-did>/<collection-nsid>/<rkey>`
+/// Space-only form: `ats://<space-did>/<space-type-nsid>/<skey>`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SpaceUri {
-    pub owner_did: String,
+    pub did: String,
     pub type_nsid: String,
     pub skey: String,
     pub user_did: Option<String>,
@@ -32,7 +32,7 @@ impl SpaceUri {
 
         if parts.len() < 3 {
             return Err(AppError::BadRequest(
-                "SpaceUri requires at least owner_did/type_nsid/skey".into(),
+                "SpaceUri requires at least did/type_nsid/skey".into(),
             ));
         }
 
@@ -42,7 +42,7 @@ impl SpaceUri {
             ));
         }
 
-        let owner_did = parts[0].to_string();
+        let did = parts[0].to_string();
         let type_nsid = parts[1].to_string();
         let skey = parts[2].to_string();
 
@@ -61,7 +61,7 @@ impl SpaceUri {
         };
 
         Ok(SpaceUri {
-            owner_did,
+            did,
             type_nsid,
             skey,
             user_did,
@@ -71,7 +71,7 @@ impl SpaceUri {
     }
 
     pub fn space_uri(&self) -> String {
-        format!("ats://{}/{}/{}", self.owner_did, self.type_nsid, self.skey)
+        format!("ats://{}/{}/{}", self.did, self.type_nsid, self.skey)
     }
 
     pub fn is_record_uri(&self) -> bool {
@@ -85,11 +85,7 @@ impl SpaceUri {
 
 impl fmt::Display for SpaceUri {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "ats://{}/{}/{}",
-            self.owner_did, self.type_nsid, self.skey
-        )?;
+        write!(f, "ats://{}/{}/{}", self.did, self.type_nsid, self.skey)?;
         if let (Some(user), Some(col), Some(rkey)) = (&self.user_did, &self.collection, &self.rkey)
         {
             write!(f, "/{}/{}/{}", user, col, rkey)?;
@@ -105,7 +101,7 @@ mod tests {
     #[test]
     fn parse_space_uri() {
         let uri = SpaceUri::parse("ats://did:plc:abc123/com.example.forum/main").unwrap();
-        assert_eq!(uri.owner_did, "did:plc:abc123");
+        assert_eq!(uri.did, "did:plc:abc123");
         assert_eq!(uri.type_nsid, "com.example.forum");
         assert_eq!(uri.skey, "main");
         assert!(uri.is_space_uri());
@@ -119,7 +115,7 @@ mod tests {
             "ats://did:plc:abc123/com.example.forum/main/did:plc:user1/com.example.forum.post/3k2abc",
         )
         .unwrap();
-        assert_eq!(uri.owner_did, "did:plc:abc123");
+        assert_eq!(uri.did, "did:plc:abc123");
         assert_eq!(uri.type_nsid, "com.example.forum");
         assert_eq!(uri.skey, "main");
         assert_eq!(uri.user_did.as_deref(), Some("did:plc:user1"));
@@ -132,7 +128,7 @@ mod tests {
     #[test]
     fn display_space_uri() {
         let uri = SpaceUri {
-            owner_did: "did:plc:abc123".into(),
+            did: "did:plc:abc123".into(),
             type_nsid: "com.example.forum".into(),
             skey: "main".into(),
             user_did: None,
@@ -148,7 +144,7 @@ mod tests {
     #[test]
     fn display_record_uri() {
         let uri = SpaceUri {
-            owner_did: "did:plc:abc123".into(),
+            did: "did:plc:abc123".into(),
             type_nsid: "com.example.forum".into(),
             skey: "main".into(),
             user_did: Some("did:plc:user1".into()),

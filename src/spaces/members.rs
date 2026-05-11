@@ -77,7 +77,7 @@ fn resolve_members_recursive<'a>(
                     .await?;
                 }
             } else {
-                merge_access(resolved, &member.member_did, member.access);
+                merge_access(resolved, &member.did, member.access);
             }
         }
 
@@ -93,14 +93,13 @@ async fn resolve_delegation_target(
     backend: DatabaseBackend,
     member: &SpaceMember,
 ) -> Result<Option<String>, AppError> {
-    if member.member_did.starts_with("ats://") {
-        let uri = SpaceUri::parse(&member.member_did)?;
+    if member.did.starts_with("ats://") {
+        let uri = SpaceUri::parse(&member.did)?;
         let space =
-            db::get_space_by_address(pool, backend, &uri.owner_did, &uri.type_nsid, &uri.skey)
-                .await?;
+            db::get_space_by_address(pool, backend, &uri.did, &uri.type_nsid, &uri.skey).await?;
         Ok(space.map(|s| s.id))
     } else {
-        let space = db::get_space(pool, backend, &member.member_did).await?;
+        let space = db::get_space(pool, backend, &member.did).await?;
         Ok(space.map(|s| s.id))
     }
 }

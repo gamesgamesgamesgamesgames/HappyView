@@ -72,7 +72,9 @@ impl fmt::Display for AccessMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Space {
     pub id: String,
+    pub did: String,
     pub owner_did: String,
+    #[serde(rename = "type")]
     pub type_nsid: String,
     pub skey: String,
     pub display_name: Option<String>,
@@ -82,6 +84,7 @@ pub struct Space {
     pub app_denylist: Option<Vec<String>>,
     pub managing_app_did: Option<String>,
     pub config: SpaceConfig,
+    pub revision: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -100,7 +103,7 @@ pub struct SpaceConfig {
 pub struct SpaceMember {
     pub id: String,
     pub space_id: String,
-    pub member_did: String,
+    pub did: String,
     pub access: SpaceAccess,
     pub is_delegation: bool,
     pub granted_by: Option<String>,

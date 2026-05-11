@@ -280,7 +280,7 @@ pub fn register_atproto_api(
                 let space = crate::spaces::db::get_space_by_address(
                     &state.db,
                     state.db_backend,
-                    &uri.owner_did,
+                    &uri.did,
                     &uri.type_nsid,
                     &uri.skey,
                 )
@@ -321,7 +321,7 @@ pub fn register_atproto_api(
                 let space = crate::spaces::db::get_space_by_address(
                     &state.db,
                     state.db_backend,
-                    &uri.owner_did,
+                    &uri.did,
                     &uri.type_nsid,
                     &uri.skey,
                 )
@@ -361,7 +361,7 @@ pub fn register_atproto_api(
             let space = crate::spaces::db::get_space_by_address(
                 &state.db,
                 state.db_backend,
-                &uri.owner_did,
+                &uri.did,
                 &uri.type_nsid,
                 &uri.skey,
             )
@@ -416,7 +416,7 @@ pub fn register_atproto_api(
             let space = crate::spaces::db::get_space_by_address(
                 &state.db,
                 state.db_backend,
-                &uri.owner_did,
+                &uri.did,
                 &uri.type_nsid,
                 &uri.skey,
             )
@@ -433,9 +433,11 @@ pub fn register_atproto_api(
                 &state.db,
                 state.db_backend,
                 &space.id,
+                None,
                 collection.as_deref(),
                 limit.min(100),
                 cursor.as_deref(),
+                false,
             )
             .await
             .map_err(|e| mlua::Error::runtime(format!("record query failed: {e}")))?;
