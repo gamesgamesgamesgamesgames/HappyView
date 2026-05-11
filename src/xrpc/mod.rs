@@ -350,9 +350,13 @@ pub async fn xrpc_post(
     let mut params = parse_query_params(&raw_query);
     let claims = xrpc_claims.identity;
 
-    // Space credential Bearer requests bypass the client-key requirement;
-    // rate-limit by the credential's sub DID instead.
     let rate_key = resolve_client_key(&state, claims.as_ref(), &parts, &params)?;
+
+    if claims.is_none() && xrpc_claims.space_credential.is_none() {
+        return Err(AppError::Auth(
+            "XRPC procedures require DPoP authentication".into(),
+        ));
+    }
 
     let lexicon = state.lexicons.get(&method).await;
 
