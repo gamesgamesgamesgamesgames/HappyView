@@ -300,6 +300,53 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Experimental",
+      items: [
+        {
+          type: "category",
+          label: "Permissioned Spaces",
+          items: [
+            {
+              type: "doc",
+              id: "experimental/spaces",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "experimental/spaces/managing-spaces",
+              label: "Managing Spaces",
+            },
+            {
+              type: "doc",
+              id: "experimental/spaces/members",
+              label: "Members",
+            },
+            {
+              type: "doc",
+              id: "experimental/spaces/records",
+              label: "Records",
+            },
+            {
+              type: "doc",
+              id: "experimental/spaces/credentials",
+              label: "Credentials",
+            },
+            {
+              type: "doc",
+              id: "experimental/spaces/invites",
+              label: "Invites",
+            },
+            {
+              type: "doc",
+              id: "experimental/spaces/changelog",
+              label: "Changelog",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Reference",
       items: [
         {
