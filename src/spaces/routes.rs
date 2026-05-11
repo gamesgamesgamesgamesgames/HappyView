@@ -281,6 +281,32 @@ fn require_auth(claims: &XrpcClaims) -> Result<&crate::auth::Claims, AppError> {
         .ok_or_else(|| AppError::Auth("This endpoint requires authentication".into()))
 }
 
+/// Like `require_auth`, but also accepts a verified space credential as an
+/// identity source. Use this in space endpoints that support `Bearer
+/// <space_credential>` in addition to DPoP auth.
+async fn require_auth_or_credential(
+    state: &AppState,
+    claims: &XrpcClaims,
+) -> Result<String, AppError> {
+    if let Some(identity) = &claims.identity {
+        return Ok(identity.did().to_string());
+    }
+
+    if let Some(token) = &claims.space_credential {
+        let verified = crate::spaces::credential::verify_external_credential(
+            token,
+            &state.http,
+            &state.config.plc_url,
+        )
+        .await?;
+        return Ok(verified.sub);
+    }
+
+    Err(AppError::Auth(
+        "This endpoint requires authentication".into(),
+    ))
+}
+
 async fn resolve_space(state: &AppState, space_uri: &str) -> Result<Space, AppError> {
     let uri = SpaceUri::parse(space_uri)?;
     db::get_space_by_address(
@@ -566,8 +592,7 @@ async fn create_record(
     xrpc_claims: XrpcClaims,
     Json(input): Json<CreateRecordInput>,
 ) -> Result<Response, AppError> {
-    let claims = require_auth(&xrpc_claims)?;
-    let did = claims.did().to_string();
+    let did = require_auth_or_credential(&state, &xrpc_claims).await?;
     let space = resolve_space(&state, &input.space).await?;
     require_membership(
         &state,
@@ -616,8 +641,7 @@ async fn put_record(
     xrpc_claims: XrpcClaims,
     Json(input): Json<PutRecordInput>,
 ) -> Result<Response, AppError> {
-    let claims = require_auth(&xrpc_claims)?;
-    let did = claims.did().to_string();
+    let did = require_auth_or_credential(&state, &xrpc_claims).await?;
     let space = resolve_space(&state, &input.space).await?;
     require_membership(
         &state,
@@ -708,8 +732,7 @@ async fn apply_writes(
     xrpc_claims: XrpcClaims,
     Json(input): Json<ApplyWritesInput>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let claims = require_auth(&xrpc_claims)?;
-    let did = claims.did().to_string();
+    let did = require_auth_or_credential(&state, &xrpc_claims).await?;
     let space = resolve_space(&state, &input.space).await?;
     require_membership(
         &state,
@@ -838,12 +861,12 @@ async fn get_record(
     xrpc_claims: XrpcClaims,
     Query(query): Query<GetRecordQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let claims = require_auth(&xrpc_claims)?;
+    let did = require_auth_or_credential(&state, &xrpc_claims).await?;
     let space = resolve_space(&state, &query.space).await?;
     require_membership(
         &state,
         &space,
-        claims.did(),
+        &did,
         false,
         xrpc_claims.space_credential.as_deref(),
     )
@@ -871,12 +894,12 @@ async fn list_records(
     xrpc_claims: XrpcClaims,
     Query(query): Query<ListRecordsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let claims = require_auth(&xrpc_claims)?;
+    let did = require_auth_or_credential(&state, &xrpc_claims).await?;
     let space = resolve_space(&state, &query.space).await?;
     require_membership(
         &state,
         &space,
-        claims.did(),
+        &did,
         false,
         xrpc_claims.space_credential.as_deref(),
     )
@@ -886,7 +909,7 @@ async fn list_records(
         if xrpc_claims.space_credential.is_some() {
             None
         } else {
-            Some(claims.did())
+            Some(did.as_str())
         }
     });
 
@@ -935,11 +958,11 @@ async fn list_members(
     let space = resolve_space(&state, &query.space).await?;
 
     if !space.config.membership_public {
-        let claims = require_auth(&xrpc_claims)?;
+        let did = require_auth_or_credential(&state, &xrpc_claims).await?;
         require_membership(
             &state,
             &space,
-            claims.did(),
+            &did,
             false,
             xrpc_claims.space_credential.as_deref(),
         )

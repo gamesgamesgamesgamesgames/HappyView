@@ -254,12 +254,8 @@ impl FromRequestParts<AppState> for XrpcClaims {
                 let token = &h[7..];
                 match crate::spaces::credential::peek_jwt_typ(token) {
                     Some(typ) if typ == "space_credential" => {
-                        let sub =
-                            crate::spaces::credential::peek_credential_sub(token).ok_or_else(
-                                || AppError::Auth("invalid space credential payload".into()),
-                            )?;
                         Ok(XrpcClaims {
-                            identity: Some(Claims::internal(sub)),
+                            identity: None,
                             space_credential: Some(token.to_string()),
                         })
                     }
