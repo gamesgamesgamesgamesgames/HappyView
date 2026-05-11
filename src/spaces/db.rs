@@ -95,7 +95,7 @@ pub async fn get_space_by_address(
 pub async fn list_spaces_by_owner(
     pool: &sqlx::AnyPool,
     backend: DatabaseBackend,
-    did: &str,
+    owner_did: &str,
 ) -> Result<Vec<Space>, AppError> {
     let sql = adapt_sql(
         "SELECT id, did, owner_did, type_nsid, skey, display_name, description, access_mode, app_allowlist, app_denylist, managing_app_did, config, revision, created_at, updated_at FROM spaces WHERE owner_did = ? ORDER BY created_at DESC",
@@ -103,7 +103,7 @@ pub async fn list_spaces_by_owner(
     );
 
     let rows: Vec<SpaceRow> = sqlx::query_as(&sql)
-        .bind(did)
+        .bind(owner_did)
         .fetch_all(pool)
         .await
         .map_err(|e| AppError::Internal(format!("failed to list spaces: {e}")))?;
