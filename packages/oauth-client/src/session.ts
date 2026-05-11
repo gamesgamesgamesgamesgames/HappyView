@@ -7,7 +7,7 @@ export interface HappyViewSessionOptions {
   accessToken: string;
   clientKey: string;
   instanceUrl: string;
-  scopes: string[];
+  scopes?: string;
   pdsUrl?: string;
   issuer?: string;
   fetch?: typeof globalThis.fetch;
@@ -48,12 +48,12 @@ export class HappyViewSession {
 
   constructor(options: HappyViewSessionOptions) {
     this.did = options.did;
-    this.scopes = options.scopes;
+    this.scopes = options.scopes ? options.scopes.split(" ") : [];
     this.dpopKey = options.dpopKey;
     this.accessToken = options.accessToken;
     this.clientKey = options.clientKey;
     this.instanceUrl = options.instanceUrl.replace(/\/+$/, "");
-    this._scopes = options.scopes.join(" ") || undefined;
+    this._scopes = options.scopes;
     this._pdsUrl = options.pdsUrl;
     this._issuer = options.issuer;
     this._fetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof globalThis.fetch;

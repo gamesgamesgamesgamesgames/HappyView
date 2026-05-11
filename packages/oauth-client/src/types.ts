@@ -46,7 +46,7 @@ export interface StoredSession {
   accessToken: string;
   clientKey: string;
   instanceUrl: string;
-  scopes: string[];
+  scopes?: string;
   pdsUrl?: string;
   issuer?: string;
 }
