@@ -57,7 +57,7 @@ pub fn verify_grant(token: &str, secret: &[u8; 32]) -> Result<MemberGrantClaims,
         .unwrap()
         .as_secs();
 
-    if now > data.claims.exp {
+    if now >= data.claims.exp {
         return Err(AppError::Auth("member grant has expired".into()));
     }
 
@@ -173,7 +173,7 @@ pub fn verify_credential(
         .unwrap()
         .as_secs();
 
-    if now > claims.exp {
+    if now >= claims.exp {
         return Err(AppError::Auth("credential has expired".into()));
     }
 
