@@ -96,8 +96,8 @@ async fn seed_domain(app: &TestApp, id: &str, url: &str, is_primary: bool) {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn domains_list_returns_seeded_domain() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     seed_domain(&app, "primary-id", "http://127.0.0.1:0", true).await;
@@ -119,8 +119,8 @@ async fn domains_list_returns_seeded_domain() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn domains_create_and_delete() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     seed_domain(&app, "primary-id", "http://127.0.0.1:0", true).await;
@@ -175,8 +175,8 @@ async fn domains_create_and_delete() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn domains_duplicate_url_returns_400() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     seed_domain(&app, "primary-id", "http://127.0.0.1:0", true).await;
@@ -203,8 +203,8 @@ async fn domains_duplicate_url_returns_400() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn domains_cannot_delete_primary() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     seed_domain(&app, "primary-id", "http://127.0.0.1:0", true).await;
@@ -229,8 +229,8 @@ async fn domains_cannot_delete_primary() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn domains_set_primary() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     seed_domain(&app, "id-a", "http://127.0.0.1:0", true).await;
@@ -278,8 +278,8 @@ async fn domains_set_primary() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn unknown_host_returns_421_on_domain_scoped_routes() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // No domains seeded — cache is empty
@@ -300,8 +300,8 @@ async fn unknown_host_returns_421_on_domain_scoped_routes() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn health_check_bypasses_domain_resolution() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // No domains seeded — cache is empty
@@ -322,8 +322,8 @@ async fn health_check_bypasses_domain_resolution() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn domain_scoped_route_works_with_known_host() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Domain.host() for "http://localhost:3000" is "localhost:3000"

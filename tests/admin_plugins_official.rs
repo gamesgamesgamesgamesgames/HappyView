@@ -41,8 +41,8 @@ fn admin_post(
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn official_plugins_endpoint_returns_cached_list() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let gh = MockServer::start().await;
@@ -111,8 +111,8 @@ async fn official_plugins_endpoint_returns_cached_list() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn plugins_list_populates_update_available_when_behind() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let gh = MockServer::start().await;
@@ -187,8 +187,8 @@ async fn plugins_list_populates_update_available_when_behind() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn check_update_endpoint_refreshes_cache_on_demand() {
+    common::require_db!();
     // Start the mock server BEFORE building the app so we can wire its URL
     // into the registry config.
     let gh = MockServer::start().await;

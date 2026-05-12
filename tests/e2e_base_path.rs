@@ -8,8 +8,8 @@ use tower::ServiceExt;
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn health_at_root_when_base_path_set() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_base_path("/hv").await;
 
     let resp = app
@@ -31,8 +31,8 @@ async fn health_at_root_when_base_path_set() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn health_not_nested_under_base_path() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_base_path("/hv").await;
 
     let resp = app
@@ -52,8 +52,8 @@ async fn health_not_nested_under_base_path() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn config_accessible_under_base_path() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_base_path("/hv").await;
 
     let resp = app
@@ -74,8 +74,8 @@ async fn config_accessible_under_base_path() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn config_not_at_root_when_base_path_set() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_base_path("/hv").await;
 
     let resp = app
@@ -96,8 +96,8 @@ async fn config_not_at_root_when_base_path_set() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn redirect_includes_base_path_prefix() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_base_path("/hv").await;
 
     let resp = app

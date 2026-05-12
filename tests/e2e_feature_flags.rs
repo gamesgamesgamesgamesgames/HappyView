@@ -53,8 +53,8 @@ fn admin_delete(
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn space_routes_blocked_when_flag_disabled() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -76,8 +76,8 @@ async fn space_routes_blocked_when_flag_disabled() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn space_routes_allowed_after_enabling_flag() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Enable the feature flag
@@ -116,8 +116,8 @@ async fn space_routes_allowed_after_enabling_flag() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn space_routes_blocked_again_after_disabling_flag() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Enable
@@ -165,8 +165,8 @@ async fn space_routes_blocked_again_after_disabling_flag() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_feature_flags_lists_flags() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -192,8 +192,8 @@ async fn admin_feature_flags_lists_flags() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_feature_flags_reflects_enabled_state() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Enable the flag
@@ -228,8 +228,8 @@ async fn admin_feature_flags_reflects_enabled_state() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn config_endpoint_includes_features() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Default: spaces disabled
@@ -282,8 +282,8 @@ async fn config_endpoint_includes_features() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_feature_flags_requires_auth() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app

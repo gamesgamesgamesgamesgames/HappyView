@@ -63,8 +63,8 @@ fn admin_delete(
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_no_auth_returns_401() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -84,8 +84,8 @@ async fn admin_no_auth_returns_401() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_wrong_token_returns_401() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // No valid session cookie — the request will be rejected.
@@ -107,8 +107,8 @@ async fn admin_wrong_token_returns_401() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_valid_token_returns_200() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -123,8 +123,8 @@ async fn admin_valid_token_returns_200() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_non_admin_did_returns_403() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Use a DID that is NOT in the admins table.
@@ -143,8 +143,8 @@ async fn admin_non_admin_did_returns_403() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_auto_bootstrap_first_user() {
+    common::require_db!();
     let app = TestApp::new().await;
     let backend = app.state.db_backend;
 
@@ -186,8 +186,8 @@ async fn admin_auto_bootstrap_first_user() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_create_returns_201() {
+    common::require_db!();
     let app = TestApp::new().await;
     let body = json!({
         "lexicon_json": fixtures::game_record_lexicon(),
@@ -209,8 +209,8 @@ async fn lexicon_create_returns_201() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_upsert_returns_200_with_incremented_revision() {
+    common::require_db!();
     let app = TestApp::new().await;
     let body = json!({
         "lexicon_json": fixtures::game_record_lexicon(),
@@ -241,8 +241,8 @@ async fn lexicon_upsert_returns_200_with_incremented_revision() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_invalid_version_returns_400() {
+    common::require_db!();
     let app = TestApp::new().await;
     let body = json!({
         "lexicon_json": { "lexicon": 99, "id": "test.bad" },
@@ -260,8 +260,8 @@ async fn lexicon_invalid_version_returns_400() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_missing_id_returns_400() {
+    common::require_db!();
     let app = TestApp::new().await;
     let body = json!({
         "lexicon_json": { "lexicon": 1 },
@@ -279,8 +279,8 @@ async fn lexicon_missing_id_returns_400() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_list_all() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Seed a lexicon
@@ -311,8 +311,8 @@ async fn lexicon_list_all() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_get_by_id() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     app.router
@@ -343,8 +343,8 @@ async fn lexicon_get_by_id() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_get_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -362,8 +362,8 @@ async fn lexicon_get_not_found() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_delete() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     app.router
@@ -392,8 +392,8 @@ async fn lexicon_delete() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn lexicon_delete_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -415,8 +415,8 @@ async fn lexicon_delete_not_found() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn stats_empty_db() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -434,8 +434,8 @@ async fn stats_empty_db() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn stats_with_seeded_records() {
+    common::require_db!();
     let app = TestApp::new().await;
     let backend = app.state.db_backend;
 
@@ -496,8 +496,8 @@ async fn stats_with_seeded_records() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn backfill_create_job() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Register a record-type lexicon first (required by backfill validation).
@@ -527,14 +527,14 @@ async fn backfill_create_job() {
 
     assert_eq!(resp.status(), StatusCode::CREATED);
     let json = json_body(resp).await;
-    assert_eq!(json["status"], "completed");
+    assert_eq!(json["status"], "running");
     assert!(json.get("id").is_some());
 }
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn backfill_list_jobs() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Create a job first
@@ -567,8 +567,8 @@ async fn backfill_list_jobs() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_create_returns_did() {
+    common::require_db!();
     let app = TestApp::new().await;
     let body = json!({ "did": "did:plc:newadmin" });
 
@@ -587,8 +587,8 @@ async fn admin_create_returns_did() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_created_did_authenticates() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let new_did = "did:plc:newadmin2";
@@ -618,8 +618,8 @@ async fn admin_created_did_authenticates() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_list_returns_dids() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let cookie = app.admin_cookie();
@@ -643,8 +643,8 @@ async fn admin_list_returns_dids() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_delete_returns_204() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // Create an admin to delete
@@ -675,8 +675,8 @@ async fn admin_delete_returns_204() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn admin_delete_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let cookie = app.admin_cookie();

@@ -72,8 +72,8 @@ async fn seed_network_lexicon(app: &TestApp, nsid: &str, authority_did: &str) {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn network_lexicon_list_empty() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -90,8 +90,8 @@ async fn network_lexicon_list_empty() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn network_lexicon_list_returns_seeded() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     seed_network_lexicon(&app, "games.gamesgamesgamesgames.game", "did:plc:authority").await;
@@ -113,8 +113,8 @@ async fn network_lexicon_list_returns_seeded() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn network_lexicon_delete_removes_tracking_and_lexicon() {
+    common::require_db!();
     let app = TestApp::new().await;
     let backend = app.state.db_backend;
 
@@ -149,8 +149,8 @@ async fn network_lexicon_delete_removes_tracking_and_lexicon() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn network_lexicon_delete_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -168,8 +168,8 @@ async fn network_lexicon_delete_not_found() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn network_lexicon_no_auth_returns_401() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app

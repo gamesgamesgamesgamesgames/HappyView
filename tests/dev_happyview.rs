@@ -88,6 +88,7 @@ async fn setup_dpop_session(app: &common::app::TestApp, user_did: &str) -> (Stri
 #[tokio::test]
 #[serial]
 async fn list_api_clients_unauthenticated_returns_non_200() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     let req = Request::builder()
@@ -111,6 +112,7 @@ async fn list_api_clients_unauthenticated_returns_non_200() {
 #[tokio::test]
 #[serial]
 async fn list_api_clients_authenticated_returns_200_with_clients_array() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testowner";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
@@ -147,6 +149,7 @@ async fn list_api_clients_authenticated_returns_200_with_clients_array() {
 #[tokio::test]
 #[serial]
 async fn get_api_client_not_found() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testowner404";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
@@ -178,6 +181,7 @@ async fn get_api_client_not_found() {
 #[tokio::test]
 #[serial]
 async fn create_api_client_via_xrpc() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testcreator";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
@@ -230,6 +234,7 @@ async fn create_api_client_via_xrpc() {
 #[tokio::test]
 #[serial]
 async fn create_api_client_public_no_secret() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testcreatorpublic";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
@@ -286,6 +291,7 @@ async fn create_api_client_public_no_secret() {
 #[tokio::test]
 #[serial]
 async fn delete_api_client_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testownerdelete";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
@@ -367,6 +373,7 @@ async fn delete_api_client_success() {
 #[tokio::test]
 #[serial]
 async fn delete_api_client_not_found() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testownerdel404";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;
@@ -397,6 +404,7 @@ async fn delete_api_client_not_found() {
 #[tokio::test]
 #[serial]
 async fn get_api_client_returns_client() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:testownerget";
     let (client_key, dpop_key, access_token) = setup_dpop_session(&app, user_did).await;

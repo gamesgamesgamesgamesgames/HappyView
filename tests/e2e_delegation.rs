@@ -296,6 +296,7 @@ async fn setup_session_for_client(
 #[tokio::test]
 #[serial]
 async fn link_account_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:owner1";
     let target_did = "did:plc:studio1";
@@ -325,6 +326,7 @@ async fn link_account_success() {
 #[tokio::test]
 #[serial]
 async fn link_account_already_linked() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:owner2";
     let target_did = "did:plc:studio2";
@@ -348,6 +350,7 @@ async fn link_account_already_linked() {
 #[tokio::test]
 #[serial]
 async fn link_account_self_link_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:selflinker";
 
@@ -368,6 +371,7 @@ async fn link_account_self_link_rejected() {
 #[tokio::test]
 #[serial]
 async fn link_account_no_session_for_target() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:owner3";
     let target_did = "did:plc:nosession";
@@ -394,6 +398,7 @@ async fn link_account_no_session_for_target() {
 #[tokio::test]
 #[serial]
 async fn unlink_account_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:unlink_owner";
     let target_did = "did:plc:unlink_studio";
@@ -430,6 +435,7 @@ async fn unlink_account_success() {
 #[tokio::test]
 #[serial]
 async fn unlink_account_non_owner_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:unlink_owner2";
     let admin_did = "did:plc:unlink_admin2";
@@ -472,6 +478,7 @@ async fn unlink_account_non_owner_rejected() {
 #[tokio::test]
 #[serial]
 async fn add_delegate_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:add_owner";
     let member_did = "did:plc:add_member";
@@ -518,6 +525,7 @@ async fn add_delegate_success() {
 #[tokio::test]
 #[serial]
 async fn add_delegate_owner_role_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:add_owner2";
     let target_did = "did:plc:add_studio2";
@@ -540,6 +548,7 @@ async fn add_delegate_owner_role_rejected() {
 #[tokio::test]
 #[serial]
 async fn add_delegate_already_exists() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:add_owner3";
     let member_did = "did:plc:add_member3";
@@ -576,6 +585,7 @@ async fn add_delegate_already_exists() {
 #[tokio::test]
 #[serial]
 async fn add_delegate_member_cannot_add() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:add_owner4";
     let member_did = "did:plc:add_member4";
@@ -618,6 +628,7 @@ async fn add_delegate_member_cannot_add() {
 #[tokio::test]
 #[serial]
 async fn remove_delegate_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:rm_owner";
     let member_did = "did:plc:rm_member";
@@ -669,6 +680,7 @@ async fn remove_delegate_success() {
 #[tokio::test]
 #[serial]
 async fn remove_delegate_cannot_remove_owner() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:rm_owner2";
     let target_did = "did:plc:rm_studio2";
@@ -691,6 +703,7 @@ async fn remove_delegate_cannot_remove_owner() {
 #[tokio::test]
 #[serial]
 async fn remove_delegate_admin_cannot_remove_admin() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:rm_owner3";
     let admin1_did = "did:plc:rm_admin3a";
@@ -742,6 +755,7 @@ async fn remove_delegate_admin_cannot_remove_admin() {
 #[tokio::test]
 #[serial]
 async fn list_accounts_returns_linked_accounts() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:list_owner";
     let studio1 = "did:plc:list_studio1";
@@ -781,6 +795,7 @@ async fn list_accounts_returns_linked_accounts() {
 #[tokio::test]
 #[serial]
 async fn list_accounts_empty() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let user_did = "did:plc:no_accounts";
 
@@ -807,6 +822,7 @@ async fn list_accounts_empty() {
 #[tokio::test]
 #[serial]
 async fn get_account_not_a_delegate() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:ga_owner";
     let target_did = "did:plc:ga_studio";
@@ -839,6 +855,7 @@ async fn get_account_not_a_delegate() {
 #[tokio::test]
 #[serial]
 async fn list_delegates_member_cannot_list() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:ld_owner";
     let member_did = "did:plc:ld_member";
@@ -969,6 +986,7 @@ async fn update_session_pds_url(app: &common::app::TestApp, user_did: &str, pds_
 #[tokio::test]
 #[serial]
 async fn delegated_write_non_delegate_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     seed_procedure_lexicon(&app).await;
 
@@ -995,6 +1013,7 @@ async fn delegated_write_non_delegate_rejected() {
 #[tokio::test]
 #[serial]
 async fn delegated_write_member_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     seed_procedure_lexicon(&app).await;
 
@@ -1039,6 +1058,7 @@ async fn delegated_write_member_rejected() {
 #[tokio::test]
 #[serial]
 async fn delegated_write_owner_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     seed_procedure_lexicon(&app).await;
 
@@ -1086,6 +1106,7 @@ async fn delegated_write_owner_success() {
 #[tokio::test]
 #[serial]
 async fn delegated_write_admin_success() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     seed_procedure_lexicon(&app).await;
 
@@ -1148,6 +1169,7 @@ async fn delegated_write_admin_success() {
 #[tokio::test]
 #[serial]
 async fn admin_can_add_delegate() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     let owner_did = "did:plc:acd_owner";
@@ -1211,6 +1233,7 @@ async fn admin_can_add_delegate() {
 #[tokio::test]
 #[serial]
 async fn admin_can_remove_member() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     let owner_did = "did:plc:arm_owner";
@@ -1276,6 +1299,7 @@ async fn admin_can_remove_member() {
 #[tokio::test]
 #[serial]
 async fn admin_can_list_delegates() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     let owner_did = "did:plc:ald_owner";
@@ -1319,6 +1343,7 @@ async fn admin_can_list_delegates() {
 #[tokio::test]
 #[serial]
 async fn member_can_view_account() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     let owner_did = "did:plc:mva_owner";
@@ -1362,6 +1387,7 @@ async fn member_can_view_account() {
 #[tokio::test]
 #[serial]
 async fn owner_can_remove_admin() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     let owner_did = "did:plc:ora_owner";
@@ -1419,6 +1445,7 @@ async fn owner_can_remove_admin() {
 #[tokio::test]
 #[serial]
 async fn cross_client_get_account_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:xc_ga_owner";
     let target_did = "did:plc:xc_ga_studio";
@@ -1444,6 +1471,7 @@ async fn cross_client_get_account_rejected() {
 #[tokio::test]
 #[serial]
 async fn cross_client_add_delegate_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:xc_ad_owner";
     let target_did = "did:plc:xc_ad_studio";
@@ -1467,6 +1495,7 @@ async fn cross_client_add_delegate_rejected() {
 #[tokio::test]
 #[serial]
 async fn cross_client_delegated_write_rejected() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     seed_procedure_lexicon(&app).await;
 
@@ -1505,6 +1534,7 @@ async fn cross_client_delegated_write_rejected() {
 #[tokio::test]
 #[serial]
 async fn cross_client_list_accounts_isolated() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let owner_did = "did:plc:xc_la_owner";
     let studio1 = "did:plc:xc_la_studio1";

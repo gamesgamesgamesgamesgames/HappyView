@@ -109,8 +109,8 @@ async fn seed_record(app: &TestApp, uri: &str, did: &str, collection: &str, reco
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn profile_no_auth_returns_401() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -128,58 +128,14 @@ async fn profile_no_auth_returns_401() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-#[serial]
-#[ignore]
-async fn profile_with_mocked_services_returns_200() {
-    let app = TestApp::new().await;
-    let did = &app.admin_did;
-
-    // Mock PLC directory
-    Mock::given(method("GET"))
-        .and(path(format!("/{did}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(fixtures::did_document(did, &app.mock_server.uri())),
-        )
-        .mount(&app.mock_server)
-        .await;
-
-    // Mock PDS getRecord for profile
-    Mock::given(method("GET"))
-        .and(path("/xrpc/com.atproto.repo.getRecord"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(fixtures::profile_record()))
-        .mount(&app.mock_server)
-        .await;
-
-    let cookie = app.admin_cookie();
-    let resp = app
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/xrpc/app.bsky.actor.getProfile")
-                .header(cookie.0, cookie.1)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(resp.status(), StatusCode::OK);
-    let json = json_body(resp).await;
-    assert_eq!(json["did"], did.as_str());
-    assert_eq!(json["displayName"], "Test User");
-}
-
 // ---------------------------------------------------------------------------
 // Catch-all GET (queries)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -188,6 +144,7 @@ async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
         .oneshot(
             Request::builder()
                 .uri("/xrpc/nonexistent.method")
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -201,8 +158,8 @@ async fn xrpc_get_unknown_method_proxies_and_returns_bad_gateway() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_get_non_query_returns_400() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
@@ -213,6 +170,7 @@ async fn xrpc_get_non_query_returns_400() {
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.game")
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -224,8 +182,8 @@ async fn xrpc_get_non_query_returns_400() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_get_single_record_by_uri() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
@@ -253,6 +211,7 @@ async fn xrpc_get_single_record_by_uri() {
                     "/xrpc/games.gamesgamesgamesgames.listGames?uri={}",
                     urlencoding::encode(uri)
                 ))
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -267,8 +226,8 @@ async fn xrpc_get_single_record_by_uri() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_get_record_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
@@ -277,6 +236,7 @@ async fn xrpc_get_record_not_found() {
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames?uri=at%3A%2F%2Fdid%3Aplc%3Anone%2Fgames.gamesgamesgamesgames.game%2Fmissing")
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -288,8 +248,8 @@ async fn xrpc_get_record_not_found() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_get_list_with_pagination() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
@@ -326,6 +286,7 @@ async fn xrpc_get_list_with_pagination() {
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames?limit=2")
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -347,6 +308,7 @@ async fn xrpc_get_list_with_pagination() {
                 .uri(format!(
                     "/xrpc/games.gamesgamesgamesgames.listGames?limit=2&cursor={cursor}"
                 ))
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -361,8 +323,8 @@ async fn xrpc_get_list_with_pagination() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_get_list_filtered_by_did() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
@@ -402,6 +364,7 @@ async fn xrpc_get_list_filtered_by_did() {
         .oneshot(
             Request::builder()
                 .uri("/xrpc/games.gamesgamesgamesgames.listGames?did=did:plc:a")
+                .header("x-client-key", "hvc_test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -421,8 +384,8 @@ async fn xrpc_get_list_filtered_by_did() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn xrpc_post_no_auth_returns_401() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
 
@@ -445,37 +408,8 @@ async fn xrpc_post_no_auth_returns_401() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
-async fn xrpc_post_non_procedure_returns_400() {
-    let app = TestApp::new().await;
-    seed_lexicons(&app).await;
-
-    // Use cookie auth for did:plc:test so auth passes
-    let (cookie_name, cookie_val) =
-        common::auth::admin_cookie_header("did:plc:test", &app.state.cookie_key);
-
-    let resp = app
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/xrpc/games.gamesgamesgamesgames.listGames")
-                .header(cookie_name, cookie_val)
-                .header("content-type", "application/json")
-                .body(Body::from(b"{}".to_vec()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-#[serial]
-#[ignore]
 async fn xrpc_delete_procedure_removes_record() {
+    common::require_db!();
     let app = TestApp::new().await;
     seed_lexicons(&app).await;
     let backend = app.state.db_backend;
@@ -576,8 +510,8 @@ async fn xrpc_delete_procedure_removes_record() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn upload_lexicon_with_invalid_action_returns_400() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app

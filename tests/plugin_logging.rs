@@ -14,6 +14,7 @@ use serial_test::serial;
 /// The log() function spawns fire-and-forget tasks; we need to yield
 /// until they complete before querying.
 async fn flush_spawned_tasks() {
+    common::require_db!();
     for _ in 0..20 {
         tokio::task::yield_now().await;
         tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
@@ -23,6 +24,7 @@ async fn flush_spawned_tasks() {
 #[tokio::test]
 #[serial]
 async fn plugin_log_writes_all_four_levels_to_event_logs() {
+    common::require_db!();
     let pool = test_pool().await;
     let backend = test_backend();
     truncate_all(&pool).await;
@@ -103,6 +105,7 @@ async fn plugin_log_writes_all_four_levels_to_event_logs() {
 #[tokio::test]
 #[serial]
 async fn plugin_log_with_none_db_does_not_write_event_log() {
+    common::require_db!();
     let pool = test_pool().await;
     let backend = test_backend();
     truncate_all(&pool).await;

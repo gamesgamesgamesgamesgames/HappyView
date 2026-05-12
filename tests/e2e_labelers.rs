@@ -76,8 +76,8 @@ fn admin_delete(
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_add_returns_201() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let body = json!({ "did": "did:plc:labeler1" });
@@ -94,8 +94,8 @@ async fn labeler_add_returns_201() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_add_upsert_reactivates() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let body = json!({ "did": "did:plc:labeler1" });
@@ -151,8 +151,8 @@ async fn labeler_add_upsert_reactivates() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_list_empty() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -169,8 +169,8 @@ async fn labeler_list_empty() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_list_returns_added() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     app.router
@@ -217,8 +217,8 @@ async fn labeler_list_returns_added() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_update_status() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     app.router
@@ -261,8 +261,8 @@ async fn labeler_update_status() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_update_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -285,8 +285,8 @@ async fn labeler_update_not_found() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_delete_returns_204() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     app.router
@@ -327,8 +327,8 @@ async fn labeler_delete_returns_204() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_delete_not_found() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -346,8 +346,8 @@ async fn labeler_delete_not_found() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_delete_removes_labels() {
+    common::require_db!();
     let app = TestApp::new().await;
     let backend = app.state.db_backend;
 
@@ -405,8 +405,8 @@ async fn labeler_delete_removes_labels() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn labeler_no_auth_returns_401() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app

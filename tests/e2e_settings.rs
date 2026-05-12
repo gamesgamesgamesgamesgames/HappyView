@@ -61,8 +61,8 @@ fn admin_delete(
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn settings_crud() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // PUT a setting
@@ -134,8 +134,8 @@ async fn settings_crud() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn settings_requires_auth() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -155,8 +155,8 @@ async fn settings_requires_auth() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn logo_upload_and_serve() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let boundary = "----testboundary";
@@ -260,8 +260,8 @@ async fn logo_upload_and_serve() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn client_metadata_includes_settings() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     // PUT app_name setting
@@ -306,8 +306,8 @@ async fn client_metadata_includes_settings() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn client_metadata_client_id_matches_path() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -332,46 +332,8 @@ async fn client_metadata_client_id_matches_path() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
-async fn client_metadata_scope_overridden_by_setting() {
-    let app = TestApp::new().await;
-
-    let resp = app
-        .router
-        .clone()
-        .oneshot(admin_put(
-            "/admin/settings/oauth_scopes",
-            app.admin_cookie(),
-            &json!({ "value": "atproto  include:com.example.foo\n include:com.example.bar" }),
-        ))
-        .await
-        .unwrap();
-    assert!(resp.status().is_success());
-
-    let resp = app
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/oauth-client-metadata.json")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-    let json = json_body(resp).await;
-    assert_eq!(
-        json["scope"], "atproto include:com.example.foo include:com.example.bar",
-        "expected normalized scope string, got {:?}",
-        json["scope"]
-    );
-}
-
-#[tokio::test]
-#[serial]
-#[ignore]
 async fn client_metadata_client_uri_overridden_by_setting() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app

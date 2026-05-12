@@ -47,6 +47,7 @@ async fn response_json(resp: axum::http::Response<Body>) -> serde_json::Value {
 #[tokio::test]
 #[serial]
 async fn test_provision_dpop_key_confidential_client() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, client_secret, _id) = app.create_api_client("confidential", None).await;
 
@@ -72,6 +73,7 @@ async fn test_provision_dpop_key_confidential_client() {
 #[tokio::test]
 #[serial]
 async fn test_provision_dpop_key_public_client_requires_pkce() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, _secret, _id) = app
         .create_api_client("public", Some(vec!["http://localhost:3000".to_string()]))
@@ -94,6 +96,7 @@ async fn test_provision_dpop_key_public_client_requires_pkce() {
 #[tokio::test]
 #[serial]
 async fn test_provision_dpop_key_public_client_with_pkce() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, _secret, _id) = app
         .create_api_client("public", Some(vec!["http://localhost:3000".to_string()]))
@@ -127,6 +130,7 @@ async fn test_provision_dpop_key_public_client_with_pkce() {
 #[tokio::test]
 #[serial]
 async fn test_register_session_validates_scopes() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, client_secret, _id) = app.create_api_client("confidential", None).await;
 
@@ -165,6 +169,7 @@ async fn test_register_session_validates_scopes() {
 #[tokio::test]
 #[serial]
 async fn test_register_session_requires_atproto_scope() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, client_secret, _id) = app.create_api_client("confidential", None).await;
 
@@ -201,6 +206,7 @@ async fn test_register_session_requires_atproto_scope() {
 #[tokio::test]
 #[serial]
 async fn test_full_flow_provision_register_delete() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, client_secret, _id) = app.create_api_client("confidential", None).await;
 
@@ -265,6 +271,7 @@ async fn test_full_flow_provision_register_delete() {
 #[tokio::test]
 #[serial]
 async fn test_xrpc_rejects_bearer_auth() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     // Bearer auth should be explicitly rejected on XRPC routes
@@ -290,6 +297,7 @@ async fn test_xrpc_rejects_bearer_auth() {
 #[tokio::test]
 #[serial]
 async fn test_xrpc_allows_anonymous_queries() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     // Anonymous access (no auth header) should pass through to lexicon lookup.
@@ -314,6 +322,7 @@ async fn test_xrpc_allows_anonymous_queries() {
 #[tokio::test]
 #[serial]
 async fn test_xrpc_procedure_requires_dpop_auth() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
 
     // POST to an XRPC procedure without DPoP auth should be rejected
@@ -339,6 +348,7 @@ async fn test_xrpc_procedure_requires_dpop_auth() {
 #[tokio::test]
 #[serial]
 async fn test_xrpc_dpop_auth_accepted() {
+    common::require_db!();
     let app = common::app::TestApp::new_with_encryption().await;
     let (client_key, client_secret, _id) = app.create_api_client("confidential", None).await;
 

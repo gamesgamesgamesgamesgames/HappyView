@@ -118,12 +118,23 @@ impl TestApp {
         })
         .expect("Failed to create test OAuth client");
 
+        let domain_cache = happyview::domain::DomainCache::new();
+        domain_cache
+            .insert(happyview::domain::Domain {
+                id: uuid::Uuid::new_v4().to_string(),
+                url: "http://127.0.0.1:0".to_string(),
+                is_primary: true,
+                created_at: now_rfc3339(),
+                updated_at: now_rfc3339(),
+            })
+            .await;
+
         let state = AppState {
             config,
             http: reqwest::Client::new(),
             db: pool.clone(),
             db_backend: backend,
-            domain_cache: happyview::domain::DomainCache::new(),
+            domain_cache,
             lexicons,
             collections_tx,
             labeler_subscriptions_tx,
@@ -158,7 +169,15 @@ impl TestApp {
             ))),
         };
 
-        let router = server::router(state.clone());
+        let router = server::router(state.clone()).layer(axum::middleware::from_fn(
+            |mut req: axum::extract::Request, next: axum::middleware::Next| async move {
+                if !req.headers().contains_key("host") {
+                    req.headers_mut()
+                        .insert("host", axum::http::HeaderValue::from_static("127.0.0.1"));
+                }
+                next.run(req).await
+            },
+        ));
 
         Self {
             router,
@@ -178,20 +197,7 @@ impl TestApp {
 
     pub async fn new_with_encryption() -> Self {
         let mut app = Self::new().await;
-        // Set a test encryption key (32 bytes)
         app.state.config.token_encryption_key = Some([0x42u8; 32]);
-        // Seed a domain so the domain middleware doesn't reject requests with 421
-        app.state
-            .domain_cache
-            .insert(happyview::domain::Domain {
-                id: uuid::Uuid::new_v4().to_string(),
-                url: "http://127.0.0.1:0".to_string(),
-                is_primary: true,
-                created_at: now_rfc3339(),
-                updated_at: now_rfc3339(),
-            })
-            .await;
-        // Rebuild the router with the updated state
         app.router = server::router(app.state.clone());
         app
     }

@@ -41,8 +41,8 @@ fn admin_put(
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn get_proxy_config_returns_default() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -60,8 +60,8 @@ async fn get_proxy_config_returns_default() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn put_and_get_allowlist() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -98,8 +98,8 @@ async fn put_and_get_allowlist() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn disabled_mode_clears_nsids() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -132,8 +132,8 @@ async fn disabled_mode_clears_nsids() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn invalid_mode_rejected() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -155,8 +155,8 @@ async fn invalid_mode_rejected() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn invalid_nsid_rejected() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
@@ -178,8 +178,8 @@ async fn invalid_nsid_rejected() {
 
 #[tokio::test]
 #[serial]
-#[ignore]
 async fn requires_auth() {
+    common::require_db!();
     let app = TestApp::new().await;
 
     let resp = app
