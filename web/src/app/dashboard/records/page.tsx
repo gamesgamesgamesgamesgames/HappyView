@@ -28,6 +28,12 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CodeBlock } from "@/components/code-block";
 import { DataTable } from "@/components/data-table/data-table";
@@ -430,29 +436,87 @@ export default function RecordsPage() {
           </div>
         )}
 
-        {viewRecord && (
-          <ResponsiveDialog open onOpenChange={() => setViewRecord(null)}>
-            <ResponsiveDialogContent className="sm:max-w-4xl">
-              <ResponsiveDialogHeader>
-                <ResponsiveDialogTitle className="truncate font-mono text-sm">
-                  {viewRecord.uri}
-                </ResponsiveDialogTitle>
-              </ResponsiveDialogHeader>
-              <CodeBlock code={JSON.stringify(viewRecord, null, 2)} />
-              {hasPermission("records:delete") && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="destructive"
-                    onClick={() => setDeleteUri(viewRecord.uri)}
-                    disabled={deleting}
-                  >
-                    {deleting ? "Deleting..." : "Delete Record"}
-                  </Button>
+        <Sheet
+          open={viewRecord != null}
+          onOpenChange={(open) => {
+            if (!open) setViewRecord(null);
+          }}
+        >
+          <SheetContent className="sm:max-w-xl overflow-hidden flex flex-col">
+            {viewRecord && (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="sr-only">Record Detail</SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 flex flex-col gap-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">URI</span>
+                      <p className="font-mono text-xs break-all">{viewRecord.uri}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">DID</span>
+                      <p className="font-mono text-xs break-all">{viewRecord.did}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Collection</span>
+                      <p className="font-mono text-xs">{viewRecord.collection}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Record Key</span>
+                      <p className="font-mono text-xs">{viewRecord.rkey}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">CID</span>
+                      <p className="font-mono text-xs break-all">{viewRecord.cid}</p>
+                    </div>
+                    {viewRecord.indexed_at && (
+                      <div>
+                        <span className="text-muted-foreground">Indexed</span>
+                        <p className="text-xs">
+                          {new Date(viewRecord.indexed_at).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                    {viewRecord.labels.length > 0 && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Labels</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {viewRecord.labels.map((l, i) => (
+                            <span
+                              key={i}
+                              className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs"
+                            >
+                              {l.val}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col flex-1 min-h-0">
+                    <span className="text-muted-foreground text-sm">Record</span>
+                    <div className="mt-1">
+                      <CodeBlock code={JSON.stringify(viewRecord.record, null, 2)} />
+                    </div>
+                  </div>
                 </div>
-              )}
-            </ResponsiveDialogContent>
-          </ResponsiveDialog>
-        )}
+                {hasPermission("records:delete") && (
+                  <div className="flex justify-end border-t p-4">
+                    <Button
+                      variant="destructive"
+                      onClick={() => setDeleteUri(viewRecord.uri)}
+                      disabled={deleting}
+                    >
+                      {deleting ? "Deleting..." : "Delete Record"}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
 
         <ResponsiveDialog
           open={!!deleteUri}

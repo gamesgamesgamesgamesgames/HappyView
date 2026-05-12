@@ -36,6 +36,10 @@ pub(super) struct RecordLabel {
 pub(super) struct RecordEntry {
     pub uri: String,
     pub did: String,
+    pub collection: String,
+    pub rkey: String,
+    pub cid: String,
+    pub indexed_at: Option<String>,
     pub record: Value,
     pub labels: Vec<RecordLabel>,
 }
@@ -46,6 +50,16 @@ pub(super) struct ListRecordsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
 }
+
+type RecordRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    String,
+);
 
 /// GET /admin/records?collection=X&limit=N&cursor=C — browse records by collection.
 pub(super) async fn list_records(
@@ -63,10 +77,10 @@ pub(super) async fn list_records(
         .unwrap_or(0);
 
     let sql = adapt_sql(
-        "SELECT uri, did, record FROM records WHERE collection = ? ORDER BY indexed_at DESC LIMIT ? OFFSET ?",
+        "SELECT uri, did, collection, rkey, cid, indexed_at, record FROM records WHERE collection = ? ORDER BY indexed_at DESC LIMIT ? OFFSET ?",
         backend,
     );
-    let rows: Vec<(String, String, String)> = sqlx::query_as(&sql)
+    let rows: Vec<RecordRow> = sqlx::query_as(&sql)
         .bind(&params.collection)
         .bind(limit + 1)
         .bind(offset)
@@ -75,13 +89,12 @@ pub(super) async fn list_records(
         .map_err(|e| AppError::Internal(format!("failed to list records: {e}")))?;
 
     let has_more = rows.len() as i64 > limit;
-    let visible_rows: Vec<(String, String, String)> =
-        rows.into_iter().take(limit as usize).collect();
+    let visible_rows: Vec<RecordRow> = rows.into_iter().take(limit as usize).collect();
 
     // Batch-query external labels for all visible URIs
     let uris: Vec<&str> = visible_rows
         .iter()
-        .map(|(uri, _, _)| uri.as_str())
+        .map(|(uri, _, _, _, _, _, _)| uri.as_str())
         .collect();
 
     let label_rows: Vec<(String, String, String, String)> = if uris.is_empty() {
@@ -114,34 +127,40 @@ pub(super) async fn list_records(
 
     let records: Vec<RecordEntry> = visible_rows
         .into_iter()
-        .map(|(uri, did, record_str)| {
-            let record: Value = serde_json::from_str(&record_str).unwrap_or_default();
-            let mut labels = labels_by_uri.remove(&uri).unwrap_or_default();
+        .map(
+            |(uri, did, collection, rkey, cid, indexed_at, record_str)| {
+                let record: Value = serde_json::from_str(&record_str).unwrap_or_default();
+                let mut labels = labels_by_uri.remove(&uri).unwrap_or_default();
 
-            // Extract self-labels from record JSONB
-            if let Some(values) = record
-                .get("labels")
-                .and_then(|l| l.get("values"))
-                .and_then(|v| v.as_array())
-            {
-                for entry in values {
-                    if let Some(val) = entry.get("val").and_then(|v| v.as_str()) {
-                        labels.push(RecordLabel {
-                            src: did.clone(),
-                            val: val.to_string(),
-                            cts: String::new(),
-                        });
+                // Extract self-labels from record JSONB
+                if let Some(values) = record
+                    .get("labels")
+                    .and_then(|l| l.get("values"))
+                    .and_then(|v| v.as_array())
+                {
+                    for entry in values {
+                        if let Some(val) = entry.get("val").and_then(|v| v.as_str()) {
+                            labels.push(RecordLabel {
+                                src: did.clone(),
+                                val: val.to_string(),
+                                cts: String::new(),
+                            });
+                        }
                     }
                 }
-            }
 
-            RecordEntry {
-                uri,
-                did,
-                record,
-                labels,
-            }
-        })
+                RecordEntry {
+                    uri,
+                    did,
+                    collection,
+                    rkey,
+                    cid,
+                    indexed_at,
+                    record,
+                    labels,
+                }
+            },
+        )
         .collect();
 
     let cursor = if has_more {
