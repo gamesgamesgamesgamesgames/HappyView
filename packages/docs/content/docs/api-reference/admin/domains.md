@@ -43,11 +43,11 @@ POST /admin/domains
 curl -X POST http://127.0.0.1:3000/admin/domains \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
-  -d '{ "url": "https://api.cartridge.dev" }'
+  -d '{ "url": "https://api.example.com" }'
 ```
 
-| Field | Type   | Required | Description                                                                                                        |
-| ----- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| Field | Type   | Required | Description                                                                                                         |
+| ----- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
 | `url` | string | yes      | Valid origin (scheme + host, no path or trailing slash). Must be `https` unless `PUBLIC_URL` is a loopback address. |
 
 Returns `400 Bad Request` if the URL is invalid or already registered.
@@ -57,7 +57,7 @@ Returns `400 Bad Request` if the URL is invalid or already registered.
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440001",
-  "url": "https://api.cartridge.dev",
+  "url": "https://api.example.com",
   "is_primary": false,
   "created_at": "2026-04-16T00:00:00Z",
   "updated_at": "2026-04-16T00:00:00Z"
