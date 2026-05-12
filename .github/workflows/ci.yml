@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main, dev]
   pull_request:
     branches: [main, dev]
   delete:
@@ -14,7 +16,7 @@ jobs:
   # Required because workflow-level `paths` filters can't vary per job.
   # ---------------------------------------------------------------------------
   changes:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: depot-ubuntu-24.04
     outputs:
       server: ${{ steps.filter.outputs.server }}
