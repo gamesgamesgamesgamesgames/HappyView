@@ -13,7 +13,6 @@ services:
   #     - "5432:5432"
   #   volumes:
   #     - pgdata:/var/lib/postgresql/data
-  #     - ./docker/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
   #   healthcheck:
   #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
   #     interval: 5s
