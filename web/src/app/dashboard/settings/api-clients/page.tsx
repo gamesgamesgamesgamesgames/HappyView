@@ -260,7 +260,6 @@ export default function ApiClientsPage() {
 
 function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
   const config = useConfig();
-  const happyviewCallbackUri = `${config.public_url.replace(/\/$/, "")}/auth/callback`;
 
   const [clientType, setClientType] = useState<"confidential" | "public">(
     "confidential",
@@ -312,8 +311,7 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
 
   async function handleCreate() {
     setError(null);
-    const extraUris = redirectUris.map((u) => u.trim()).filter(Boolean);
-    const allUris = [happyviewCallbackUri, ...extraUris];
+    const allUris = redirectUris.map((u) => u.trim()).filter(Boolean);
     const extraScopes = scopes.map((s) => s.trim()).filter(Boolean);
     const allScopes = ["atproto", ...extraScopes].join(" ");
 
@@ -550,7 +548,6 @@ function CreateApiClientDialog({ onSuccess }: { onSuccess: () => void }) {
                 values={redirectUris}
                 onChange={setRedirectUris}
                 placeholder="https://example.com/auth/callback"
-                readonlyValues={[happyviewCallbackUri]}
               />
             </fieldset>
             {clientType === "public" && (
@@ -682,12 +679,9 @@ function EditApiClientDialog({
   onSuccess: () => void;
 }) {
   const config = useConfig();
-  const happyviewCallbackUri = `${config.public_url.replace(/\/$/, "")}/auth/callback`;
 
-  // Parse existing redirect URIs: separate the HappyView callback from user-added ones
   function parseRedirectUris(uris: string[]): string[] {
-    const filtered = uris.filter((u) => u !== happyviewCallbackUri);
-    return filtered.length > 0 ? [...filtered, ""] : [""];
+    return uris.length > 0 ? [...uris, ""] : [""];
   }
 
   // Parse existing scopes: separate "atproto" from user-added ones
@@ -760,8 +754,7 @@ function EditApiClientDialog({
     }
     setSaving(true);
     try {
-      const extraUris = redirectUris.map((u) => u.trim()).filter(Boolean);
-      const allUris = [happyviewCallbackUri, ...extraUris];
+      const allUris = redirectUris.map((u) => u.trim()).filter(Boolean);
       const extraScopes = scopes.map((s) => s.trim()).filter(Boolean);
       const allScopes = ["atproto", ...extraScopes].join(" ");
 
@@ -843,7 +836,6 @@ function EditApiClientDialog({
               values={redirectUris}
               onChange={setRedirectUris}
               placeholder="https://example.com/auth/callback"
-              readonlyValues={[happyviewCallbackUri]}
             />
           </fieldset>
           {client.client_type === "public" && (
