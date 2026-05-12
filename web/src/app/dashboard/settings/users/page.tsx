@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Search, Shield, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -76,6 +77,8 @@ export default function UsersPage() {
   const [handles, setHandles] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [pendingPermissions, setPendingPermissions] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
   const [permSearch, setPermSearch] = useState("");
   const [permissionEntries, setPermissionEntries] = useState<PermissionEntry[]>([]);
   const [profiles, setProfiles] = useState<Record<string, BskyProfile>>({});
@@ -141,6 +144,13 @@ export default function UsersPage() {
     }
   }, [users, handles]);
 
+  // Initialize pending permissions when a user is selected
+  useEffect(() => {
+    if (!selectedUserId) return;
+    const user = users.find((u) => u.id === selectedUserId);
+    if (user) setPendingPermissions([...user.permissions]);
+  }, [selectedUserId, users]);
+
   // Fetch Bluesky profile when a user is selected
   useEffect(() => {
     if (!selectedUserId) return;
@@ -171,53 +181,59 @@ export default function UsersPage() {
     }
   }
 
-  async function handleTogglePermission(
-    user: UserSummary,
+  function handleTogglePermission(
+    _user: UserSummary,
     permission: string,
     enabled: boolean
   ) {
-    const grant: string[] = [];
-    const revoke: string[] = [];
+    setPendingPermissions((prev) => {
+      const perms = new Set(prev);
+      const [ns, action] = permission.split(":");
 
-    const [ns, action] = permission.split(":");
+      const nsReadPerm = allPermissionKeys.find(
+        (k) => k.startsWith(`${ns}:`) && (k.endsWith(":read") || k.endsWith(":view"))
+      );
+      const isReadAction = action === "read" || action === "view";
 
-    if (enabled) {
-      grant.push(permission);
-      // Adding a write permission also enables its read counterpart
-      if (action === "create" || action === "update" || action === "delete") {
-        const readPerm = `${ns}:read`;
-        if (!user.permissions.includes(readPerm)) {
-          grant.push(readPerm);
-        }
-      }
-      // Adding records:delete-collection also enables records:delete
-      if (permission === "records:delete-collection" && !user.permissions.includes("records:delete")) {
-        grant.push("records:delete");
-      }
-    } else {
-      revoke.push(permission);
-      // Removing read also removes all write permissions in the same namespace
-      if (action === "read") {
-        for (const p of user.permissions) {
-          if (p.startsWith(`${ns}:`) && p !== permission) {
-            revoke.push(p);
+      if (enabled) {
+        perms.add(permission);
+        if (!isReadAction && nsReadPerm) perms.add(nsReadPerm);
+        if (permission === "records:delete-collection") perms.add("records:delete");
+      } else {
+        perms.delete(permission);
+        if (isReadAction) {
+          for (const p of prev) {
+            if (p.startsWith(`${ns}:`) && p !== permission) perms.delete(p);
           }
         }
+        if (permission === "records:delete") perms.delete("records:delete-collection");
       }
-      // Removing records:delete also removes records:delete-collection
-      if (permission === "records:delete" && user.permissions.includes("records:delete-collection")) {
-        revoke.push("records:delete-collection");
-      }
-    }
 
+      return [...perms];
+    });
+  }
+
+  async function handleSavePermissions(userId: string, originalPermissions: string[]) {
+    const originalSet = new Set(originalPermissions);
+    const pendingSet = new Set(pendingPermissions);
+
+    const grant = pendingPermissions.filter((p) => !originalSet.has(p));
+    const revoke = originalPermissions.filter((p) => !pendingSet.has(p));
+
+    if (grant.length === 0 && revoke.length === 0) return;
+
+    setSaving(true);
     try {
       const body: { grant?: string[]; revoke?: string[] } = {};
       if (grant.length > 0) body.grant = grant;
       if (revoke.length > 0) body.revoke = revoke;
-      await updateUserPermissions(user.id, body);
+      await updateUserPermissions(userId, body);
+      toast.success("Permissions updated");
       load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -307,8 +323,27 @@ export default function UsersPage() {
         {(() => {
           const selectedUser = users.find((u) => u.id === selectedUserId);
           return (
-            <Sheet open={!!selectedUser} onOpenChange={(open) => { if (!open) { setSelectedUserId(null); setPermSearch(""); } }}>
-              <SheetContent className="overflow-hidden">
+            <Sheet modal={false} open={!!selectedUser} onOpenChange={(open) => {
+              if (!open) {
+                const user = users.find((u) => u.id === selectedUserId);
+                if (user) {
+                  const origSet = new Set(user.permissions);
+                  const pendSet = new Set(pendingPermissions);
+                  const unsaved = pendingPermissions.some((p) => !origSet.has(p)) || user.permissions.some((p) => !pendSet.has(p));
+                  if (unsaved) {
+                    toast.warning("You have unsaved changes. Save or cancel before closing.");
+                    return;
+                  }
+                }
+                setSelectedUserId(null);
+                setPermSearch("");
+              }
+            }}>
+              <SheetContent className="overflow-hidden" onInteractOutside={(e) => {
+                if (e.target instanceof HTMLElement && e.target.closest("[data-sonner-toaster]")) {
+                  e.preventDefault();
+                }
+              }}>
                 {selectedUser && (
                   <>
                     <SheetHeader>
@@ -349,6 +384,14 @@ export default function UsersPage() {
                       </CardContent>
                     </Card>
 
+                    {(() => {
+                      const originalSet = new Set(selectedUser.permissions);
+                      const pendingSet = new Set(pendingPermissions);
+                      const added = pendingPermissions.filter((p) => !originalSet.has(p)).length;
+                      const removed = selectedUser.permissions.filter((p) => !pendingSet.has(p)).length;
+                      const hasChanges = added > 0 || removed > 0;
+                      return (
+                    <>
                     <div className="grid grid-cols-2 gap-4 text-sm px-4">
                       <div>
                         <span className="text-muted-foreground text-xs">Role</span>
@@ -363,7 +406,14 @@ export default function UsersPage() {
                         <p className="text-xs tabular-nums">
                           {selectedUser.is_super
                             ? `${allPermissionKeys.length}/${allPermissionKeys.length}`
-                            : `${selectedUser.permissions.filter((p) => allPermissionKeys.includes(p)).length}/${allPermissionKeys.length}`}
+                            : `${pendingPermissions.filter((p) => allPermissionKeys.includes(p)).length}/${allPermissionKeys.length}`}
+                          {hasChanges && (
+                            <span className="ml-1.5">
+                              {added > 0 && <span className="text-green-500">+{added}</span>}
+                              {added > 0 && removed > 0 && " "}
+                              {removed > 0 && <span className="text-red-500">-{removed}</span>}
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div>
@@ -399,19 +449,14 @@ export default function UsersPage() {
                         currentUserPermissions={currentUser?.permissions ?? []}
                         isCurrentUserSuper={isCurrentUserSuper}
                         filteredCategories={filteredCategories}
+                        pendingPermissions={pendingPermissions}
+                        originalPermissions={selectedUser.permissions}
                         onToggle={handleTogglePermission}
                       />
                     </div>
 
                     <SheetFooter className="border-t flex-row">
-                      <div className="flex items-center gap-2 ml-auto">
-                        {isCurrentUserSuper && (
-                          <TransferOwnershipDialog
-                            user={selectedUser}
-                            disabled={selectedUser.did === currentDid}
-                            onConfirm={() => handleTransferSuper(selectedUser.id)}
-                          />
-                        )}
+                      <div className="flex items-center gap-2">
                         <Button
                           variant="destructive"
                           size="sm"
@@ -421,8 +466,35 @@ export default function UsersPage() {
                           <Trash2 className="mr-1 size-3.5" />
                           Delete User
                         </Button>
+                        {isCurrentUserSuper && (
+                          <TransferOwnershipDialog
+                            user={selectedUser}
+                            disabled={selectedUser.did === currentDid}
+                            onConfirm={() => handleTransferSuper(selectedUser.id)}
+                          />
+                        )}
+                      </div>
+                      <div className="ml-auto flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!hasChanges || saving}
+                          onClick={() => setPendingPermissions([...selectedUser.permissions])}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!hasChanges || saving || selectedUser.is_super || selectedUser.did === currentDid || (!isCurrentUserSuper && !currentUser?.permissions.includes("users:update"))}
+                          onClick={() => handleSavePermissions(selectedUser.id, selectedUser.permissions)}
+                        >
+                          {saving ? "Saving..." : "Save"}
+                        </Button>
                       </div>
                     </SheetFooter>
+                    </>
+                      );
+                    })()}
                   </>
                 )}
               </SheetContent>
@@ -440,6 +512,8 @@ function PermissionsPanel({
   currentUserPermissions,
   isCurrentUserSuper,
   filteredCategories,
+  pendingPermissions,
+  originalPermissions,
   onToggle,
 }: {
   user: UserSummary;
@@ -447,9 +521,12 @@ function PermissionsPanel({
   currentUserPermissions: string[];
   isCurrentUserSuper: boolean;
   filteredCategories: Record<string, PermissionEntry[]>;
+  pendingPermissions: string[];
+  originalPermissions: string[];
   onToggle: (user: UserSummary, permission: string, enabled: boolean) => void;
 }) {
   const canUpdate = isCurrentUserSuper || currentUserPermissions.includes("users:update");
+  const originalSet = new Set(originalPermissions);
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
@@ -460,7 +537,10 @@ function PermissionsPanel({
           </p>
           <div className="flex flex-col gap-3 w-full">
             {permissions.map((perm) => {
-              const enabled = user.is_super || user.permissions.includes(perm.key);
+              const enabled = user.is_super || pendingPermissions.includes(perm.key);
+              const wasEnabled = user.is_super || originalSet.has(perm.key);
+              const isAdded = enabled && !wasEnabled;
+              const isRemoved = !enabled && wasEnabled;
               return (
                 <div key={perm.key} className="flex items-start gap-2">
                   <Switch
@@ -481,7 +561,11 @@ function PermissionsPanel({
                     htmlFor={`${user.id}-${perm.key}`}
                     className="flex flex-col items-start cursor-pointer text-xs leading-tight"
                   >
-                    <span>{perm.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      {perm.name}
+                      {isAdded && <span className="inline-block size-1.5 rounded-full bg-green-500" />}
+                      {isRemoved && <span className="inline-block size-1.5 rounded-full bg-red-500" />}
+                    </span>
                     <span className="text-muted-foreground font-normal">{perm.description}</span>
                   </Label>
                 </div>
