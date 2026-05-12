@@ -5,20 +5,7 @@ use sqlx::{Column, Row};
 use std::sync::Arc;
 
 use crate::AppState;
-use crate::db::{DatabaseBackend, adapt_sql};
-
-/// Encode a cursor from created_at timestamp and uri.
-fn encode_cursor(created_at: &str, uri: &str) -> String {
-    BASE64.encode(format!("{created_at}|{uri}"))
-}
-
-/// Decode a cursor into (created_at, uri). Returns None if invalid.
-fn decode_cursor(cursor: &str) -> Option<(String, String)> {
-    let decoded = BASE64.decode(cursor).ok()?;
-    let s = String::from_utf8(decoded).ok()?;
-    let (ts, uri) = s.split_once('|')?;
-    Some((ts.to_string(), uri.to_string()))
-}
+use crate::db::{DatabaseBackend, adapt_sql, decode_cursor, encode_cursor};
 
 /// Register the `db` table with database query functions.
 pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {

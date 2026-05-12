@@ -95,7 +95,7 @@ curl 'https://happyview.example.com/xrpc/dev.happyview.space.listSpaces?limit=20
       "isOwner": true
     }
   ],
-  "cursor": "2026-05-09T12:00:00Z"
+  "cursor": "MjAyNi0wNS0wOVQxMjowMDowMFp8YXRzOi8vZGlkOnBsYzphYmMxMjMvY29tLmV4YW1wbGUuZm9ydW0vbWFpbg"
 }
 ```
 

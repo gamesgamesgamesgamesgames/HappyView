@@ -498,7 +498,7 @@ async fn list_spaces(
     let did = query.did.unwrap_or_else(|| claims.did().to_string());
     let limit = query.limit.unwrap_or(50).min(100);
 
-    let views = db::list_spaces_for_user(
+    let (views, cursor) = db::list_spaces_for_user(
         &state.db,
         state.db_backend,
         &did,
@@ -506,12 +506,6 @@ async fn list_spaces(
         query.cursor.as_deref(),
     )
     .await?;
-
-    let cursor = if views.len() as i64 == limit {
-        views.last().map(|v| v.created_at.clone())
-    } else {
-        None
-    };
 
     let spaces_json: Vec<serde_json::Value> = views
         .into_iter()
@@ -915,7 +909,7 @@ async fn list_records(
 
     let limit = query.limit.unwrap_or(50).min(100);
     let reverse = query.reverse.unwrap_or(false);
-    let records = db::list_space_records(
+    let (records, cursor) = db::list_space_records(
         &state.db,
         state.db_backend,
         &space.id,
@@ -926,8 +920,6 @@ async fn list_records(
         reverse,
     )
     .await?;
-
-    let cursor = records.last().map(|r| r.indexed_at.clone());
 
     let records_json: Vec<serde_json::Value> = records
         .into_iter()

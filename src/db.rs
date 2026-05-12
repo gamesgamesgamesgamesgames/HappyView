@@ -1,3 +1,4 @@
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::Deserialize;
@@ -183,6 +184,19 @@ pub fn parse_dt(s: &str) -> DateTime<Utc> {
 /// Get current UTC time as RFC 3339 string for database binding.
 pub fn now_rfc3339() -> String {
     Utc::now().to_rfc3339()
+}
+
+/// Encode a pagination cursor from a timestamp and URI.
+pub fn encode_cursor(timestamp: &str, uri: &str) -> String {
+    BASE64.encode(format!("{timestamp}|{uri}"))
+}
+
+/// Decode a pagination cursor into (timestamp, uri). Returns None if invalid.
+pub fn decode_cursor(cursor: &str) -> Option<(String, String)> {
+    let decoded = BASE64.decode(cursor).ok()?;
+    let s = String::from_utf8(decoded).ok()?;
+    let (ts, uri) = s.split_once('|')?;
+    Some((ts.to_string(), uri.to_string()))
 }
 
 /// Connect to the configured database and run migrations.

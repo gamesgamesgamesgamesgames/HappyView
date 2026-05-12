@@ -1,4 +1,4 @@
-use crate::db::{DatabaseBackend, adapt_sql, now_rfc3339};
+use crate::db::{DatabaseBackend, adapt_sql, decode_cursor, encode_cursor, now_rfc3339};
 use crate::error::AppError;
 use crate::spaces::types::*;
 
@@ -123,28 +123,24 @@ pub async fn list_spaces_for_user(
     did: &str,
     limit: i64,
     cursor: Option<&str>,
-) -> Result<Vec<SpaceView>, AppError> {
-    let (sql, has_cursor) = if cursor.is_some() {
-        (
-            adapt_sql(
-                "SELECT s.did, s.owner_did, s.type_nsid, s.skey, sm.created_at FROM space_members sm JOIN spaces s ON s.id = sm.space_id WHERE sm.member_did = ? AND sm.created_at > ? ORDER BY sm.created_at ASC LIMIT ?",
-                backend,
-            ),
-            true,
+) -> Result<(Vec<SpaceView>, Option<String>), AppError> {
+    let decoded_cursor = cursor.and_then(decode_cursor);
+
+    let sql = if decoded_cursor.is_some() {
+        adapt_sql(
+            "SELECT s.did, s.owner_did, s.type_nsid, s.skey, sm.created_at FROM space_members sm JOIN spaces s ON s.id = sm.space_id WHERE sm.member_did = ? AND (sm.created_at > ? OR (sm.created_at = ? AND ('ats://' || s.did || '/' || s.type_nsid || '/' || s.skey) > ?)) ORDER BY sm.created_at ASC, ('ats://' || s.did || '/' || s.type_nsid || '/' || s.skey) ASC LIMIT ?",
+            backend,
         )
     } else {
-        (
-            adapt_sql(
-                "SELECT s.did, s.owner_did, s.type_nsid, s.skey, sm.created_at FROM space_members sm JOIN spaces s ON s.id = sm.space_id WHERE sm.member_did = ? ORDER BY sm.created_at ASC LIMIT ?",
-                backend,
-            ),
-            false,
+        adapt_sql(
+            "SELECT s.did, s.owner_did, s.type_nsid, s.skey, sm.created_at FROM space_members sm JOIN spaces s ON s.id = sm.space_id WHERE sm.member_did = ? ORDER BY sm.created_at ASC, ('ats://' || s.did || '/' || s.type_nsid || '/' || s.skey) ASC LIMIT ?",
+            backend,
         )
     };
 
     let mut query = sqlx::query_as::<_, (String, String, String, String, String)>(&sql).bind(did);
-    if has_cursor {
-        query = query.bind(cursor.unwrap());
+    if let Some((ref ts, ref uri)) = decoded_cursor {
+        query = query.bind(ts.as_str()).bind(ts.as_str()).bind(uri.as_str());
     }
     query = query.bind(limit);
 
@@ -153,7 +149,7 @@ pub async fn list_spaces_for_user(
         .await
         .map_err(|e| AppError::Internal(format!("failed to list spaces for user: {e}")))?;
 
-    Ok(rows
+    let views: Vec<SpaceView> = rows
         .into_iter()
         .map(
             |(space_did, owner_did, type_nsid, skey, created_at)| SpaceView {
@@ -162,7 +158,15 @@ pub async fn list_spaces_for_user(
                 created_at,
             },
         )
-        .collect())
+        .collect();
+
+    let next_cursor = if views.len() as i64 == limit {
+        views.last().map(|v| encode_cursor(&v.created_at, &v.uri))
+    } else {
+        None
+    };
+
+    Ok((views, next_cursor))
 }
 
 pub async fn update_space(
@@ -491,7 +495,9 @@ pub async fn list_space_records(
     limit: i64,
     cursor: Option<&str>,
     reverse: bool,
-) -> Result<Vec<SpaceRecord>, AppError> {
+) -> Result<(Vec<SpaceRecord>, Option<String>), AppError> {
+    let decoded_cursor = cursor.and_then(decode_cursor);
+
     let mut conditions = vec!["space_id = ?".to_string()];
     if repo.is_some() {
         conditions.push("author_did = ?".to_string());
@@ -499,19 +505,17 @@ pub async fn list_space_records(
     if collection.is_some() {
         conditions.push("collection = ?".to_string());
     }
-    let (cursor_op, order) = if reverse {
-        ("indexed_at < ?", "DESC")
-    } else {
-        ("indexed_at > ?", "ASC")
-    };
-    if cursor.is_some() {
-        conditions.push(cursor_op.to_string());
+    let (cursor_cmp, order) = if reverse { ("<", "DESC") } else { (">", "ASC") };
+    if decoded_cursor.is_some() {
+        conditions.push(format!(
+            "(indexed_at {cursor_cmp} ? OR (indexed_at = ? AND uri {cursor_cmp} ?))"
+        ));
     }
 
     let where_clause = conditions.join(" AND ");
     let raw = format!(
-        "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE {} ORDER BY indexed_at {} LIMIT ?",
-        where_clause, order
+        "SELECT uri, space_id, author_did, collection, rkey, record, cid, indexed_at FROM space_records WHERE {} ORDER BY indexed_at {}, uri {} LIMIT ?",
+        where_clause, order, order
     );
     let sql = adapt_sql(&raw, backend);
 
@@ -522,8 +526,8 @@ pub async fn list_space_records(
     if let Some(c) = collection {
         query = query.bind(c);
     }
-    if let Some(cur) = cursor {
-        query = query.bind(cur);
+    if let Some((ref ts, ref uri)) = decoded_cursor {
+        query = query.bind(ts.as_str()).bind(ts.as_str()).bind(uri.as_str());
     }
     query = query.bind(limit);
 
@@ -532,7 +536,18 @@ pub async fn list_space_records(
         .await
         .map_err(|e| AppError::Internal(format!("failed to list space records: {e}")))?;
 
-    rows.into_iter().map(parse_record_row).collect()
+    let records: Vec<SpaceRecord> = rows
+        .into_iter()
+        .map(parse_record_row)
+        .collect::<Result<_, _>>()?;
+
+    let next_cursor = if records.len() as i64 == limit {
+        records.last().map(|r| encode_cursor(&r.indexed_at, &r.uri))
+    } else {
+        None
+    };
+
+    Ok((records, next_cursor))
 }
 
 pub async fn insert_space_record(

@@ -429,7 +429,7 @@ pub fn register_atproto_api(
                 }
             };
 
-            let records = crate::spaces::db::list_space_records(
+            let (records, next_cursor) = crate::spaces::db::list_space_records(
                 &state.db,
                 state.db_backend,
                 &space.id,
@@ -441,8 +441,6 @@ pub fn register_atproto_api(
             )
             .await
             .map_err(|e| mlua::Error::runtime(format!("record query failed: {e}")))?;
-
-            let next_cursor = records.last().map(|r| r.indexed_at.clone());
 
             let result = lua.create_table()?;
             let records_table = lua.create_table()?;
