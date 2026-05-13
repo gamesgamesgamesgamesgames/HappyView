@@ -12,7 +12,7 @@ Without Lua scripts, HappyView's query endpoints return raw records and procedur
 
 Scripts are attached to query and procedure lexicons and run in a sandboxed Lua VM with access to the [Record API](#record-api), a [database API](#database-api), an [HTTP client API](#http-api), a [JSON API](#json-api), and a set of [context globals](#context-globals).
 
-For scripts that react to record changes from the network (rather than XRPC requests), see [Index Hooks](indexing/index-hooks.md).
+For scripts that react to record changes from the network (rather than XRPC requests), see [Index Hooks](index-hooks.md).
 
 ## Script structure
 
@@ -37,7 +37,7 @@ The `os` module is replaced with a safe subset exposing only `os.time`, `os.date
 
 An instruction limit of 1,000,000 prevents infinite loops. Exceeding it terminates the script with an error.
 
-See the [Standard Libraries](../reference/lua/standard-libraries.md) reference for the full list of available Lua modules and builtins.
+See the [Standard Libraries](../api-reference/lua/standard-libraries.md) reference for the full list of available Lua modules and builtins.
 
 ## Context globals
 
@@ -73,7 +73,7 @@ Available in both queries and procedures:
 | ---------------- | ------- | ------------------------------------------------------------------- |
 | `now()`          | string  | Current UTC timestamp in ISO 8601 format                            |
 | `log(message)`   | —       | Log a message (appears in server logs at debug level)               |
-| `TID()`          | string  | Generate a fresh atproto TID (13-character sortable identifier). Also provides conversion methods — see [Utility Globals reference](../reference/lua/utility-globals.md#tid). |
+| `TID()`          | string  | Generate a fresh atproto TID (13-character sortable identifier). Also provides conversion methods — see [Utility Globals reference](../api-reference/lua/utility-globals.md#tid). |
 | `toarray(table)` | table   | Mark a table as a JSON array for serialization (see [below](#toarray)) |
 
 ### toarray
@@ -92,7 +92,7 @@ You don't need `toarray()` on results from `db.query`, `db.search`, `db.backlink
 
 The `Record` API is only available in **procedure** scripts. It handles creating, updating, loading, and deleting atproto records. Writes are proxied to the caller's PDS and indexed locally.
 
-See the full [Record API reference](../reference/lua/record-api.md) for constructor, static methods, instance methods, fields, schema validation, and save behavior.
+See the full [Record API reference](../api-reference/lua/record-api.md) for constructor, static methods, instance methods, fields, schema validation, and save behavior.
 
 Quick example:
 
@@ -108,7 +108,7 @@ end
 
 The `db` table provides access to the database. Available in both queries and procedures.
 
-See the full [Database API reference](../reference/lua/database-api.md) for `db.query`, `db.get`, `db.search`, `db.backlinks`, `db.count`, and `db.raw`.
+See the full [Database API reference](../api-reference/lua/database-api.md) for `db.query`, `db.get`, `db.search`, `db.backlinks`, `db.count`, and `db.raw`.
 
 Quick example:
 
@@ -123,7 +123,7 @@ end
 
 The `http` table provides async HTTP client functions. Available in both queries and procedures.
 
-See the full [HTTP API reference](../reference/lua/http-api.md) for all methods, options, and response format.
+See the full [HTTP API reference](../api-reference/lua/http-api.md) for all methods, options, and response format.
 
 Quick example:
 
@@ -136,7 +136,7 @@ local data = json.decode(resp.body)
 
 The `xrpc` table lets scripts call other XRPC endpoints — both local and proxied. Available in both queries and procedures.
 
-See the full [XRPC Lua API reference](../reference/lua/xrpc-lua-api.md) for `xrpc.query` and `xrpc.procedure`.
+See the full [XRPC Lua API reference](../api-reference/lua/xrpc-lua-api.md) for `xrpc.query` and `xrpc.procedure`.
 
 Quick example:
 
@@ -149,13 +149,13 @@ local data = json.decode(resp.body)
 
 The `atproto` table provides atproto utility functions like DID resolution, label queries, and record signing.
 
-See the full [atproto API reference](../reference/lua/atproto-api.md) for `atproto.resolve_service_endpoint`, `atproto.get_labels`, `atproto.get_labels_batch`, `atproto.sign`, and `atproto.verify_signature`.
+See the full [atproto API reference](../api-reference/lua/atproto-api.md) for `atproto.resolve_service_endpoint`, `atproto.get_labels`, `atproto.get_labels_batch`, `atproto.sign`, and `atproto.verify_signature`.
 
 ## JSON API
 
 The `json` global provides JSON serialization and deserialization.
 
-See the full [JSON API reference](../reference/lua/json-api.md) for `json.encode` and `json.decode`.
+See the full [JSON API reference](../api-reference/lua/json-api.md) for `json.encode` and `json.decode`.
 
 ## Debugging
 
@@ -195,28 +195,28 @@ The **full error message** is logged server-side at error level. Check the serve
 See the example script references for complete, ready-to-use scripts:
 
 **Queries:**
-- [Get a record](scripting/get-record.md) — fetch a single record by AT URI
-- [Paginated list](scripting/paginated-list.md) — list records with cursor-based pagination and DID filtering
-- [List or fetch](scripting/list-or-fetch.md) — combined single-record lookup and paginated listing
-- [Expanded query](scripting/expanded-query.md) — list statuses with user profiles in a single response
-- [Verify signed record](scripting/signed-record-verify.md) — fetch a record and verify its attestation signature
+- [Get a record](../reference/script-examples/get-record.md) — fetch a single record by AT URI
+- [Paginated list](../reference/script-examples/paginated-list.md) — list records with cursor-based pagination and DID filtering
+- [List or fetch](../reference/script-examples/list-or-fetch.md) — combined single-record lookup and paginated listing
+- [Expanded query](../reference/script-examples/expanded-query.md) — list statuses with user profiles in a single response
+- [Verify signed record](../reference/script-examples/signed-record-verify.md) — fetch a record and verify its attestation signature
 
 **Procedures:**
-- [Create a record](scripting/create-record.md) — simple write that saves input as a record
-- [Upsert a record](scripting/upsert-record.md) — create or update using a deterministic rkey
-- [Update or delete](scripting/update-or-delete.md) — single endpoint handling create, update, and delete
-- [Batch save](scripting/batch-save.md) — create multiple records in parallel with `Record.save_all()`
-- [Sidecar records](scripting/sidecar-records.md) — create linked records across collections with a shared rkey
-- [Cascading delete](scripting/cascading-delete.md) — delete a record and all related records
-- [Complex mutations](scripting/complex-mutations.md) — load, transform, and save a record with multiple field changes
-- [Signed record](scripting/signed-record.md) — save a record with an attestation signature
+- [Create a record](../reference/script-examples/create-record.md) — simple write that saves input as a record
+- [Upsert a record](../reference/script-examples/upsert-record.md) — create or update using a deterministic rkey
+- [Update or delete](../reference/script-examples/update-or-delete.md) — single endpoint handling create, update, and delete
+- [Batch save](../reference/script-examples/batch-save.md) — create multiple records in parallel with `Record.save_all()`
+- [Sidecar records](../reference/script-examples/sidecar-records.md) — create linked records across collections with a shared rkey
+- [Cascading delete](../reference/script-examples/cascading-delete.md) — delete a record and all related records
+- [Complex mutations](../reference/script-examples/complex-mutations.md) — load, transform, and save a record with multiple field changes
+- [Signed record](../reference/script-examples/signed-record.md) — save a record with an attestation signature
 
 **Index Hooks:**
-- [Algolia sync](scripting/algolia-sync.md) — push records to an Algolia search index on create/update/delete
+- [Algolia sync](../reference/script-examples/algolia-sync.md) — push records to an Algolia search index on create/update/delete
 
 ## Next steps
 
-- [Index Hooks](indexing/index-hooks.md): React to record changes from the network in real time
-- [Lexicons](indexing/lexicons.md): Understand how record, query, and procedure lexicons work together
-- [XRPC API](../reference/xrpc-api.md): See how endpoints behave with and without Lua scripts
+- [Index Hooks](index-hooks.md): React to record changes from the network in real time
+- [Lexicons](lexicons.md): Understand how record, query, and procedure lexicons work together
+- [XRPC API](../api-reference/xrpc-api.md): See how endpoints behave with and without Lua scripts
 - [Dashboard](../getting-started/dashboard.md#lua-editor): Use the web editor with context-aware completions

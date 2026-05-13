@@ -15,7 +15,7 @@ HappyView provides JavaScript packages for building third-party apps that authen
 
 **Starting a new app?** Use `@happyview/lex-agent` with `@atproto/lex`. It gives you type-safe XRPC calls through a `Client` that routes requests to your HappyView instance with DPoP authentication. This is the recommended way to interact with HappyView from JavaScript.
 
-**Already using `@atproto/api`?** `HappyViewSession` works directly as a session manager for `@atproto/api`'s `Agent` — just pass it to `new Agent(session)`. See [Using with @atproto/api](./oauth-client-browser.md#using-with-atprotoapi).
+**Already using `@atproto/api`?** `HappyViewSession` works directly as a session manager for `@atproto/api`'s `Agent` — just pass it to `new Agent(session)`. See [Using with @atproto/api](./oauth-client-browser/overview.md#using-with-atprotoapi).
 
 **Already using `@atproto/oauth-client-browser`?** Add `@happyview/oauth-client-browser` to get a `HappyViewBrowserClient` that handles the HappyView-specific DPoP key provisioning and session registration on top of the standard atproto OAuth flow.
 
@@ -69,8 +69,8 @@ const result = await lex.xrpc(myLexicons.com.example.getGame, {
 
 ## Next steps
 
-- [Lex Agent](./lex-agent.md): type-safe XRPC with `@atproto/lex`
-- [OAuth Client](./oauth-client.md): platform-agnostic core client
-- [Browser Client](./oauth-client-browser.md): browser OAuth redirect flow
-- [Node Client](./oauth-client-node.md): server-side OAuth flow
+- [Lex Agent](./lex-agent/overview.md): type-safe XRPC with `@atproto/lex`
+- [OAuth Client](./oauth-client/overview.md): platform-agnostic core client
+- [Browser Client](./oauth-client-browser/overview.md): browser OAuth redirect flow
+- [Node Client](./oauth-client-node/overview.md): server-side OAuth flow
 - [Authentication](../getting-started/authentication.md): full details on DPoP key provisioning and API client types

@@ -2,7 +2,7 @@
 title: "JSON API"
 ---
 
-The `json` global provides JSON serialization and deserialization. Available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md).
+The `json` global provides JSON serialization and deserialization. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
 
 ## json.encode
 

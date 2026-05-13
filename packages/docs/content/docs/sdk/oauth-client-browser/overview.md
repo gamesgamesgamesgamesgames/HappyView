@@ -2,9 +2,9 @@
 title: "Browser Client"
 ---
 
-The browser client handles the full OAuth redirect flow for browser apps authenticating with a HappyView instance. It wraps the [OAuth Client](./oauth-client.md) with Web Crypto, localStorage, and atproto handle/DID resolution.
+The browser client handles the full OAuth redirect flow for browser apps authenticating with a HappyView instance. It wraps the [OAuth Client](../oauth-client/overview.md) with Web Crypto, localStorage, and atproto handle/DID resolution.
 
-If you're starting a new app, consider using [`@happyview/lex-agent`](./lex-agent.md) with `@atproto/lex` instead — it provides type-safe XRPC calls and is the recommended way to interact with HappyView. This package is primarily useful if your app already uses `@atproto/oauth-client-browser` and you want to add HappyView authentication alongside it.
+If you're starting a new app, consider using [`@happyview/lex-agent`](../lex-agent/overview.md) with `@atproto/lex` instead — it provides type-safe XRPC calls and is the recommended way to interact with HappyView. This package is primarily useful if your app already uses `@atproto/oauth-client-browser` and you want to add HappyView authentication alongside it.
 
 ## Installation
 
@@ -47,7 +47,7 @@ const client = new HappyViewBrowserClient({
 ```
 
 <Callout type="info">
-The API client must be registered as a **public** client (no secret) with your app's origin in `allowed_origins`. See [Authentication — API clients](../getting-started/authentication.md#api-clients-confidential-vs-public).
+The API client must be registered as a **public** client (no secret) with your app's origin in `allowed_origins`. See [Authentication — API clients](../../getting-started/authentication.md#api-clients-confidential-vs-public).
 </Callout>
 
 ## Sign in

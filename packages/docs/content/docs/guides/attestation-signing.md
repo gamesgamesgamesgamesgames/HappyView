@@ -39,7 +39,7 @@ If key loading fails for any reason, signing is disabled and `atproto.sign` / `a
 
 ## Using in Lua scripts
 
-Available in queries, procedures, and index hooks via the [atproto API](../../reference/lua/atproto-api.md).
+Available in queries, procedures, and index hooks via the [atproto API](../api-reference/lua/atproto-api.md).
 
 ### Signing a record
 
@@ -106,6 +106,6 @@ Signatures are stored as objects in the record's `signatures` array:
 
 ## Next steps
 
-- [atproto API reference](../../reference/lua/atproto-api.md#atprotosign) — `atproto.sign` and `atproto.verify_signature` parameter docs
-- [Signed Record](../scripting/signed-record.md) — save a record with an attestation signature
-- [Verify Signed Record](../scripting/signed-record-verify.md) — fetch a record and verify its signature
+- [atproto API reference](../api-reference/lua/atproto-api.md#atprotosign) — `atproto.sign` and `atproto.verify_signature` parameter docs
+- [Signed Record](../reference/script-examples/signed-record.md) — save a record with an attestation signature
+- [Verify Signed Record](../reference/script-examples/signed-record-verify.md) — fetch a record and verify its signature

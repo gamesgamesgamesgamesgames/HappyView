@@ -2,7 +2,7 @@
 title: "XRPC Lua API"
 ---
 
-The `xrpc` table provides cross-endpoint XRPC calls. Available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md).
+The `xrpc` table provides cross-endpoint XRPC calls. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
 
 ## xrpc.query
 

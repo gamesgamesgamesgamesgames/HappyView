@@ -4,11 +4,11 @@ title: "Index Hooks"
 
 Index hooks are Lua scripts that run whenever a record in a collection is created, updated, or deleted. They run **before** the record is indexed, giving you the ability to filter out unwanted records, transform record data before storage, or trigger side effects like syncing with external services.
 
-Index hooks fire on **all** record events for the collection — including records created by HappyView procedure endpoints, not just events from the network. Unlike [query and procedure scripts](../scripting.md) that run in response to XRPC requests, index hooks are triggered by incoming Jetstream events (which include events caused by HappyView's own PDS writes).
+Index hooks fire on **all** record events for the collection — including records created by HappyView procedure endpoints, not just events from the network. Unlike [query and procedure scripts](./lua-scripting.md) that run in response to XRPC requests, index hooks are triggered by incoming Jetstream events (which include events caused by HappyView's own PDS writes).
 
 ## Attaching a hook
 
-Each record-type lexicon can have one index hook. You can add it through the [dashboard](../../getting-started/dashboard.md) (click "Add Index Hook" on any record lexicon's detail page) or via the [admin API](../../reference/admin/lexicons.md#upload--upsert-a-lexicon) by including the `index_hook` field when uploading a lexicon.
+Each record-type lexicon can have one index hook. You can add it through the [dashboard](../getting-started/dashboard.md) (click "Add Index Hook" on any record lexicon's detail page) or via the [admin API](../api-reference/admin/lexicons.md#upload--upsert-a-lexicon) by including the `index_hook` field when uploading a lexicon.
 
 ## Script structure
 
@@ -59,13 +59,13 @@ Index hooks do **not** have access to `caller_did`, `input`, `params`, `method`,
 
 Index hooks have access to:
 
-- **[Database API](../../reference/lua/database-api.md)** — `db.query`, `db.get`, `db.search`, `db.backlinks`, `db.count`, `db.raw`
-- **[HTTP API](../../reference/lua/http-api.md)** — `http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`, `http.head`
-- **[XRPC Lua API](../../reference/lua/xrpc-lua-api.md)** — `xrpc.query`, `xrpc.procedure`
-- **[atproto API](../../reference/lua/atproto-api.md)** — `atproto.resolve_service_endpoint`, `atproto.get_labels`, `atproto.get_labels_batch`
-- **[JSON API](../../reference/lua/json-api.md)** — `json.encode`, `json.decode`
-- **[Utility globals](../scripting.md#utility-globals)** — `log()`, `now()`, `TID()`, `toarray()`
-- **[Script variables](../../reference/admin/script-variables.md)** — `env` table with key-value pairs configured in the dashboard
+- **[Database API](../api-reference/lua/database-api.md)** — `db.query`, `db.get`, `db.search`, `db.backlinks`, `db.count`, `db.raw`
+- **[HTTP API](../api-reference/lua/http-api.md)** — `http.get`, `http.post`, `http.put`, `http.patch`, `http.delete`, `http.head`
+- **[XRPC Lua API](../api-reference/lua/xrpc-lua-api.md)** — `xrpc.query`, `xrpc.procedure`
+- **[atproto API](../api-reference/lua/atproto-api.md)** — `atproto.resolve_service_endpoint`, `atproto.get_labels`, `atproto.get_labels_batch`
+- **[JSON API](../api-reference/lua/json-api.md)** — `json.encode`, `json.decode`
+- **[Utility globals](./lua-scripting.md#utility-globals)** — `log()`, `now()`, `TID()`, `toarray()`
+- **[Script variables](../api-reference/admin/script-variables.md)** — `env` table with key-value pairs configured in the dashboard
 
 ## Error handling and retries
 
@@ -75,7 +75,7 @@ Index hooks are designed to be resilient:
 2. If all retries are exhausted, the failed event is inserted into the `dead_letter_hooks` table for later inspection.
 3. On failure the system **fails open** — the original record is stored as-is so indexing is not permanently blocked.
 
-Failed hooks are logged as errors. Check the [event logs](../admin/event-logs.md) or query the `dead_letter_hooks` table directly to find and replay failures.
+Failed hooks are logged as errors. Check the [event logs](./event-logs.md) or query the `dead_letter_hooks` table directly to find and replay failures.
 
 ### Performance considerations
 
@@ -183,7 +183,7 @@ function handle()
 end
 ```
 
-See the full [Algolia sync reference](../scripting/algolia-sync.md) for more detail.
+See the full [Algolia sync reference](../reference/script-examples/algolia-sync.md) for more detail.
 
 ### Sync to Meilisearch
 
@@ -218,10 +218,10 @@ function handle()
 end
 ```
 
-See the full [Meilisearch sync reference](../scripting/meilisearch-sync.md) for more detail.
+See the full [Meilisearch sync reference](../reference/script-examples/meilisearch-sync.md) for more detail.
 
 ## Next steps
 
-- [Lua Scripting](../scripting.md): Full reference for the sandbox, APIs, and debugging
+- [Lua Scripting](./lua-scripting.md): Full reference for the sandbox, APIs, and debugging
 - [Lexicons](lexicons.md): Understand how record, query, and procedure lexicons work together
-- [Admin API — Lexicons](../../reference/admin/lexicons.md#upload--upsert-a-lexicon): Upload lexicons with index hooks via the API
+- [Admin API — Lexicons](../api-reference/admin/lexicons.md#upload--upsert-a-lexicon): Upload lexicons with index hooks via the API

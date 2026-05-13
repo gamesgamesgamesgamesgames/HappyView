@@ -32,8 +32,8 @@ end
 
 ## How it works
 
-1. If `input.delete` is truthy and `input.uri` is provided, load the record with [`Record.load`](../../reference/lua/record-api.md#static-methods) and delete it.
-2. If only `input.uri` is provided, load the existing record with [`Record.load`](../../reference/lua/record-api.md#static-methods), update its fields, and save it back. Since `_uri` is already set, `r:save()` calls `putRecord` instead of `createRecord`.
+1. If `input.delete` is truthy and `input.uri` is provided, load the record with [`Record.load`](../../api-reference/lua/record-api.md#static-methods) and delete it.
+2. If only `input.uri` is provided, load the existing record with [`Record.load`](../../api-reference/lua/record-api.md#static-methods), update its fields, and save it back. Since `_uri` is already set, `r:save()` calls `putRecord` instead of `createRecord`.
 3. If neither condition matches, create a new record from the input.
 
 ## Usage

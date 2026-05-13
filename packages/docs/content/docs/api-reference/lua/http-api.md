@@ -2,7 +2,7 @@
 title: "HTTP API"
 ---
 
-The `http` table provides async HTTP client functions. Available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md).
+The `http` table provides async HTTP client functions. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
 
 ## Methods
 

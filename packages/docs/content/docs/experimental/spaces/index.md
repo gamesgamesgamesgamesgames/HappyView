@@ -39,7 +39,7 @@ When disabled, all `/xrpc/dev.happyview.space.*` endpoints return `501 Not Imple
 
 ## Endpoints
 
-All space endpoints live under the `dev.happyview.space` namespace and require [DPoP authentication](../getting-started/authentication.md).
+All space endpoints live under the `dev.happyview.space` namespace and require [DPoP authentication](../../getting-started/authentication.md).
 
 | Endpoint                                 | Method | Description                           |
 | ---------------------------------------- | ------ | ------------------------------------- |
@@ -97,8 +97,8 @@ HappyView mostly mirrors [Daniel Holmgren's `permissioned-data` branch](https://
 
 ## Next steps
 
-- [Managing Spaces](spaces/managing-spaces.md) — create, update, and delete spaces
-- [Members](spaces/members.md) — manage membership and delegation
-- [Records](spaces/records.md) — read and write permissioned data
-- [Credentials](spaces/credentials.md) — cross-service authentication for spaces
-- [Invites](spaces/invites.md) — invite-based membership
+- [Managing Spaces](./managing-spaces.md) — create, update, and delete spaces
+- [Members](./members.md) — manage membership and delegation
+- [Records](./records.md) — read and write permissioned data
+- [Credentials](./credentials.md) — cross-service authentication for spaces
+- [Invites](./invites.md) — invite-based membership

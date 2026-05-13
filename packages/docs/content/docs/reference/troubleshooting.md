@@ -20,9 +20,9 @@ Common issues and how to resolve them.
 
 **Causes**:
 
-- The query lexicon is missing a `target_collection`. Without it, the query doesn't know which records to read. See [Lexicons - target_collection](../guides/indexing/lexicons.md#target-collection).
+- The query lexicon is missing a `target_collection`. Without it, the query doesn't know which records to read. See [Lexicons - target_collection](../guides/lexicons.md#target-collection).
 - The record-type lexicon hasn't finished backfilling. Check backfill status with `GET /admin/backfill/status` or the dashboard.
-- Records exist on the network but HappyView hasn't indexed them yet. Jetstream only delivers events from after the collection was added to the filter. Use [backfill](../guides/indexing/backfill.md) to import historical records.
+- Records exist on the network but HappyView hasn't indexed them yet. Jetstream only delivers events from after the collection was added to the filter. Use [backfill](../guides/backfill.md) to import historical records.
 
 ## Procedure returns 401 Unauthorized
 
@@ -50,7 +50,7 @@ Common issues and how to resolve them.
 
 **Causes**:
 
-- Your user account doesn't have the specific permission required by the endpoint. Each endpoint requires a specific permission — see the [permissions table](admin/admin-api.md#permissions).
+- Your user account doesn't have the specific permission required by the endpoint. Each endpoint requires a specific permission — see the [permissions table](../api-reference/admin/admin-api.md#permissions).
 - If using an API key, the key's effective permissions are the intersection of the key's permissions and your user permissions. A key can never have more access than the user who created it.
 - Only the super user can call `POST /admin/users/transfer-super`. This endpoint cannot be accessed with any permission — it requires super user status.
 
@@ -62,9 +62,9 @@ Common issues and how to resolve them.
 
 1. Check the server logs: the full error message is logged at error level but not exposed to the client.
 2. Use `log("message")` in your script to trace execution. Output appears in server logs at debug level (requires `RUST_LOG` to include debug).
-3. If you hit the execution limit, your script likely has an infinite loop or is processing too much data. See [Lua Scripting - Sandbox](../guides/scripting.md#sandbox).
+3. If you hit the execution limit, your script likely has an infinite loop or is processing too much data. See [Lua Scripting - Sandbox](../guides/lua-scripting.md#sandbox).
 
-See [Lua Scripting - Debugging](../guides/scripting.md#debugging) for more.
+See [Lua Scripting - Debugging](../guides/lua-scripting.md#debugging) for more.
 
 ## Backfill job stuck in "pending" or "running"
 
@@ -76,7 +76,7 @@ See [Lua Scripting - Debugging](../guides/scripting.md#debugging) for more.
 - The relay (`RELAY_URL`) may be unreachable or slow to respond. Check connectivity.
 - Individual PDS fetches can fail silently. The worker logs warnings and continues. Check server logs for details.
 
-See [Backfill](../guides/indexing/backfill.md) for how the process works.
+See [Backfill](../guides/backfill.md) for how the process works.
 
 ## Records not appearing in real time
 
@@ -104,7 +104,7 @@ See [Backfill](../guides/indexing/backfill.md) for how the process works.
 
 **Causes**:
 
-- `TOKEN_ENCRYPTION_KEY` is not set. Plugin secrets are encrypted at rest and cannot be read without this key. See [Plugins - Configuration](../guides/features/plugins.md#plugin-configuration).
+- `TOKEN_ENCRYPTION_KEY` is not set. Plugin secrets are encrypted at rest and cannot be read without this key. See [Plugins - Configuration](../guides/plugins.md#plugin-configuration).
 - If `TOKEN_ENCRYPTION_KEY` changed since the secrets were saved, the existing encrypted values are unreadable. Re-enter the secrets via the dashboard or `PUT /admin/plugins/{id}/secrets`.
 - Environment variable secrets (`PLUGIN_<ID>_<KEY>`) are overridden by dashboard-configured secrets. If you've set both, the dashboard values take precedence.
 

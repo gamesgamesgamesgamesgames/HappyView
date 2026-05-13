@@ -2,7 +2,7 @@
 title: "Configuration"
 ---
 
-HappyView is configured via environment variables. A `.env` file in the project root is loaded automatically on startup. See [Deployment](deployment/docker.md) for local setup or [Production Deployment](production-deployment.md) for production setup.
+HappyView is configured via environment variables. A `.env` file in the project root is loaded automatically on startup. See [Deployment](deployment/docker.md) for local setup or [Production Deployment](deployment/production.md) for production setup.
 
 ## Environment variables
 
@@ -11,19 +11,19 @@ HappyView is configured via environment variables. A `.env` file in the project 
 | `DATABASE_URL` | yes | --- | Database connection string. SQLite (`sqlite://path/to/db?mode=rwc`) or Postgres (`postgres://user:pass@host/db`) |
 | `DATABASE_BACKEND` | no | auto-detected | Force `sqlite` or `postgres`. Auto-detected from `DATABASE_URL` scheme if not set |
 | `PUBLIC_URL` | yes | --- | Public-facing URL for HappyView (used for OAuth callbacks, e.g. `https://happyview.example.com`). **For local development, use `http://127.0.0.1:3000` — not `localhost`** (see note below). Do **not** include the base path — see `BASE_PATH` |
-| `BASE_PATH` | no | _(none)_ | Subpath prefix for mounting HappyView behind a reverse proxy (e.g. `/hv`). Must start with `/` and have no trailing slash. When set, all routes are served under this prefix and the dashboard is accessible at `https://example.com/hv/`. See [Reverse proxy subpath](production-deployment.md#reverse-proxy-subpath) |
+| `BASE_PATH` | no | _(none)_ | Subpath prefix for mounting HappyView behind a reverse proxy (e.g. `/hv`). Must start with `/` and have no trailing slash. When set, all routes are served under this prefix and the dashboard is accessible at `https://example.com/hv/`. See [Reverse proxy subpath](deployment/production.md#reverse-proxy-subpath) |
 | `SESSION_SECRET` | no | dev default | Secret key for signing session cookies (at least 64 characters). **Must be set in production** |
 | `HOST` | no | `0.0.0.0` | Bind host |
 | `PORT` | no | `3000` | Bind port |
 | `JETSTREAM_URL` | no | `wss://jetstream1.us-east.bsky.network` | Jetstream WebSocket URL for real-time record streaming |
-| `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/indexing/backfill.md) repo discovery |
+| `RELAY_URL` | no | `https://bsky.network` | Relay URL for [backfill](../guides/backfill.md) repo discovery |
 | `PLC_URL` | no | `https://plc.directory` | [PLC directory](https://github.com/did-method-plc/did-method-plc) URL for DID resolution |
 | `STATIC_DIR` | no | `./web/out` | Directory containing the built dashboard static assets |
 | `EVENT_LOG_RETENTION_DAYS` | no | `30` | Number of days to keep event logs before automatic cleanup. Set to `0` to disable cleanup |
 | `TOKEN_ENCRYPTION_KEY` | no | --- | Base64-encoded 32-byte key for encrypting stored OAuth tokens. **Strongly recommended in production** |
 | `DEFAULT_RATE_LIMIT_CAPACITY` | no | `100` | Default token bucket capacity used when registering a new API client |
 | `DEFAULT_RATE_LIMIT_REFILL_RATE` | no | `2.0` | Default token bucket refill rate (tokens/second) for new API clients |
-| `ATTESTATION_PRIVATE_KEY` | no | auto-generated | Hex-encoded 32-byte secp256k1 private key for [attestation signing](../guides/features/attestation-signing.md). Auto-generated and persisted to database on first run |
+| `ATTESTATION_PRIVATE_KEY` | no | auto-generated | Hex-encoded 32-byte secp256k1 private key for [attestation signing](../guides/attestation-signing.md). Auto-generated and persisted to database on first run |
 | `ATTESTATION_KEY_ID` | no | `did:web:{host}#attestation` | Key identifier included in attestation signatures. Derived from `PUBLIC_URL` by default |
 | `ATTESTATION_SIG_TYPE` | no | app-specific NSID | `$type` value used in attestation signature objects |
 | `RUST_LOG` | no | `happyview=debug,tower_http=debug` | Log filter (uses `tracing_subscriber::EnvFilter`) |
@@ -70,4 +70,4 @@ SESSION_SECRET=change-me-in-production
 
 - [Authentication](authentication.md) — set up OAuth and admin users
 - [Dashboard](dashboard.md) — explore the admin dashboard
-- [Production deployment](production-deployment.md) — deploy HappyView to production
+- [Production deployment](deployment/production.md) — deploy HappyView to production

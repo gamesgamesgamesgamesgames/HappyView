@@ -2,7 +2,7 @@
 title: "Database API"
 ---
 
-The `db` table provides access to the database. Available in queries, procedures, and [index hooks](../../guides/indexing/index-hooks.md).
+The `db` table provides access to the database. Available in queries, procedures, and [index hooks](../../guides/index-hooks.md).
 
 ## db.query
 

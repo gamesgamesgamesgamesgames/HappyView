@@ -105,15 +105,15 @@ Clients should pass the `cursor` value from the response as a query parameter to
 
 v2 adds several new Lua APIs that you can optionally adopt:
 
-- [`atproto.resolve_service_endpoint`](../reference/lua/atproto-api.md) — resolve a DID to its PDS endpoint
-- [`atproto.get_labels`](../reference/lua/atproto-api.md) / [`atproto.get_labels_batch`](../reference/lua/atproto-api.md) — fetch content labels from subscribed labelers
-- [`os.time`](../reference/lua/standard-libraries.md), `os.date`, `os.difftime`, `os.clock` — safe `os` subset
+- [`atproto.resolve_service_endpoint`](../api-reference/lua/atproto-api.md) — resolve a DID to its PDS endpoint
+- [`atproto.get_labels`](../api-reference/lua/atproto-api.md) / [`atproto.get_labels_batch`](../api-reference/lua/atproto-api.md) — fetch content labels from subscribed labelers
+- [`os.time`](../api-reference/lua/standard-libraries.md), `os.date`, `os.difftime`, `os.clock` — safe `os` subset
 
 ## 5. Update API key prefixes
 
 v1 API keys used the `hv_` prefix. v2 keeps existing `hv_` keys working but new keys use the `hv_` prefix as well. No migration needed.
 
-v2 also adds **API clients** for third-party OAuth apps, which use the `hvc_` prefix. These are separate from API keys — see the [API Clients guide](features/api-clients.md).
+v2 also adds **API clients** for third-party OAuth apps, which use the `hvc_` prefix. These are separate from API keys — see the [API Clients guide](api-clients.md).
 
 ## 6. Update the dashboard URL
 
@@ -136,7 +136,7 @@ v2 introduces granular user permissions. After upgrading:
 2. Additional users are created with no permissions by default.
 3. Assign permissions or use a template (Viewer, Operator, Manager, Full Access).
 
-See the [Permissions guide](admin/permissions.md) for details.
+See the [Permissions guide](permissions.md) for details.
 
 ## 8. Docker Compose (example)
 

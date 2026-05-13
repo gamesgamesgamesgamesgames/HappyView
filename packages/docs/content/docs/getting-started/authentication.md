@@ -5,7 +5,7 @@ title: "Authentication"
 HappyView has two distinct authentication surfaces:
 
 - **XRPC** (`/xrpc/*`) — client-level identification via an **API client key** on every request, plus optional user-level atproto OAuth for endpoints that need a specific user's identity (e.g. procedures that write to a PDS).
-- **Admin API** (`/admin/*`) — user-level authentication via admin API keys or service auth JWTs, gated by [permissions](../guides/admin/permissions.md).
+- **Admin API** (`/admin/*`) — user-level authentication via admin API keys or service auth JWTs, gated by [permissions](../guides/permissions.md).
 
 ## Which endpoints require what?
 
@@ -13,7 +13,7 @@ HappyView has two distinct authentication surfaces:
 | ---------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
 | Queries (`GET /xrpc/{method}`)     | `X-Client-Key` required | Optional — DPoP auth if the query needs to know who the user is                                     |
 | Procedures (`POST /xrpc/{method}`) | `X-Client-Key` required | Required — DPoP auth so HappyView can proxy writes to the user's PDS                                |
-| Admin API (`/admin/*`)             | —                       | Required — admin API key or service auth JWT with the right [permissions](../guides/admin/permissions.md) |
+| Admin API (`/admin/*`)             | —                       | Required — admin API key or service auth JWT with the right [permissions](../guides/permissions.md) |
 | Health check (`GET /health`)       | —                       | —                                                                                                   |
 
 ## XRPC: API client identification
@@ -94,7 +94,7 @@ Admin endpoints don't use API clients. They require a real HappyView user, ident
 
 ### Admin API key
 
-For automation — CI/CD, monitoring, cron jobs — create an [admin API key](../guides/admin/api-keys.md) at **Settings > API Keys** or via `POST /admin/api-keys` and pass it as a bearer token:
+For automation — CI/CD, monitoring, cron jobs — create an [admin API key](../guides/api-keys.md) at **Settings > API Keys** or via `POST /admin/api-keys` and pass it as a bearer token:
 
 ```sh
 export TOKEN="hv_your-api-key-here"
@@ -121,7 +121,7 @@ As with the other methods, the resolved DID still has to exist in the HappyView 
 
 On a fresh deployment, the `users` table is empty. The first authenticated request to any admin endpoint auto-bootstraps that user as the **super user** with all permissions granted. This includes logging in to the dashboard — the dashboard makes admin API calls on your behalf, so the first person to log in becomes the super user.
 
-To add more users after that, use `POST /admin/users` or the [dashboard](dashboard.md). You can assign permissions individually or use a template (`viewer`, `operator`, `manager`, `full_access`). See [Admin API — Users](../reference/admin/users.md) for details.
+To add more users after that, use `POST /admin/users` or the [dashboard](dashboard.md). You can assign permissions individually or use a template (`viewer`, `operator`, `manager`, `full_access`). See [Admin API — Users](../api-reference/admin/users.md) for details.
 
 ## Proxying procedures to the user's PDS
 
@@ -318,7 +318,7 @@ This deletes the stored session and the associated DPoP key.
 ## Next steps
 
 - [JavaScript SDK](../sdk/overview.md) — authenticate and make XRPC calls from JavaScript
-- [Permissions](../guides/admin/permissions.md) — full list of permissions and what each one grants
-- [API Keys](../guides/admin/api-keys.md) — create scoped admin API keys for automation
-- [Admin API — API Clients](../reference/admin/api-clients.md) — register API clients and configure rate limits
-- [Third-Party API Clients](../reference/oauth/api-clients.md) — let third-party apps manage their own API clients programmatically
+- [Permissions](../guides/permissions.md) — full list of permissions and what each one grants
+- [API Keys](../guides/api-keys.md) — create scoped admin API keys for automation
+- [Admin API — API Clients](../api-reference/admin/api-clients.md) — register API clients and configure rate limits
+- [Third-Party API Clients](../api-reference/oauth/api-clients.md) — let third-party apps manage their own API clients programmatically

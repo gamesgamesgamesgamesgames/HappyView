@@ -26,7 +26,7 @@ end
 ## How it works
 
 1. Create and save the record.
-2. Sign the record fields with [`atproto.sign()`](../../reference/lua/atproto-api.md#atprotosign). The `nil` guard lets the script work without a signer configured.
+2. Sign the record fields with [`atproto.sign()`](../../api-reference/lua/atproto-api.md#atprotosign). The `nil` guard lets the script work without a signer configured.
 3. Return the signature alongside the URI.
 
 ## Usage
@@ -55,4 +55,4 @@ curl -X POST http://127.0.0.1:3000/xrpc/xyz.example.createPost \
 
 Attestation signatures let clients verify that a record was processed by your HappyView instance — useful for contributions, moderation decisions, or cross-instance data where provenance matters. The signature covers both the record content and the author's DID, so it can't be replayed across users or tampered with.
 
-See [Attestation Signing](../features/attestation-signing.md) for setup and configuration, or [Verify Signed Record](signed-record-verify.md) for the read-side counterpart.
+See [Attestation Signing](../../guides/attestation-signing.md) for setup and configuration, or [Verify Signed Record](signed-record-verify.md) for the read-side counterpart.

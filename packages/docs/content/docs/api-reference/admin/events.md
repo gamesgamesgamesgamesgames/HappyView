@@ -2,7 +2,7 @@
 title: "Event Logs"
 ---
 
-HappyView logs system events — lexicon changes, record operations, script errors, user actions, and more. See the [Event Logs guide](../../guides/admin/event-logs.md) for details on event types and retention.
+HappyView logs system events — lexicon changes, record operations, script errors, user actions, and more. See the [Event Logs guide](../../guides/event-logs.md) for details on event types and retention.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

@@ -4,7 +4,7 @@ title: "Third-Party API Clients"
 
 Third-party applications can manage their own API clients via the `dev.happyview.*` XRPC endpoints. A third-party client is always tied to exactly one parent — the admin-created top-level API client whose DPoP session made the request. Only one level of nesting is allowed; third-party clients cannot create further children. Each third-party client gets its own rate limit bucket with instance default settings.
 
-All endpoints use [DPoP authentication](../../getting-started/authentication.md#authenticating-users-for-procedures). See the [admin API client docs](../admin/api-clients.md) for managing clients through the admin API, and the [API Clients guide](../../guides/features/api-clients.md) for how API clients work.
+All endpoints use [DPoP authentication](../../getting-started/authentication.md#authenticating-users-for-procedures). See the [admin API client docs](../admin/api-clients.md) for managing clients through the admin API, and the [API Clients guide](../../guides/api-clients.md) for how API clients work.
 
 <Callout type="info">
 Only top-level API clients can call these endpoints. Third-party (child) clients receive `401 Unauthorized` or `403 Forbidden`.

@@ -23,7 +23,7 @@ For more background on how the app works, see the [ATProto Statusphere guide](ht
 
 ## Step 1: Add the record lexicon
 
-First, tell HappyView to start indexing Statusphere records. Since `xyz.statusphere.status` is [published on the atproto network](../guides/indexing/lexicons.md#network-lexicons), you can add it directly from the dashboard:
+First, tell HappyView to start indexing Statusphere records. Since `xyz.statusphere.status` is [published on the atproto network](../guides/lexicons.md#network-lexicons), you can add it directly from the dashboard:
 
 1. Go to **Lexicons > Add Lexicon > Network**
 2. Enter `xyz.statusphere.status`
@@ -34,7 +34,7 @@ First, tell HappyView to start indexing Statusphere records. Since `xyz.statusph
 HappyView now subscribes to `xyz.statusphere.status` via Jetstream and kicks off a backfill job to index historical records.
 
 <Callout type="idea">
-You can also add lexicons via the [admin API](../reference/admin/lexicons.md). This is useful for automation or CI/CD workflows:
+You can also add lexicons via the [admin API](../api-reference/admin/lexicons.md). This is useful for automation or CI/CD workflows:
 
 ```sh
 curl -X POST http://127.0.0.1:3000/admin/lexicons \
@@ -75,7 +75,7 @@ Once the backfill starts, you should see records appearing in the dashboard:
 
 ## Step 3: Create an API client
 
-Before you can call any XRPC endpoint, you need an [API client](../guides/features/api-clients.md). The client key identifies your application to HappyView and is required on every request.
+Before you can call any XRPC endpoint, you need an [API client](../guides/api-clients.md). The client key identifies your application to HappyView and is required on every request.
 
 1. Go to **Settings > API Clients > New client**
 2. Set the **Name** to something like "Statusphere Dev"
@@ -106,7 +106,7 @@ Now add a query endpoint to read the indexed data:
 }
 ```
 
-3. A [Lua script](../guides/scripting.md) editor appears automatically. Replace the default script with:
+3. A [Lua script](../guides/lua-scripting.md) editor appears automatically. Replace the default script with:
 
 ```lua
 collection = "xyz.statusphere.status"
@@ -241,14 +241,14 @@ With three lexicons and a few lines of Lua, you have a complete Statusphere AppV
 - **A query endpoint** (`xyz.statusphere.listStatuses`) with filtering, pagination, and single-record lookups
 - **A write endpoint** (`xyz.statusphere.setStatus`) that creates records on the user's PDS and indexes them locally
 
-Everything was done through the dashboard — no server restarts, no config files, no deploys. For automation and CI/CD, the same operations are available via the [admin API](../reference/admin/admin-api.md).
+Everything was done through the dashboard — no server restarts, no config files, no deploys. For automation and CI/CD, the same operations are available via the [admin API](../api-reference/admin/admin-api.md).
 
 ## Next steps
 
-- [API Clients](../guides/features/api-clients.md): Public vs. confidential clients, DPoP authentication, and rate limiting
-- [Lua Scripting](../guides/scripting.md): Explore the full Record and database APIs to build more complex queries
-- [Lexicons](../guides/indexing/lexicons.md): Learn about network lexicons, the backfill flag, and record collections
-- [XRPC API](../reference/xrpc-api.md): Understand how the generated endpoints behave
-- [Admin API](../reference/admin/admin-api.md): Automate lexicon management via the API
+- [API Clients](../guides/api-clients.md): Public vs. confidential clients, DPoP authentication, and rate limiting
+- [Lua Scripting](../guides/lua-scripting.md): Explore the full Record and database APIs to build more complex queries
+- [Lexicons](../guides/lexicons.md): Learn about network lexicons, the backfill flag, and record collections
+- [XRPC API](../api-reference/xrpc-api.md): Understand how the generated endpoints behave
+- [Admin API](../api-reference/admin/admin-api.md): Automate lexicon management via the API
 - [Statusphere example app](https://github.com/bluesky-social/statusphere-example-app): See the full Statusphere frontend
 - [ATProto Statusphere guide](https://atproto.com/guides/applications): How the app works at the protocol level

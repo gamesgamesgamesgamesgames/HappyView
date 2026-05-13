@@ -2,7 +2,7 @@
 title: "Labelers"
 ---
 
-Manage external labeler subscriptions. See the [Labelers guide](../../guides/features/labelers.md) for background.
+Manage external labeler subscriptions. See the [Labelers guide](../../guides/labelers.md) for background.
 
 ```sh
 # All examples assume $TOKEN is an API key (hv_...)

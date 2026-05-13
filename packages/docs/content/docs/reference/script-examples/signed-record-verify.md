@@ -29,7 +29,7 @@ end
 ## How it works
 
 1. Fetch the record by AT URI.
-2. If a signature is present, rebuild the same field table that was signed and verify it with [`atproto.verify_signature()`](../../reference/lua/atproto-api.md#atprotoverify_signature).
+2. If a signature is present, rebuild the same field table that was signed and verify it with [`atproto.verify_signature()`](../../api-reference/lua/atproto-api.md#atprotoverify_signature).
 3. Return `verified = true` if the signature is valid, `false` if it's missing, invalid, or the signer isn't configured.
 
 ## Usage
@@ -53,4 +53,4 @@ curl "http://127.0.0.1:3000/xrpc/xyz.example.getPost?uri=at://did:plc:abc/xyz.ex
 
 Pair this with the [Signed Record](signed-record.md) procedure to create a write-then-verify flow. The query re-derives the CID from the same fields that were originally signed, so any tampering between write and read is caught.
 
-See [Attestation Signing](../features/attestation-signing.md) for setup and configuration.
+See [Attestation Signing](../../guides/attestation-signing.md) for setup and configuration.

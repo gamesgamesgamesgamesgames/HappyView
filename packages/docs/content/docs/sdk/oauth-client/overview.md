@@ -4,7 +4,7 @@ title: "OAuth Client"
 
 The core OAuth client handles DPoP key provisioning, session registration, and session restoration against a HappyView instance. It's platform-agnostic — you provide a `CryptoAdapter` and optional `StorageAdapter` for your environment.
 
-If you're building a browser app, use the [Browser Client](./oauth-client-browser.md) instead. It wraps this package with Web Crypto, localStorage, and a complete OAuth redirect flow.
+If you're building a browser app, use the [Browser Client](../oauth-client-browser/overview.md) instead. It wraps this package with Web Crypto, localStorage, and a complete OAuth redirect flow.
 
 ## Installation
 
@@ -26,11 +26,11 @@ const client = new HappyViewOAuthClient({
 });
 ```
 
-The `clientSecret` parameter makes this a **confidential client**. Omit it for public clients (browser apps), which use PKCE instead. See [Authentication — API clients](../getting-started/authentication.md#api-clients-confidential-vs-public) for details.
+The `clientSecret` parameter makes this a **confidential client**. Omit it for public clients (browser apps), which use PKCE instead. See [Authentication — API clients](../../getting-started/authentication.md#api-clients-confidential-vs-public) for details.
 
 ## DPoP key provisioning
 
-Request a DPoP keypair from the HappyView instance. This is the first step of the [DPoP key provisioning flow](../getting-started/authentication.md#dpop-key-provisioning-for-third-party-apps).
+Request a DPoP keypair from the HappyView instance. This is the first step of the [DPoP key provisioning flow](../../getting-started/authentication.md#dpop-key-provisioning-for-third-party-apps).
 
 ```typescript
 const { provisionId, dpopKey, pkceVerifier } =

@@ -2,13 +2,13 @@
 title: "Overview"
 ---
 
-The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require authentication from a DID that exists in the `users` table, with the appropriate [permissions](../../guides/admin/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../../getting-started/dashboard.md).
+The admin API lets you manage lexicons, monitor records, run backfill jobs, and control user access. All endpoints live under `/admin` and require authentication from a DID that exists in the `users` table, with the appropriate [permissions](../../guides/permissions.md) for the endpoint being called. You can also manage all of this through the [web dashboard](../../getting-started/dashboard.md).
 
 ## Auth
 
 The admin API supports two authentication methods:
 
-1. **API keys** — read/write tokens starting with `hv_`, passed as `Authorization: Bearer hv_...`. See the [API Keys guide](../../guides/admin/api-keys.md) for details.
+1. **API keys** — read/write tokens starting with `hv_`, passed as `Authorization: Bearer hv_...`. See the [API Keys guide](../../guides/api-keys.md) for details.
 2. **Service auth JWT** — atproto inter-service authentication via signed JWTs.
 
 In all cases the resolved DID is checked against the `users` table, and the user's permissions are loaded to authorize the request.
@@ -58,7 +58,7 @@ AUTH="Authorization: Bearer $TOKEN"
 
 ## Permissions
 
-Each admin API endpoint requires a specific permission. See the [Permissions guide](../../guides/admin/permissions.md) for the full list of permissions and templates.
+Each admin API endpoint requires a specific permission. See the [Permissions guide](../../guides/permissions.md) for the full list of permissions and templates.
 
 | Endpoint                                 | Required Permission        |
 | ---------------------------------------- | -------------------------- |
