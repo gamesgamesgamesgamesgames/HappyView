@@ -8,6 +8,7 @@ import {
 } from 'fumadocs-ui/layouts/docs/page';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { Mermaid } from '@/components/mermaid';
+import { VaporwaveGrid } from '@/components/vaporwave-grid';
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -25,6 +26,7 @@ export default async function Page(props: {
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
         <Mdx components={{ ...defaultMdxComponents, Mermaid }} />
+        <VaporwaveGrid />
       </DocsBody>
     </DocsPage>
   );

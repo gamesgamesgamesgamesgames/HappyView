@@ -5,6 +5,7 @@
   "exports": {
     "./tokens.css": "./src/tokens.css",
     "./globals.css": "./src/globals.css",
+    "./vaporwave.css": "./src/vaporwave.css",
     "./fonts": "./src/fonts.ts"
   }
 }

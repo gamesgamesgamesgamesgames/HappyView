@@ -1,23 +1,35 @@
 :root {
-  --color-bg: 252 252 252;
-  --color-bg-subtle: 247 247 248;
+  --color-bg: 240 244 248;
+  --color-bg-subtle: 230 236 244;
   --color-surface: 255 255 255;
-  --color-border: 230 230 233;
-  --color-border-strong: 210 210 215;
+  --color-border: 200 212 228;
+  --color-border-strong: 168 184 208;
 
-  --color-fg: 10 10 11;
-  --color-fg-muted: 90 90 100;
-  --color-fg-subtle: 140 140 150;
+  --color-fg: 14 21 48;
+  --color-fg-muted: 80 96 128;
+  --color-fg-subtle: 136 152 176;
 
-  --color-accent: 10 10 11;
+  --color-accent: 0 153 187;
   --color-accent-fg: 255 255 255;
-  --color-accent-subtle: 240 240 244;
+  --color-accent-subtle: 228 238 248;
 
-  --color-code-bg: 247 247 248;
-  --color-code-fg: 10 10 11;
+  --color-code-bg: 248 240 255;
+  --color-code-fg: 14 21 48;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-aqua: 0 153 187;
+  --color-magenta: 217 32 110;
+  --color-sun: 204 153 0;
+  --color-mint: 0 179 107;
+
+  --syntax-keyword: 217 32 110;
+  --syntax-string: 0 128 90;
+  --syntax-type: 0 153 187;
+  --syntax-function: 204 153 0;
+  --syntax-comment: 136 152 176;
+  --syntax-fg: 14 21 48;
+
+  --font-sans: var(--font-fraunces), Georgia, serif;
+  --font-mono: var(--font-space-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -26,20 +38,32 @@
 }
 
 .dark {
-  --color-bg: 10 10 11;
-  --color-bg-subtle: 16 16 18;
-  --color-surface: 20 20 23;
-  --color-border: 32 32 36;
-  --color-border-strong: 48 48 54;
+  --color-bg: 8 8 24;
+  --color-bg-subtle: 15 18 40;
+  --color-surface: 20 20 50;
+  --color-border: 30 30 64;
+  --color-border-strong: 42 42 85;
 
-  --color-fg: 250 250 250;
-  --color-fg-muted: 161 161 170;
-  --color-fg-subtle: 115 115 122;
+  --color-fg: 232 240 255;
+  --color-fg-muted: 128 144 176;
+  --color-fg-subtle: 80 96 128;
 
-  --color-accent: 250 250 250;
-  --color-accent-fg: 10 10 11;
-  --color-accent-subtle: 28 28 32;
+  --color-accent: 0 212 255;
+  --color-accent-fg: 8 8 24;
+  --color-accent-subtle: 12 20 45;
 
-  --color-code-bg: 14 14 17;
-  --color-code-fg: 236 236 240;
+  --color-code-bg: 6 6 15;
+  --color-code-fg: 232 240 255;
+
+  --color-aqua: 0 212 255;
+  --color-magenta: 255 51 144;
+  --color-sun: 255 204 0;
+  --color-mint: 0 255 159;
+
+  --syntax-keyword: 255 51 144;
+  --syntax-string: 0 255 159;
+  --syntax-type: 0 212 255;
+  --syntax-function: 255 204 0;
+  --syntax-comment: 80 96 128;
+  --syntax-fg: 232 240 255;
 }

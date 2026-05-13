@@ -23,15 +23,24 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${fontVariables} dark`} suppressHydrationWarning>
+    <html lang="en" className={fontVariables} suppressHydrationWarning>
       <body>
-        <RootProvider>
+        <RootProvider theme={{ defaultTheme: 'dark' }}>
           <DocsLayout
             tree={source.getPageTree()}
             nav={{
               title: (
                 <span className="flex items-center gap-2 text-sm tracking-tight">
-                  <img src="/img/logo.dark.png" alt="HappyView" className="h-14" />
+                  <img
+                    src="/img/logo.dark.png"
+                    alt="HappyView"
+                    className="h-14 hidden dark:block"
+                  />
+                  <img
+                    src="/img/logo.light.png"
+                    alt="HappyView"
+                    className="h-14 block dark:hidden"
+                  />
                 </span>
               ),
             }}

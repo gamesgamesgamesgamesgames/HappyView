@@ -1,15 +1,17 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Space_Mono } from "next/font/google";
 
-export const geistSans = Geist({
+export const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-geist-sans",
+  variable: "--font-fraunces",
   display: "swap",
+  axes: ["WONK", "SOFT"],
 });
 
-export const geistMono = Geist_Mono({
+export const spaceMono = Space_Mono({
   subsets: ["latin"],
-  variable: "--font-geist-mono",
+  variable: "--font-space-mono",
   display: "swap",
+  weight: ["400", "700"],
 });
 
-export const fontVariables = `${geistSans.variable} ${geistMono.variable}`;
+export const fontVariables = `${fraunces.variable} ${spaceMono.variable}`;
