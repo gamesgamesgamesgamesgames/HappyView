@@ -17,8 +17,8 @@ export function SidebarFooter() {
   }
 
   return (
-    <div className="flex items-center">
-      <ThemeSwitch className="p-0" />
+    <div className="flex items-center gap-2">
+      <ThemeSwitch />
       <button
         type="button"
         onClick={cycleMotion}
