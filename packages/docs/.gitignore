@@ -5,4 +5,4 @@
 
 # Generated changelogs (built from GitHub releases)
 content/docs/reference/changelog.md
-content/docs/sdk/changelog-*.md
+content/docs/sdk/**/changelog.md
