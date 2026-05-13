@@ -3,6 +3,7 @@ import { RootProvider } from 'fumadocs-ui/provider/next';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import { source } from '@/lib/source';
 import { fontVariables } from '@/lib/fonts';
+import { ReducedMotionProvider } from '@/lib/reduced-motion';
 import { SidebarFooter } from '@/components/sidebar-footer';
 import type { ReactNode } from 'react';
 
@@ -26,7 +27,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className={fontVariables} suppressHydrationWarning>
       <body>
         <RootProvider theme={{ defaultTheme: 'dark' }}>
-          <DocsLayout
+          <ReducedMotionProvider>
+            <DocsLayout
             tree={source.getPageTree()}
             nav={{
               title: (
@@ -62,7 +64,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             ]}
           >
             {children}
-          </DocsLayout>
+            </DocsLayout>
+          </ReducedMotionProvider>
         </RootProvider>
       </body>
     </html>

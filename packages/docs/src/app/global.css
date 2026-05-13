@@ -5,6 +5,7 @@
 @import "@happyview/design-system/vaporwave.css";
 
 @source "../../node_modules/fumadocs-ui/dist/**/*.js";
+@source "../../node_modules/fumadocs-ui/css/**/*.css";
 
 /* --- Layout --- */
 

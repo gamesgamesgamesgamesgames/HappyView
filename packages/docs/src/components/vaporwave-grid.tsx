@@ -1,18 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useReducedMotion } from '@/lib/reduced-motion';
 
 export function VaporwaveGrid() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mq.matches);
-    const onChange = () => setReducedMotion(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  const logoRef = useRef<HTMLImageElement | null>(null);
+  const { reducedMotion } = useReducedMotion();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -21,8 +15,11 @@ export function VaporwaveGrid() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const logo = new Image();
-    logo.src = '/img/face.webp';
+    if (!logoRef.current) {
+      logoRef.current = new Image();
+      logoRef.current.src = '/img/face.webp';
+    }
+    const logo = logoRef.current;
 
     let animationId: number;
     let w = 0;
@@ -39,8 +36,6 @@ export function VaporwaveGrid() {
     }
 
     resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
 
     function render(opts: {
       elapsed: number;
@@ -219,16 +214,22 @@ export function VaporwaveGrid() {
     }
 
     if (reducedMotion) {
-      function drawStatic() {
-        if (logo.complete && logo.naturalWidth > 0) {
-          render({ elapsed: 0, faceReveal: 1, scrollOffset: 0, glitch: false });
-        } else {
-          logo.addEventListener('load', drawStatic, { once: true });
-        }
-      }
+      const drawStatic = () => render({ elapsed: 0, faceReveal: 1, scrollOffset: 0, glitch: false });
+      const observer = new ResizeObserver(() => { resize(); drawStatic(); });
+      observer.observe(canvas);
       drawStatic();
+      if (!logo.complete || logo.naturalWidth === 0) {
+        logo.addEventListener('load', drawStatic, { once: true });
+        return () => {
+          logo.removeEventListener('load', drawStatic);
+          observer.disconnect();
+        };
+      }
       return () => observer.disconnect();
     }
+
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
 
     function draw(time: number) {
       const elapsed = time / 1000;
