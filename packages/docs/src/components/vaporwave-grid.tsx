@@ -16,12 +16,16 @@ export function VaporwaveGrid() {
     logo.src = '/img/face.webp';
 
     let animationId: number;
+    let w = 0;
+    let h = 0;
 
     function resize() {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas!.getBoundingClientRect();
-      canvas!.width = rect.width * dpr;
-      canvas!.height = rect.height * dpr;
+      w = rect.width;
+      h = rect.height;
+      canvas!.width = w * dpr;
+      canvas!.height = h * dpr;
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
@@ -31,9 +35,6 @@ export function VaporwaveGrid() {
 
     function draw(time: number) {
       const elapsed = time / 1000;
-      const rect = canvas!.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
 
       const scrollY = window.scrollY;
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
