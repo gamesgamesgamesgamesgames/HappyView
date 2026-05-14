@@ -19,6 +19,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: dev
+          persist-credentials: false
 
       - name: Merge main into dev
         env:
