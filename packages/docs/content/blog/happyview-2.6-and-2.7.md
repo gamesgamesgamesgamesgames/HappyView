@@ -1,7 +1,7 @@
 ---
 title: "HappyView v2.6 + v2.7"
 description: "Base path support, a Node.js SDK, security hardening, and a pile of quality-of-life fixes."
-date: 2026-05-14
+date: 2026-05-13
 author:
   name: "Trezy"
   avatar: "/authors/trezy.webp"
@@ -9,7 +9,7 @@ tags:
   - announcements
 ---
 
-Two releases in two days. v2.6 landed on May 12th and v2.7 followed the next day. Neither one has a single marquee feature like [Permissioned Spaces](/blog/happyview-2.5), but together they make the whole system noticeably more solid.
+Two releases in two days. v2.6, followed closely by v2.7. Neither one has a single marquee feature like [Permissioned Spaces](/blog/happyview-2.5), but together they make the whole system noticeably more solid.
 
 ## Base path support
 
