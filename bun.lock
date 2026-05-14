@@ -18,6 +18,7 @@
       "dependencies": {
         "@happyview/design-system": "workspace:*",
         "@tailwindcss/postcss": "^4.2.0",
+        "@types/mdast": "^4.0.4",
         "@types/mdx": "^2.0.13",
         "fumadocs-core": "^16.8.10",
         "fumadocs-mdx": "^15.0.4",
@@ -29,6 +30,7 @@
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
         "tailwindcss": "^4.2.0",
+        "unist-util-visit": "^5.1.0",
         "zod": "^4.4.3",
       },
       "devDependencies": {

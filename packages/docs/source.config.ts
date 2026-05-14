@@ -1,5 +1,6 @@
 import { defineDocs, defineConfig, frontmatterSchema } from 'fumadocs-mdx/config';
 import { remarkMdxMermaid, remarkCodeTab } from 'fumadocs-core/mdx-plugins';
+import { remarkStripMdExtension } from './src/lib/remark-strip-md-extension';
 import { z } from 'zod';
 
 const neonLagoonDark = {
@@ -124,7 +125,7 @@ export const blog = defineDocs({
 
 export default defineConfig({
   mdxOptions: {
-    remarkPlugins: [remarkMdxMermaid, remarkCodeTab],
+    remarkPlugins: [remarkStripMdExtension, remarkMdxMermaid, remarkCodeTab],
     rehypeCodeOptions: {
       themes: {
         light: neonLagoonLight,
