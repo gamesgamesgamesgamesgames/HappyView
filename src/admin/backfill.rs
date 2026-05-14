@@ -17,6 +17,30 @@ use crate::event_log::{EventLog, Severity, log_event};
 use crate::profile;
 use crate::record_handler::{self, RecordEvent};
 
+/// Parse rate-limit sleep duration from response headers.
+/// Checks `RateLimit-Reset` (Unix timestamp, used by XRPC servers) first,
+/// then `retry-after` (seconds), defaulting to 5s.
+fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> u64 {
+    if let Some(reset) = headers
+        .get("ratelimit-reset")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<i64>().ok())
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let wait = (reset - now).max(1) as u64;
+        return wait.min(120);
+    }
+
+    headers
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(5)
+}
+
 use super::auth::UserAuth;
 use super::permissions::Permission;
 use super::types::{BackfillJob, CreateBackfillBody};
@@ -186,12 +210,23 @@ async fn discover_repos_from_relay(
             url.push_str(&format!("&cursor={c}"));
         }
 
-        let resp = state
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("relay request failed: {e}"))?;
+        let resp = loop {
+            let r = state
+                .http
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| format!("relay request failed: {e}"))?;
+
+            if r.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let wait = parse_retry_after(r.headers());
+                tracing::warn!(collection, wait, "rate limited by relay, sleeping");
+                tokio::time::sleep(tokio::time::Duration::from_secs(wait)).await;
+                continue;
+            }
+
+            break r;
+        };
 
         if !resp.status().is_success() {
             return Err(format!("relay returned {}", resp.status()));
@@ -434,21 +469,10 @@ async fn fetch_records_from_pds(
             .await
             .map_err(|e| format!("PDS request failed: {e}"))?;
 
-        // Handle rate limiting
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            let retry_after = resp
-                .headers()
-                .get("retry-after")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(5);
-            tracing::warn!(
-                did,
-                collection,
-                retry_after,
-                "rate limited by PDS, sleeping"
-            );
-            tokio::time::sleep(tokio::time::Duration::from_secs(retry_after)).await;
+            let wait = parse_retry_after(resp.headers());
+            tracing::warn!(did, collection, wait, "rate limited by PDS, sleeping");
+            tokio::time::sleep(tokio::time::Duration::from_secs(wait)).await;
             continue;
         }
 
