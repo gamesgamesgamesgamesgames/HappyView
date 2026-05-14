@@ -560,7 +560,7 @@ export default function DeadLettersPage() {
             if (!open) setViewDetail(null);
           }}
         >
-          <SheetContent className="sm:max-w-xl overflow-hidden flex flex-col">
+          <SheetContent className="overflow-hidden flex flex-col">
             {viewDetail && (
               <>
                 <SheetHeader>

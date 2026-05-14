@@ -10,7 +10,7 @@ use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
 
 use super::auth::UserAuth;
-use super::permissions::Permission;
+use super::permissions::{self, Permission};
 use super::types::{CreateUserBody, TransferSuperBody, UpdatePermissionsBody, UserSummary};
 
 /// POST /admin/users — create a new user with template or explicit permissions.
@@ -479,4 +479,54 @@ pub(super) async fn transfer_super(
     .await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// GET /admin/permissions — list all available permissions and templates.
+pub(super) async fn list_permissions(
+    State(state): State<AppState>,
+    auth: UserAuth,
+) -> Result<Json<Value>, AppError> {
+    auth.require(Permission::UsersRead).await?;
+
+    let spaces_enabled = crate::feature_flags::is_enabled(
+        &state.db,
+        crate::feature_flags::FeatureFlag::SPACES_ENABLED,
+        state.db_backend,
+    )
+    .await;
+
+    let all_permissions: Vec<Value> = permissions::catalog()
+        .into_iter()
+        .filter(|p| spaces_enabled || p.category != "Spaces")
+        .map(|p| {
+            serde_json::json!({
+                "key": p.key,
+                "name": p.name,
+                "description": p.description,
+                "category": p.category,
+            })
+        })
+        .collect();
+
+    let templates: Vec<Value> = permissions::Template::ALL
+        .iter()
+        .map(|t| {
+            let info = t.info();
+            let perms: Vec<&str> = info
+                .permissions
+                .into_iter()
+                .filter(|p| spaces_enabled || !p.starts_with("spaces:"))
+                .collect();
+            serde_json::json!({
+                "key": info.key,
+                "label": info.label,
+                "permissions": perms,
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({
+        "permissions": all_permissions,
+        "templates": templates,
+    })))
 }

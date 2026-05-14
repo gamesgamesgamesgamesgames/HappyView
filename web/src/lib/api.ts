@@ -213,6 +213,29 @@ export function transferSuper(body: { target_user_id: string }) {
   });
 }
 
+// Permissions catalog
+export type PermissionEntry = {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+};
+
+export type PermissionTemplate = {
+  key: string;
+  label: string;
+  permissions: string[];
+};
+
+export type PermissionsCatalog = {
+  permissions: PermissionEntry[];
+  templates: PermissionTemplate[];
+};
+
+export function getPermissions() {
+  return apiFetch<PermissionsCatalog>("/admin/permissions");
+}
+
 // API Keys
 export function getApiKeys() {
   return apiFetch<ApiKeySummary[]>("/admin/api-keys");

@@ -442,7 +442,7 @@ export default function RecordsPage() {
             if (!open) setViewRecord(null);
           }}
         >
-          <SheetContent className="sm:max-w-xl overflow-hidden flex flex-col">
+          <SheetContent className="overflow-hidden flex flex-col">
             {viewRecord && (
               <>
                 <SheetHeader>
