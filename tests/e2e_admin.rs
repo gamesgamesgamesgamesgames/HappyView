@@ -561,6 +561,137 @@ async fn backfill_list_jobs() {
     assert_eq!(json.as_array().unwrap().len(), 1);
 }
 
+#[tokio::test]
+#[serial]
+async fn backfill_cancel_running_job() {
+    common::require_db!();
+    let app = TestApp::new().await;
+    let backend = app.state.db_backend;
+
+    // Insert a running job directly so we don't need a real relay.
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "INSERT INTO backfill_jobs (id, status, stage, started_at, created_at) VALUES (?, 'running', 'discovering_repos', ?, ?)",
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(&job_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_post(
+            &format!("/admin/backfill/{job_id}/cancel"),
+            app.admin_cookie(),
+            &json!({}),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = json_body(resp).await;
+    assert_eq!(json["id"], job_id);
+    assert_eq!(json["status"], "cancelling");
+}
+
+#[tokio::test]
+#[serial]
+async fn backfill_cancel_already_cancelling_is_idempotent() {
+    common::require_db!();
+    let app = TestApp::new().await;
+    let backend = app.state.db_backend;
+
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "INSERT INTO backfill_jobs (id, status, stage, started_at, created_at) VALUES (?, 'cancelling', 'fetching_records', ?, ?)",
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(&job_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_post(
+            &format!("/admin/backfill/{job_id}/cancel"),
+            app.admin_cookie(),
+            &json!({}),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = json_body(resp).await;
+    assert_eq!(json["status"], "cancelling");
+}
+
+#[tokio::test]
+#[serial]
+async fn backfill_cancel_completed_returns_400() {
+    common::require_db!();
+    let app = TestApp::new().await;
+    let backend = app.state.db_backend;
+
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let now = now_rfc3339();
+    let sql = adapt_sql(
+        "INSERT INTO backfill_jobs (id, status, stage, completed_at, created_at) VALUES (?, 'completed', 'completed', ?, ?)",
+        backend,
+    );
+    sqlx::query(&sql)
+        .bind(&job_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_post(
+            &format!("/admin/backfill/{job_id}/cancel"),
+            app.admin_cookie(),
+            &json!({}),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial]
+async fn backfill_cancel_not_found_returns_404() {
+    common::require_db!();
+    let app = TestApp::new().await;
+
+    let resp = app
+        .router
+        .clone()
+        .oneshot(admin_post(
+            "/admin/backfill/nonexistent-id/cancel",
+            app.admin_cookie(),
+            &json!({}),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
 // ---------------------------------------------------------------------------
 // Admin management
 // ---------------------------------------------------------------------------

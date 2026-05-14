@@ -14,32 +14,9 @@ use crate::AppState;
 use crate::db::{adapt_sql, now_rfc3339};
 use crate::error::AppError;
 use crate::event_log::{EventLog, Severity, log_event};
+use crate::http_retry::parse_retry_after;
 use crate::profile;
 use crate::record_handler::{self, RecordEvent};
-
-/// Parse rate-limit sleep duration from response headers.
-/// Checks `RateLimit-Reset` (Unix timestamp, used by XRPC servers) first,
-/// then `retry-after` (seconds), defaulting to 5s.
-fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> u64 {
-    if let Some(reset) = headers
-        .get("ratelimit-reset")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<i64>().ok())
-    {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let wait = (reset - now).max(1) as u64;
-        return wait.min(120);
-    }
-
-    headers
-        .get("retry-after")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(5)
-}
 
 use super::auth::UserAuth;
 use super::permissions::Permission;
@@ -249,6 +226,7 @@ async fn discover_repos_from_relay(
 ) -> Result<(), String> {
     let base = state.config.relay_url.trim_end_matches('/');
     let mut cursor: Option<String> = None;
+    let mut running_total: i32 = count_repos(state, job_id).await;
 
     loop {
         let mut url = format!(
@@ -287,20 +265,34 @@ async fn discover_repos_from_relay(
 
         let page_count = body.repos.len();
 
-        for repo in &body.repos {
-            let sql = adapt_sql(
-                "INSERT INTO backfill_repos (job_id, did) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                state.db_backend,
+        if !body.repos.is_empty() {
+            let base_sql = "INSERT INTO backfill_repos (job_id, did) VALUES ";
+            let placeholders: Vec<String> = body
+                .repos
+                .iter()
+                .enumerate()
+                .map(|(i, _)| {
+                    if state.db_backend == crate::db::DatabaseBackend::Postgres {
+                        format!("(${}, ${})", i * 2 + 1, i * 2 + 2)
+                    } else {
+                        "(?, ?)".to_string()
+                    }
+                })
+                .collect();
+            let sql = format!(
+                "{base_sql}{} ON CONFLICT DO NOTHING",
+                placeholders.join(", ")
             );
-            let _ = sqlx::query(&sql)
-                .bind(job_id)
-                .bind(&repo.did)
-                .execute(&state.db)
-                .await;
+
+            let mut query = sqlx::query(&sql);
+            for repo in &body.repos {
+                query = query.bind(job_id).bind(&repo.did);
+            }
+            let _ = query.execute(&state.db).await;
         }
 
-        let total = count_repos(state, job_id).await;
-        update_job_counter(state, job_id, "total_repos", total).await;
+        running_total += page_count as i32;
+        update_job_counter(state, job_id, "total_repos", running_total).await;
 
         if is_cancelled(state, job_id).await {
             return Ok(());
@@ -413,8 +405,22 @@ async fn run_fetching_phase(state: &AppState, job_id: &str, collections: &[Strin
     // Reset processed_repos for the fetching phase
     update_job_counter(state, job_id, "processed_repos", already_completed).await;
 
+    // Seed total_records from DB so a resumed job doesn't lose its prior count
+    let existing_records: i32 = {
+        let sql = adapt_sql(
+            "SELECT total_records FROM backfill_jobs WHERE id = ?",
+            state.db_backend,
+        );
+        sqlx::query_as::<_, (Option<i32>,)>(&sql)
+            .bind(job_id)
+            .fetch_one(&state.db)
+            .await
+            .map(|(c,)| c.unwrap_or(0))
+            .unwrap_or(0)
+    };
+
     let processed_repos = Arc::new(AtomicI32::new(already_completed));
-    let total_records = Arc::new(AtomicI32::new(0));
+    let total_records = Arc::new(AtomicI32::new(existing_records));
     let cancelled = Arc::new(AtomicBool::new(false));
     let state = Arc::new(state.clone());
     let collections = Arc::new(collections.to_vec());
