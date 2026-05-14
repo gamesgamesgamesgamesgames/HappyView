@@ -125,7 +125,7 @@ async fn cleanup_repos(state: &AppState, job_id: &str) {
 async fn fail_job(state: &AppState, job_id: &str, error: &str) {
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "UPDATE backfill_jobs SET status = 'failed', stage = 'failed', completed_at = ?, error = ? WHERE id = ?",
+        "UPDATE backfill_jobs SET status = 'failed', completed_at = ?, error = ? WHERE id = ?",
         state.db_backend,
     );
     let _ = sqlx::query(&sql)
@@ -162,7 +162,7 @@ async fn request_cancel(state: &AppState, job_id: &str) {
 async fn finalise_cancel(state: &AppState, job_id: &str) {
     let now = now_rfc3339();
     let sql = adapt_sql(
-        "UPDATE backfill_jobs SET status = 'cancelled', stage = 'cancelled', completed_at = ?, error = 'cancelled by user' WHERE id = ?",
+        "UPDATE backfill_jobs SET status = 'cancelled', completed_at = ?, error = 'cancelled by user' WHERE id = ?",
         state.db_backend,
     );
     let _ = sqlx::query(&sql)
@@ -370,7 +370,7 @@ async fn run_resolution_phase(state: &AppState, job_id: &str) {
 // Phase 3: Fetch records from PDS instances
 // ---------------------------------------------------------------------------
 
-async fn run_fetching_phase(state: &AppState, job_id: &str, collections: &[String]) {
+async fn run_fetching_phase(state: &AppState, job_id: &str, collections: &[String]) -> (i32, i32) {
     set_stage(state, job_id, "fetching_records").await;
 
     // Load pending repos grouped by PDS
@@ -400,6 +400,9 @@ async fn run_fetching_phase(state: &AppState, job_id: &str, collections: &[Strin
         .await
         .map(|(c,)| c)
         .unwrap_or(0);
+
+    // Reset processed_repos for the fetching phase
+    update_job_counter(state, job_id, "processed_repos", already_completed).await;
 
     let processed_repos = Arc::new(AtomicI32::new(already_completed));
     let total_records = Arc::new(AtomicI32::new(0));
@@ -497,6 +500,23 @@ async fn run_fetching_phase(state: &AppState, job_id: &str, collections: &[Strin
             }
         })
         .await;
+
+    let final_repos = processed_repos.load(Ordering::Relaxed);
+    let final_records = total_records.load(Ordering::Relaxed);
+
+    // Persist final counts so they're accurate regardless of batch size
+    let sql = adapt_sql(
+        "UPDATE backfill_jobs SET processed_repos = ?, total_records = ? WHERE id = ?",
+        state.db_backend,
+    );
+    let _ = sqlx::query(&sql)
+        .bind(final_repos)
+        .bind(final_records)
+        .bind(job_id)
+        .execute(&state.db)
+        .await;
+
+    (final_repos, final_records)
 }
 
 /// Fetch all records for a given DID and collection from a PDS via
@@ -680,35 +700,13 @@ async fn run_backfill_job(state: AppState, job_id: String) {
         }
     }
 
-    run_fetching_phase(&state, &job_id, &collections).await;
+    let (final_processed, final_records) = run_fetching_phase(&state, &job_id, &collections).await;
 
     if is_cancelled(&state, &job_id).await {
         tracing::info!(job_id, "backfill job cancelled");
+        finalise_cancel(&state, &job_id).await;
         return;
     }
-
-    // Read final counters from backfill_repos before cleanup
-    let sql = adapt_sql(
-        "SELECT COUNT(*) FROM backfill_repos WHERE job_id = ? AND status = 'completed'",
-        state.db_backend,
-    );
-    let final_processed: i32 = sqlx::query_as::<_, (i32,)>(&sql)
-        .bind(&job_id)
-        .fetch_one(&state.db)
-        .await
-        .map(|(c,)| c)
-        .unwrap_or(0);
-
-    let sql = adapt_sql(
-        "SELECT total_records FROM backfill_jobs WHERE id = ?",
-        state.db_backend,
-    );
-    let final_records: i32 = sqlx::query_as::<_, (i32,)>(&sql)
-        .bind(&job_id)
-        .fetch_one(&state.db)
-        .await
-        .map(|(c,)| c)
-        .unwrap_or(0);
 
     complete_job(&state, &job_id, final_processed, final_records, None).await;
 

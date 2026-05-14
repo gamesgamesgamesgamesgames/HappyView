@@ -50,30 +50,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const STAGES = [
-  "pending",
+const PROGRESS_PHASES = [
   "discovering_repos",
   "resolving_pds",
   "fetching_records",
-  "completed",
-  "failed",
-  "cancelled",
-  "cancelling",
 ] as const;
 
-const STAGE_LABELS: Record<string, string> = {
-  pending: "Pending",
-  discovering_repos: "Discovering repos",
-  resolving_pds: "Resolving PDS",
-  fetching_records: "Fetching records",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
-  cancelling: "Cancelling",
-};
-
-function stageBadge(stage: string) {
-  switch (stage) {
+function statusBadge(job: BackfillJob) {
+  switch (job.status) {
     case "completed":
       return (
         <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 border-emerald-500/20">
@@ -94,20 +78,22 @@ function stageBadge(stage: string) {
           cancelling
         </Badge>
       );
-    case "pending":
-      return <Badge variant="secondary">pending</Badge>;
-    default:
+    case "running":
       return (
         <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 hover:bg-blue-500/25 border-blue-500/20">
-          {STAGE_LABELS[stage] ?? stage}
+          {job.stage === "pending" ? "starting" : job.stage.replace(/_/g, " ")}
         </Badge>
       );
+    default:
+      return <Badge variant="secondary">{job.status}</Badge>;
   }
 }
 
-function stageIndex(stage: string): number {
-  const idx = STAGES.indexOf(stage as (typeof STAGES)[number]);
-  return idx === -1 ? 0 : idx;
+function phaseIndex(stage: string): number {
+  const idx = PROGRESS_PHASES.indexOf(
+    stage as (typeof PROGRESS_PHASES)[number],
+  );
+  return idx;
 }
 
 export default function BackfillPage() {
@@ -183,7 +169,7 @@ export default function BackfillPage() {
                   <TableCell className="font-mono text-sm">
                     {job.did ?? "All"}
                   </TableCell>
-                  <TableCell>{stageBadge(job.stage)}</TableCell>
+                  <TableCell>{statusBadge(job)}</TableCell>
                   <TableCell>
                     {job.started_at
                       ? new Date(job.started_at).toLocaleString()
@@ -229,8 +215,14 @@ function JobDetail({
   onCancel: () => Promise<void>;
 }) {
   const [cancelling, setCancelling] = useState(false);
-  const current = stageIndex(job.stage);
+  const current = phaseIndex(job.stage);
+  const allDone = job.status === "completed";
   const isActive = job.status === "running" || job.status === "cancelling";
+
+  function hasReached(phase: (typeof PROGRESS_PHASES)[number]): boolean {
+    if (allDone) return true;
+    return current >= phaseIndex(phase);
+  }
 
   async function handleCancel() {
     setCancelling(true);
@@ -300,17 +292,17 @@ function JobDetail({
           <div className="mt-1 rounded-md border divide-y">
             <ProgressRow
               label="Discovering repos"
-              active={job.stage === "discovering_repos"}
-              reached={current >= stageIndex("discovering_repos")}
+              active={isActive && job.stage === "discovering_repos"}
+              reached={hasReached("discovering_repos")}
               value={job.total_repos?.toLocaleString()}
               suffix="repos found"
             />
             <ProgressRow
               label="Resolving PDS"
-              active={job.stage === "resolving_pds"}
-              reached={current >= stageIndex("resolving_pds")}
+              active={isActive && job.stage === "resolving_pds"}
+              reached={hasReached("resolving_pds")}
               value={
-                current >= stageIndex("resolving_pds")
+                hasReached("resolving_pds")
                   ? `${job.processed_repos?.toLocaleString() ?? "0"} / ${job.total_repos?.toLocaleString() ?? "0"}`
                   : undefined
               }
@@ -318,15 +310,15 @@ function JobDetail({
             />
             <ProgressRow
               label="Fetching records"
-              active={job.stage === "fetching_records"}
-              reached={current >= stageIndex("fetching_records")}
+              active={isActive && job.stage === "fetching_records"}
+              reached={hasReached("fetching_records")}
               value={
-                current >= stageIndex("fetching_records")
+                hasReached("fetching_records")
                   ? `${job.processed_repos?.toLocaleString() ?? "0"} / ${job.total_repos?.toLocaleString() ?? "0"} repos`
                   : undefined
               }
               suffix={
-                current >= stageIndex("fetching_records")
+                hasReached("fetching_records")
                   ? `${job.total_records?.toLocaleString() ?? "0"} records`
                   : undefined
               }
