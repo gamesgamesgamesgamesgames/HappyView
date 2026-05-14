@@ -1,7 +1,7 @@
 ---
 title: "Releasing HappyView 2 Into the Wild"
 description: "One binary, no companion services, and a lot fewer moving parts."
-date: 2026-05-13
+date: 2026-04-24
 author:
   name: "Trezy"
   avatar: "/authors/trezy.webp"
