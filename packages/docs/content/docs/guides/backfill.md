@@ -13,17 +13,49 @@ See the [admin API](../api-reference/admin/backfill.md) for endpoint details.
 
 ## How it works
 
-1. **Determine target collections**: uses the specified collection, or all record lexicons with `backfill: true`
-2. **Discover DIDs**: HappyView calls the relay's `com.atproto.sync.listReposByCollection` to find repos that contain records for each target collection (paginated)
-3. **Resolve each PDS**: for each discovered DID, HappyView resolves the DID document via PLC to find the user's PDS endpoint
-4. **Fetch records**: HappyView calls `com.atproto.repo.listRecords` on each PDS for the target collection (paginated) and upserts each record into the local database
-5. **Track progress**: counters for `processed_repos` and `total_records` are updated as the job runs
+A backfill job runs through three sequential phases:
+
+1. **Discovering repos** — HappyView calls the relay's `com.atproto.sync.listReposByCollection` to find repos that contain records for each target collection. Discovered DIDs are stored in a tracking table so progress can be resumed.
+2. **Resolving PDS** — For each discovered DID, HappyView resolves the DID document (via PLC directory or `did:web`) to find the user's PDS endpoint.
+3. **Fetching records** — HappyView calls `com.atproto.repo.listRecords` on each PDS for the target collection(s), upserting each record into the local database. PDS endpoints are processed concurrently (up to 10 PDS hosts, 3 DIDs per host).
+
+Progress counters (`total_repos`, `processed_repos`, `total_records`) and the current `stage` are updated in real time. The dashboard's Backfill page shows live progress, and clicking a job opens a detail sheet with a stage-by-stage progress log.
+
+### Rate limiting
+
+All three phases handle HTTP 429 responses. HappyView reads the `RateLimit-Reset` header (a Unix timestamp, the AT Protocol convention) to determine how long to wait, falling back to the `retry-after` header, then defaulting to 5 seconds.
 
 ## Job lifecycle
 
-A backfill job moves through `pending → running → completed` (or `failed`). Unlike earlier versions of HappyView that relied on Tap, the job is only marked `completed` once every discovered repo has been fully processed — there is no separate downstream queue. Progress is visible in real time on the dashboard's Backfill page.
+A backfill job has both a `status` (overall state) and a `stage` (current phase):
 
-If a job fails midway, the `error` field contains the failure reason. Re-running the backfill resumes from scratch but is idempotent (records are upserted by URI).
+| Status       | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `running`    | Job is actively processing                           |
+| `cancelling` | Cancel requested, waiting for the worker to stop     |
+| `cancelled`  | Worker has stopped and cleaned up                    |
+| `completed`  | All repos processed successfully                     |
+| `failed`     | An error occurred                                    |
+
+The `stage` field tracks which phase the job is in: `pending`, `discovering_repos`, `resolving_pds`, `fetching_records`, `completed`, `failed`, or `cancelled`.
+
+## Cancelling a job
+
+Running jobs can be cancelled via `POST /admin/backfill/{id}/cancel` or the Cancel button in the dashboard. Cancellation is two-phase:
+
+1. The endpoint sets the job status to `cancelling`.
+2. The worker checks for cancellation at natural checkpoints (between relay pages, every 100 DIDs during resolution, every 100 repos during fetching). When it detects the `cancelling` status, it stops work and sets the final status to `cancelled`.
+
+This means there may be a short delay between clicking Cancel and the job fully stopping, depending on what the worker is doing at that moment.
+
+## Resuming after restart
+
+Backfill jobs survive server restarts. On startup, HappyView checks for jobs that were running when the server last stopped:
+
+- **Running** jobs are re-spawned and resume from where they left off. Each phase is idempotent — discovery skips already-known DIDs, resolution skips already-resolved endpoints, and fetching skips already-completed repos.
+- **Cancelling** jobs (where the cancel was requested but the worker hadn't stopped yet) are immediately finalised as `cancelled`.
+
+Per-DID progress is tracked in the database, so a job that was halfway through fetching records will pick up from the next unprocessed repo, not start over.
 
 ## Re-running backfills
 

@@ -49,7 +49,7 @@ Navigate to **Records** to browse all indexed atproto records. Records are group
 
 ### Backfill
 
-Navigate to **Backfill** to view and manage backfill jobs. You can start a new backfill for any record-type lexicon to import historical records from the network. The page shows job status, progress (repos processed / total), and record counts. See [Backfill](../guides/backfill.md) for how the process works.
+Navigate to **Backfill** to view and manage backfill jobs. You can start a new backfill for any record-type lexicon to import historical records from the network. The table shows each job's collection, DID scope, current stage, and start time. Click a row to open a detail sheet with full metadata and a stage-by-stage progress log that updates in real time. Running jobs can be cancelled from the detail sheet — the job transitions to "cancelling" while the worker finishes its current batch, then to "cancelled". See [Backfill](../guides/backfill.md) for how the process works.
 
 ### Dead Letters
 

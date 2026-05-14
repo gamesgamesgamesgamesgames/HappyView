@@ -96,9 +96,60 @@ curl -X POST http://127.0.0.1:3000/admin/backfill \
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "pending"
+  "status": "running"
 }
 ```
+
+## Cancel a backfill job
+
+```
+POST /admin/backfill/{id}/cancel
+```
+
+Requests cancellation of a running backfill job. The job status transitions to `cancelling` immediately; the background worker will stop at its next checkpoint and set the final status to `cancelled`. See the [Backfill guide](../../guides/backfill.md#cancelling-a-job) for details on the two-phase process.
+
+```ts tab="TypeScript" tab-group="language"
+const response = await fetch(
+  `http://127.0.0.1:3000/admin/backfill/${jobId}/cancel`,
+  { method: "POST", headers },
+);
+const data = await response.json();
+```
+```js tab="JavaScript" tab-group="language"
+const response = await fetch(
+  `http://127.0.0.1:3000/admin/backfill/${jobId}/cancel`,
+  { method: "POST", headers },
+);
+const data = await response.json();
+```
+```rust tab="Rust" tab-group="language"
+let response = client
+    .post(format!("http://127.0.0.1:3000/admin/backfill/{job_id}/cancel"))
+    .bearer_auth(token)
+    .send()
+    .await?;
+let data: serde_json::Value = response.json().await?;
+```
+```go tab="Go" tab-group="language"
+url := fmt.Sprintf("http://127.0.0.1:3000/admin/backfill/%s/cancel", jobID)
+req, _ := http.NewRequest("POST", url, nil)
+req.Header.Set("Authorization", "Bearer "+token)
+resp, err := http.DefaultClient.Do(req)
+```
+```sh tab="cURL" tab-group="language"
+curl -X POST "http://127.0.0.1:3000/admin/backfill/$JOB_ID/cancel" -H "$AUTH"
+```
+
+**Response**: `200 OK`
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "cancelling"
+}
+```
+
+Returns `400` if the job is not currently running, or `404` if the job ID is not found.
 
 ## List backfill jobs
 
@@ -112,9 +163,10 @@ interface BackfillJob {
   collection: string | null;
   did: string | null;
   status: string;
-  total_repos: number;
-  processed_repos: number;
-  total_records: number;
+  stage: string;
+  total_repos: number | null;
+  processed_repos: number | null;
+  total_records: number | null;
   error: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -158,6 +210,7 @@ curl http://127.0.0.1:3000/admin/backfill/status -H "$AUTH"
     "collection": "xyz.statusphere.status",
     "did": null,
     "status": "completed",
+    "stage": "completed",
     "total_repos": 42,
     "processed_repos": 42,
     "total_records": 1000,
@@ -168,3 +221,5 @@ curl http://127.0.0.1:3000/admin/backfill/status -H "$AUTH"
   }
 ]
 ```
+
+The `status` field tracks the overall job state (`running`, `cancelling`, `cancelled`, `completed`, `failed`). The `stage` field tracks the current processing phase (`pending`, `discovering_repos`, `resolving_pds`, `fetching_records`, `completed`, `failed`, `cancelled`).
