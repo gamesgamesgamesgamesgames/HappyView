@@ -1,7 +1,7 @@
 ---
 title: "HappyView v2.6 + v2.7"
 description: "Base path support, a Node.js SDK, security hardening, and a pile of quality-of-life fixes."
-date: 2026-05-12
+date: 2026-05-14
 author:
   name: "Trezy"
   avatar: "/authors/trezy.webp"
