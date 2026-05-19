@@ -63,6 +63,10 @@ pub fn admin_routes(_state: AppState) -> Router<AppState> {
             "/network-lexicons",
             post(network_lexicons::add).get(network_lexicons::list),
         )
+        .route(
+            "/network-lexicons/resolve/{nsid}",
+            get(network_lexicons::resolve),
+        )
         .route("/network-lexicons/{nsid}", delete(network_lexicons::remove))
         .route(
             "/script-variables",

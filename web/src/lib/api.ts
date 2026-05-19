@@ -142,6 +142,18 @@ export function getNetworkLexicons() {
   return apiFetch<NetworkLexiconSummary[]>("/admin/network-lexicons");
 }
 
+export function resolveNetworkLexicon(
+  nsid: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<{
+    nsid: string;
+    authority_did: string;
+    type: string | null;
+    lexicon_json: Record<string, unknown>;
+  }>(`/admin/network-lexicons/resolve/${encodeURIComponent(nsid)}`, { signal });
+}
+
 export function addNetworkLexicon(body: {
   nsid: string;
   target_collection?: string;

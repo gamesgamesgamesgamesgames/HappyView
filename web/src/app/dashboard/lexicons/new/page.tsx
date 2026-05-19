@@ -6,9 +6,9 @@ import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   addNetworkLexicon,
+  resolveNetworkLexicon,
   uploadLexicon,
 } from "@/lib/api";
-import { resolveNsid } from "@/lib/nsid";
 import { LEXICON_TEMPLATE, procedureScript, queryScript } from "@/lib/lua-templates";
 import { useLuaCompletions } from "@/hooks/use-lua-completions";
 import { CodePanels } from "@/components/code-panels";
@@ -103,15 +103,21 @@ export default function AddLexiconPage() {
       abortRef.current = controller;
       setResolving(true);
 
-      resolveNsid(nsid, controller.signal)
+      resolveNetworkLexicon(nsid, controller.signal)
         .then((result) => {
           if (!controller.signal.aborted) {
-            setMainType(result.type);
+            setMainType(result.type ?? undefined);
             setNetworkJson(
-              result.lexiconJson
-                ? JSON.stringify(result.lexiconJson, null, 2)
+              result.lexicon_json
+                ? JSON.stringify(result.lexicon_json, null, 2)
                 : "",
             );
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setMainType(undefined);
+            setNetworkJson("");
           }
         })
         .finally(() => {
