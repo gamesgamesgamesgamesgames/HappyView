@@ -20,6 +20,34 @@ async fn notify_collections(state: &AppState) {
     let _ = state.collections_tx.send(collections);
 }
 
+/// GET /admin/network-lexicons/resolve/{nsid} — preview-resolve a network lexicon without persisting.
+pub(super) async fn resolve(
+    State(state): State<AppState>,
+    auth: UserAuth,
+    Path(nsid): Path<String>,
+) -> Result<Json<Value>, AppError> {
+    auth.require(Permission::LexiconsRead).await?;
+
+    let (authority_did, pds_endpoint) =
+        resolve_nsid_authority(&state.http, &state.config.plc_url, &nsid).await?;
+
+    let lexicon_json =
+        fetch_lexicon_from_pds(&state.http, &pds_endpoint, &authority_did, &nsid).await?;
+
+    let main_type = lexicon_json
+        .get("defs")
+        .and_then(|d| d.get("main"))
+        .and_then(|m| m.get("type"))
+        .and_then(|t| t.as_str());
+
+    Ok(Json(serde_json::json!({
+        "nsid": nsid,
+        "authority_did": authority_did,
+        "type": main_type,
+        "lexicon_json": lexicon_json,
+    })))
+}
+
 /// POST /admin/network-lexicons — add a network lexicon to watch.
 pub(super) async fn add(
     State(state): State<AppState>,
