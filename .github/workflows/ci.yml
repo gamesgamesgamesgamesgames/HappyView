@@ -190,6 +190,60 @@ jobs:
         run: npx -p semantic-release -p semantic-release-gha-output semantic-release
 
   # ---------------------------------------------------------------------------
+  # Build binaries — compile per-platform and upload to GitHub release
+  # ---------------------------------------------------------------------------
+  build-binary:
+    needs: release
+    if: needs.release.outputs.version != ''
+    runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runs-on: depot-ubuntu-24.04
+            arch: amd64
+          - platform: linux/arm64
+            runs-on: depot-ubuntu-24.04-arm
+            arch: arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-release-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-release-${{ matrix.arch }}-
+
+      - name: Build release binary
+        run: |
+          docker run --rm \
+            -v "$PWD:/app" \
+            -v "$HOME/.cargo/registry:/usr/local/cargo/registry" \
+            -v "$HOME/.cargo/git:/usr/local/cargo/git" \
+            -w /app \
+            -e SQLX_OFFLINE=true \
+            -e HAPPYVIEW_VERSION="v${{ needs.release.outputs.version }}" \
+            rust:1.93-bookworm \
+            cargo build --release
+
+      - name: Upload binary to release
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+        run: |
+          cp target/release/happyview happyview-linux-${{ matrix.arch }}
+          gh release upload "v${{ needs.release.outputs.version }}" \
+            happyview-linux-${{ matrix.arch }} \
+            --clobber
+
+  # ---------------------------------------------------------------------------
   # SDK — per-package tests + releases
   # ---------------------------------------------------------------------------
   test-oauth-client:
@@ -509,7 +563,7 @@ jobs:
   # Docker — main app image (triggered by GitHub release)
   # ---------------------------------------------------------------------------
   docker:
-    needs: release
+    needs: [release, build-binary]
     if: needs.release.outputs.version != ''
     runs-on: ${{ matrix.runs-on }}
     permissions:
@@ -522,14 +576,26 @@ jobs:
         include:
           - platform: linux/amd64
             runs-on: depot-ubuntu-24.04
+            arch: amd64
           - platform: linux/arm64
             runs-on: depot-ubuntu-24.04-arm
+            arch: arm64
     env:
       GHCR_IMAGE: ghcr.io/${{ github.repository }}
       ATCR_IMAGE: atcr.io/${{ secrets.ATCR_NAMESPACE }}/happyview
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Download pre-built binary
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_GH_TOKEN }}
+        run: |
+          gh release download "v${{ needs.release.outputs.version }}" \
+            --pattern "happyview-linux-${{ matrix.arch }}" \
+            --dir .
+          mkdir -p .builder-override/app/target/release
+          cp happyview-linux-${{ matrix.arch }} .builder-override/app/target/release/happyview
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -590,8 +656,8 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
-          build-args: |
-            HAPPYVIEW_VERSION=v${{ needs.release.outputs.version }}
+          build-contexts: |
+            builder=.builder-override
           cache-from: type=gha,scope=build-${{ matrix.platform }}
           cache-to: type=gha,scope=build-${{ matrix.platform }},mode=max,ignore-error=true
           outputs: type=image,"name=${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
@@ -605,8 +671,8 @@ jobs:
       #     context: .
       #     platforms: ${{ matrix.platform }}
       #     labels: ${{ steps.meta-atcr.outputs.labels }}
-      #     build-args: |
-      #       HAPPYVIEW_VERSION=${{ github.event.release.tag_name }}
+      #     build-contexts: |
+      #       builder=.builder-override
       #     cache-from: type=gha,scope=build-${{ matrix.platform }}
       #     outputs: type=image,"name=${{ env.ATCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
 
