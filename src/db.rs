@@ -100,22 +100,39 @@ pub fn adapt_sql(sql: &str, backend: DatabaseBackend) -> String {
 }
 
 /// Convert `json_extract(col, '$.seg1.seg2.leaf')` to Postgres `col::jsonb->'seg1'->'seg2'->>'leaf'`.
+/// Handles array indices: `seg[0].leaf` becomes `->seg->0->>'leaf'`.
 fn adapt_json_extract_to_postgres(sql: &str) -> String {
     JSON_EXTRACT_RE
         .replace_all(sql, |caps: &regex::Captures| {
             let col = &caps[1];
-            let path = &caps[2]; // e.g. "defs.main.type" or "title"
+            let path = &caps[2];
 
-            let segments: Vec<&str> = path.split('.').collect();
+            let mut parts: Vec<(String, bool)> = Vec::new();
+            for segment in path.split('.') {
+                let bracket_start = segment.find('[').unwrap_or(segment.len());
+                let field_name = &segment[..bracket_start];
+                if !field_name.is_empty() {
+                    parts.push((field_name.to_string(), false));
+                }
+                let mut rest = &segment[bracket_start..];
+                while rest.starts_with('[') {
+                    if let Some(close) = rest.find(']') {
+                        parts.push((rest[1..close].to_string(), true));
+                        rest = &rest[close + 1..];
+                    } else {
+                        break;
+                    }
+                }
+            }
+
             let mut chain = format!("{col}::jsonb");
-
-            for (i, seg) in segments.iter().enumerate() {
-                if i == segments.len() - 1 {
-                    // Last segment uses ->> (text extraction)
-                    chain.push_str(&format!("->>'{seg}'"));
+            let last = parts.len().saturating_sub(1);
+            for (i, (text, is_index)) in parts.iter().enumerate() {
+                let arrow = if i == last { "->>" } else { "->" };
+                if *is_index {
+                    chain.push_str(&format!("{arrow}{text}"));
                 } else {
-                    // Intermediate segments use -> (JSON traversal)
-                    chain.push_str(&format!("->'{seg}'"));
+                    chain.push_str(&format!("{arrow}'{text}'"));
                 }
             }
 
@@ -385,6 +402,24 @@ mod tests {
         assert_eq!(
             adapt_sql(sql, DatabaseBackend::Postgres),
             "WHERE lexicon_json::jsonb->'defs'->'main'->>'type' = 'record'"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_postgres_converts_array_index_json_extract() {
+        let sql = "WHERE json_extract(record, '$.value.websites[0].url') = ?";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Postgres),
+            "WHERE record::jsonb->'value'->'websites'->0->>'url' = $1"
+        );
+    }
+
+    #[test]
+    fn adapt_sql_sqlite_keeps_array_index_json_extract() {
+        let sql = "WHERE json_extract(record, '$.value.tags[0]') = ?";
+        assert_eq!(
+            adapt_sql(sql, DatabaseBackend::Sqlite),
+            "WHERE json_extract(record, '$.value.tags[0]') = ?"
         );
     }
 

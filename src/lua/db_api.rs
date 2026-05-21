@@ -10,6 +10,38 @@ use crate::db::{DatabaseBackend, adapt_sql, decode_cursor, encode_cursor};
 const MAX_FILTER_DEPTH: u8 = 5;
 const ALLOWED_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">=", "LIKE", "NOT LIKE"];
 
+fn is_valid_json_field_path(path: &str) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+    for segment in path.split('.') {
+        if segment.is_empty() {
+            return false;
+        }
+        let bracket_start = segment.find('[').unwrap_or(segment.len());
+        let ident = &segment[..bracket_start];
+        if ident.is_empty() || !ident.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return false;
+        }
+        let mut rest = &segment[bracket_start..];
+        while !rest.is_empty() {
+            if !rest.starts_with('[') {
+                return false;
+            }
+            let close = match rest.find(']') {
+                Some(i) => i,
+                None => return false,
+            };
+            let idx = &rest[1..close];
+            if idx.is_empty() || !idx.chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
+            rest = &rest[close + 1..];
+        }
+    }
+    true
+}
+
 enum FilterNode {
     Condition {
         field: String,
@@ -30,10 +62,9 @@ fn parse_filter_node(table: &mlua::Table, depth: u8) -> LuaResult<FilterNode> {
     }
 
     if let Ok(field) = table.get::<String>("field") {
-        let valid = field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-        if !valid || field.is_empty() {
+        if !is_valid_json_field_path(&field) {
             return Err(mlua::Error::runtime(format!(
-                "invalid filter field '{field}': only alphanumeric characters and underscores are allowed",
+                "invalid filter field '{field}': use alphanumeric names with optional dot notation and array indices (e.g. 'name', 'author.handle', 'tags[0]')",
             )));
         }
 
@@ -127,14 +158,12 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let sort_direction: Option<String> = opts.get("sortDirection").ok();
             let cursor_str: Option<String> = opts.get("cursor").ok();
 
-            // Validate sort field name to prevent SQL injection
-            if let Some(ref field) = sort {
-                let valid = field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-                if !valid || field.is_empty() {
-                    return Err(mlua::Error::runtime(
-                        "invalid sort field: only alphanumeric characters and underscores are allowed",
-                    ));
-                }
+            if let Some(ref field) = sort
+                && !is_valid_json_field_path(field)
+            {
+                return Err(mlua::Error::runtime(
+                    "invalid sort field: use alphanumeric names with optional dot notation and array indices (e.g. 'name', 'author.handle', 'tags[0]')",
+                ));
             }
 
             let direction = match sort_direction.as_deref() {
@@ -175,10 +204,7 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
                 let order_expr = if top_level_columns.contains(&sort_field.as_str()) {
                     format!("{sort_field} {direction}")
                 } else {
-                    match backend {
-                        DatabaseBackend::Sqlite => format!("json_extract(record, '$.value.{sort_field}') {direction}"),
-                        DatabaseBackend::Postgres => format!("record::jsonb->'value'->>'{sort_field}' {direction}"),
-                    }
+                    format!("json_extract(record, '$.value.{sort_field}') {direction}")
                 };
 
                 let did_clause = if did.is_some() { " AND did = ?" } else { "" };
@@ -326,11 +352,9 @@ pub fn register_db_api(lua: &Lua, state: Arc<AppState>) -> LuaResult<()> {
             let query: String = opts.get("query")?;
             let limit: i64 = opts.get::<i64>("limit").unwrap_or(10).min(100);
 
-            // Validate field name to prevent SQL injection
-            let valid = field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-            if !valid || field.is_empty() {
+            if !is_valid_json_field_path(&field) {
                 return Err(mlua::Error::runtime(
-                    "invalid search field: only alphanumeric characters and underscores are allowed",
+                    "invalid search field: use alphanumeric names with optional dot notation and array indices (e.g. 'name', 'author.handle', 'tags[0]')",
                 ));
             }
 
@@ -807,6 +831,63 @@ mod tests {
                 "should have passed validation but got: {err}"
             );
         }
+    }
+
+    #[test]
+    fn valid_json_field_paths() {
+        assert!(super::is_valid_json_field_path("name"));
+        assert!(super::is_valid_json_field_path("author_name"));
+        assert!(super::is_valid_json_field_path("author.handle"));
+        assert!(super::is_valid_json_field_path("tags[0]"));
+        assert!(super::is_valid_json_field_path("data[0][1]"));
+        assert!(super::is_valid_json_field_path("author.websites[0].url"));
+        assert!(super::is_valid_json_field_path("a.b.c.d.e"));
+    }
+
+    #[test]
+    fn invalid_json_field_paths() {
+        assert!(!super::is_valid_json_field_path(""));
+        assert!(!super::is_valid_json_field_path(".name"));
+        assert!(!super::is_valid_json_field_path("name."));
+        assert!(!super::is_valid_json_field_path("name..foo"));
+        assert!(!super::is_valid_json_field_path("[0]"));
+        assert!(!super::is_valid_json_field_path("name[]"));
+        assert!(!super::is_valid_json_field_path("name[abc]"));
+        assert!(!super::is_valid_json_field_path("name; DROP TABLE"));
+        assert!(!super::is_valid_json_field_path("name'OR 1=1"));
+        assert!(!super::is_valid_json_field_path("na-me"));
+    }
+
+    #[tokio::test]
+    async fn query_accepts_nested_sort_field() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> = lua
+            .load(r#"return db.query({ collection = "test", sort = "author.handle" })"#)
+            .eval_async()
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            !err.contains("invalid sort field"),
+            "nested sort field should be accepted, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn query_accepts_array_index_sort_field() {
+        let state = test_state();
+        let lua = setup(&state);
+        let result: Result<mlua::Value, _> = lua
+            .load(r#"return db.query({ collection = "test", sort = "tags[0]" })"#)
+            .eval_async()
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            !err.contains("invalid sort field"),
+            "array index sort field should be accepted, got: {err}"
+        );
     }
 
     #[tokio::test]
