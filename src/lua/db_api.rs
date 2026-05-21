@@ -55,10 +55,10 @@ enum FilterNode {
 }
 
 fn parse_filter_node(table: &mlua::Table, depth: u8) -> LuaResult<FilterNode> {
-    if depth > MAX_FILTER_DEPTH {
-        return Err(mlua::Error::runtime(
-            "filter nesting too deep (max 5 levels)",
-        ));
+    if depth >= MAX_FILTER_DEPTH {
+        return Err(mlua::Error::runtime(format!(
+            "filter nesting too deep (max {MAX_FILTER_DEPTH} levels)",
+        )));
     }
 
     if let Ok(field) = table.get::<String>("field") {
